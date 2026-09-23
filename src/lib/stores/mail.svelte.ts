@@ -5,6 +5,8 @@ import { api, reportError } from "../api";
 import { t } from "../i18n/index.svelte";
 import type { Account, Folder, SyncState, ThreadRow } from "../types";
 import { prefs, type ListOrder } from "../../fork/stores/prefs.svelte";
+import { undo } from "../../fork/stores/undo.svelte";
+import { insertAt, withoutPending } from "../../fork/undo-filter";
 
 /** Fork (3.1): which rows the list shows. */
 export type ListFilter = "all" | "unread" | "starred";
@@ -199,7 +201,8 @@ async function guard<T>(read: () => Promise<T>): Promise<T | null> {
 /** The rows the list is about to render came out of the cache — whatever went
  *  wrong before, the view is honest again. */
 function shown(rows: ThreadRow[]) {
-  state.threads = rows;
+  // Fork (3.2): a refresh must not resurrect a row held for removal.
+  state.threads = withoutPending(rows, undo.pendingKeys);
   state.fetched = rows.length;
   state.loadFailed = false;
 }
@@ -414,7 +417,11 @@ async function loadMoreThreads() {
     state.fetched += more.length;
     // A concurrent refresh can shift the offset; drop rows we already show.
     const seen = new Set(state.threads.map(rowKey));
-    state.threads = [...state.threads, ...more.filter((t) => !seen.has(rowKey(t)))];
+    // Fork (3.2): nor may a page load bring back a held row.
+    state.threads = [
+      ...state.threads,
+      ...withoutPending(more, undo.pendingKeys).filter((t) => !seen.has(rowKey(t))),
+    ];
   } finally {
     loadingMore = false;
   }
@@ -461,8 +468,8 @@ function toggleRow(key: number, extend = false) {
 }
 
 /** Select every row currently loaded — deliberately not "every message in the
- *  folder". Skim has no undo, so a bulk action must never reach mail that was
- *  never on screen. */
+ *  folder". A bulk action must never reach mail that was never on screen
+ *  (the fork's undo covers what was on screen, not what was not). */
 function selectAllLoaded() {
   state.selectedKeys = state.threads.map(rowKey);
   state.anchorKey = null;
@@ -723,6 +730,11 @@ export const mail = {
   openLocation,
   // In the unified view the active account is null, so this syncs every engine.
   syncNow: () => api.syncNow(activeAccount()?.id),
+
+  /** Fork (3.2): put a row back at the index it left from (undo). */
+  insertThreadRow(row: ThreadRow, index: number) {
+    state.threads = insertAt(state.threads, row, index);
+  },
 
   /** Optimistically drop a thread from the visible list (archive/delete).
    *  Every row of the thread goes: the callers all act on the whole thread. */

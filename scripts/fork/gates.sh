@@ -11,4 +11,5 @@ run cargo fmt --check --manifest-path $M
 run cargo clippy --all-targets --manifest-path $M -- -D warnings
 run cargo test --manifest-path $M
 if [ -f scripts/fork/contrast.mjs ]; then run node scripts/fork/contrast.mjs; fi
+if [ -d src/fork/tests ]; then run node --test src/fork/tests/; fi
 echo "ALL GATES GREEN"

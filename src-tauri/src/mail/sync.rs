@@ -132,10 +132,11 @@ impl SyncHandle {
     }
 }
 
-struct Engine {
+// Fork: `pub(crate)` so `fork::restore::execute` can drive one op on it.
+pub(crate) struct Engine {
     app: AppHandle,
-    db: Db,
-    account: Account,
+    pub(crate) db: Db,
+    pub(crate) account: Account,
     data_dir: PathBuf,
     session: Option<imap_client::Session>,
     selected: Option<String>,
@@ -651,7 +652,7 @@ impl Engine {
         }
     }
 
-    async fn session(&mut self) -> Result<&mut imap_client::Session> {
+    pub(crate) async fn session(&mut self) -> Result<&mut imap_client::Session> {
         if self.session.is_none() {
             // Hold the shared token cache only across the (possibly refreshing)
             // credential resolve, so the two connections can't refresh at once.
@@ -678,7 +679,7 @@ impl Engine {
         Ok(self.session.as_mut().expect("just set"))
     }
 
-    async fn ensure_selected(&mut self, imap_name: &str) -> Result<()> {
+    pub(crate) async fn ensure_selected(&mut self, imap_name: &str) -> Result<()> {
         if self.selected.as_deref() == Some(imap_name) {
             return Ok(());
         }
@@ -1901,6 +1902,10 @@ impl Engine {
         }
         if kind == "save_draft" {
             return self.execute_save_draft(payload).await.map(one);
+        }
+        // Fork (3.2): undo after the grace window, see fork/restore.rs.
+        if kind == crate::fork::restore::OP_KIND {
+            return crate::fork::restore::execute(self, payload).await.map(one);
         }
         // Folder-level ops carry no UIDs, so they short-circuit before the
         // message coordinates are read.

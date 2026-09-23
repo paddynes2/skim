@@ -19,6 +19,10 @@ pub const VERSION_KEY: &str = "fork_schema_version";
 pub const FORK_MIGRATIONS: &[&str] = &[
     include_str!("migrations/f0001_gmail_provider.sql"),
     include_str!("migrations/f0002_important_role.sql"),
+    include_str!("migrations/f0003_op_schedule.sql"),
+    include_str!("migrations/f0004_calendar.sql"),
+    include_str!("migrations/f0005_court.sql"),
+    include_str!("migrations/f0006_draft_html.sql"),
 ];
 
 pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {

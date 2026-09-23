@@ -19,6 +19,8 @@
   import { prefs } from "./fork/stores/prefs.svelte";
   import { applyZoom, zoomKey } from "./fork/zoom";
   import { forkKey } from "./fork/keys";
+  import { undo } from "./fork/stores/undo.svelte";
+  import Toast from "./fork/Toast.svelte";
   import { setLocale, t } from "./lib/i18n/index.svelte";
   import { ai } from "./lib/stores/ai.svelte";
   import { aiSessions } from "./lib/stores/aiSession.svelte";
@@ -302,6 +304,13 @@
     }
     // Fork (2.7): Ctrl+= / Ctrl+- / Ctrl+0 zoom, before the Ctrl guard below.
     if (zoomKey(e)) return;
+    // Fork (3.2): Ctrl+Z undoes when not typing (inside a field it stays the
+    // browser's own undo).
+    if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ" && !e.shiftKey && !isTyping() && !palette.open) {
+      e.preventDefault();
+      void undo.undo();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.code === "KeyN") {
       e.preventDefault();
       void composeNew();
@@ -454,7 +463,9 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<!-- Fork (3.2): a removal still inside its undo window was intended; fire it
+     before the window goes away rather than losing it. -->
+<svelte:window onkeydown={onKeydown} onbeforeunload={() => undo.flushAll()} />
 
 <div class="app">
   <Titlebar />
@@ -506,6 +517,7 @@
       {/if}
       <CommandPalette />
       <FolderPicker />
+      <Toast />
       <FolderEditor />
       {#if ui.shortcutsOpen}
         <ShortcutsOverlay />

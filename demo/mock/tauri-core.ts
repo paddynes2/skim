@@ -230,6 +230,17 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     // ---- fork commands (src/fork/api.ts) ----
     case "fork_role_total":
       return ok(args.role === "starred" ? (MULTI() ? 3 : 2) : 0);
+    case "fork_removal_snapshot":
+      return ok([
+        {
+          accountId: "acc-1",
+          folderId: 1,
+          folderImapName: "INBOX",
+          messageIds: (args.messageIds as number[]).map((id) => `<${id}@demo.example>`),
+        },
+      ]);
+    case "fork_restore":
+      return ok(undefined);
     case "take_pending_open":
       return ok(null);
     case "search_messages":

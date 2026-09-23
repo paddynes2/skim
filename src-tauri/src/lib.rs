@@ -405,6 +405,8 @@ pub fn run() {
             commands::settings::prepare_update,
             // Fork commands (see fork/mod.rs).
             fork::commands::fork_role_total,
+            fork::commands::fork_removal_snapshot,
+            fork::commands::fork_restore,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

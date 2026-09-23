@@ -51,3 +51,10 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/App.svelte` | `onKeydown` | `forkKey(e)` before upstream's switch | fork key map (3.1/3.3) |
 | `src/components/ShortcutsOverlay.svelte` | navigation group | Shift U / Shift S rows | 3.1 |
 | `demo/mock/tauri-core.ts` | list commands | `listOpts` over fixtures | harness |
+| `src-tauri/src/mail/sync.rs` | `Engine` (struct, `db`, `account`, `session`, `ensure_selected`) | `pub(crate)` | `fork::restore::execute` drives one op on the engine (3.2) |
+| `src-tauri/src/mail/sync.rs` | `execute_op` | one arm: `fork_restore` → `fork::restore::execute` | undo after the grace window (3.2) |
+| `src/lib/stores/mail.svelte.ts` | `shown`, `loadMoreThreads`, `insertThreadRow` | held rows filtered out of every page; row re-insert for undo; "no undo" comment reworded | 3.2 |
+| `src/lib/bulk.ts` | `bulkAct` | removals and read/unread through `fork/actions` (held, undoable) | 3.2 |
+| `src/components/FolderPicker.svelte` | `activate` | move through `fork/actions.moveRows` (held, undoable) | 3.2 |
+| `src/App.svelte` | keydown, window, markup | Ctrl+Z before the Ctrl guard; `beforeunload` flushes held removals; `<Toast />` mounted | 3.2 |
+| `src/components/ShortcutsOverlay.svelte` | actions group | Undo row | 3.2 |

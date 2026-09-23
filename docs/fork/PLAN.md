@@ -741,3 +741,18 @@ next 5 working days, never in the past, 15-minute buffer after "now".
 1. Google Cloud: enable Calendar + Meet APIs, Internal consent screen, Desktop OAuth client; paste ID + secret into Settings → Calendar; click Connect and approve.
 2. Settings → CRM: enter the Rebound email + password once (URLs and key are prefilled).
 3. Pick a list variant (A/B/C) from `docs/fork/mocks/list-states.html` if A is not right.
+
+## 6. Addenda (added during the build, Patrick's asks)
+
+**3.4 Sent and Drafts update in real time (Patrick, 2026-09-23).** Today only
+INBOX is watched by IDLE; Sent and Drafts refresh on the 5-minute poll, so a
+message just sent (Gmail files it itself) or a draft just saved appears late.
+- After a `send` op lands: resync the account's `sent` role folder at once
+  (today only the non-Gmail mirror path returns its folder id; do it for Gmail too).
+- After a `save_draft` op lands: resync the `drafts` role folder at once.
+- Selecting the Sent or Drafts folder in the UI triggers one targeted sync of
+  that folder (new command `fork_sync_folder(folder_id)` routed to the engine's
+  existing `sync_folder`), debounced to at most once per 20 s per folder.
+- On window focus, same targeted sync for whichever of Sent/Drafts is open.
+- Tests: the op-drain path returns the sent/drafts folder id for resync;
+  the debounce.

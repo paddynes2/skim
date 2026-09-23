@@ -4,6 +4,7 @@ import { api } from "./api";
 import { mail, rowKey } from "./stores/mail.svelte";
 import { ui } from "./stores/ui.svelte";
 import type { ThreadRow } from "./types";
+import { markRowsRead, removeRows } from "../fork/actions";
 
 export type BulkAction = "archive" | "delete" | "spam" | "read";
 
@@ -41,16 +42,15 @@ export async function bulkAct(action: BulkAction): Promise<void> {
     // One decision made for the user rather than two buttons: anything unread
     // in the selection means "mark read", otherwise flip them back to unread.
     const read = rows.some((r) => !r.isRead);
-    mail.patchRows(keys, { isRead: read });
-    void api.markRead(ids, read);
+    // Fork (3.2): through the action module, so it is undoable.
+    markRowsRead(rows, read, ids);
     mail.clearSelection();
     return;
   }
 
-  mail.removeRowsFromList(keys);
-  if (action === "archive") void api.archiveMessages(ids);
-  else if (action === "delete") void api.deleteMessages(ids);
-  else void api.reportSpam(ids);
+  // Fork (3.2): the rows leave now; the call is held for the undo window.
+  void keys;
+  removeRows(rows, action, ids);
   mail.clearSelection();
 }
 

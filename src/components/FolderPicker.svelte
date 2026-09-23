@@ -7,9 +7,10 @@
   import { backdropClose } from "../lib/backdrop";
   import { folderIcon, folderLabel } from "../lib/folders";
   import { t } from "../lib/i18n/index.svelte";
-  import { mail } from "../lib/stores/mail.svelte";
+  import { mail, rowKey } from "../lib/stores/mail.svelte";
   import { ui } from "../lib/stores/ui.svelte";
   import type { Folder } from "../lib/types";
+  import { moveRows } from "../fork/actions";
 
   let filter = $state("");
   let active = $state(0);
@@ -78,8 +79,13 @@
     // Optimistic, exactly like archive: the row leaves the list now and the
     // queued op catches the server up. A move that fails for good surfaces as
     // an ops:failed notice, which also refreshes the list back.
-    mail.removeRowsFromList(req.rowKeys);
-    void api.moveMessages(req.messageIds, folder?.id ?? null, create ? query : undefined);
+    // Fork (3.2): held for the undo window, via the one action module.
+    const keys = new Set(req.rowKeys);
+    const rows = mail.threads.filter((r) => keys.has(rowKey(r)));
+    const dest = folder ? folder.imapName : query;
+    moveRows(rows, req.messageIds, dest, () => {
+      void api.moveMessages(req.messageIds, folder?.id ?? null, create ? query : undefined);
+    });
   }
 
   function onKeydown(e: KeyboardEvent) {

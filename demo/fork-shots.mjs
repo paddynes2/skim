@@ -86,6 +86,18 @@ export const SCENARIOS = {
       await sleep(300);
     },
   },
+  // Phase 3.2: archive via the hover action, the undo toast appears.
+  "undo-toast": {
+    phase: "3",
+    setup: async (page) => {
+      await openHero(page);
+      const row = page.locator('.row-wrap:has-text("Marcus Lee")').first();
+      await row.hover();
+      await row.locator(".actions .action").first().click();
+      await page.locator(".toast").waitFor();
+      await sleep(250);
+    },
+  },
   "settings-list": {
     phase: "2",
     setup: async (page) => {

@@ -41,6 +41,8 @@
         { label: t("reading.reply"), keys: ["R"] },
         { label: t("reading.reply_all"), keys: ["A"] },
         { label: t("reading.forward"), keys: ["F"] },
+        // Fork (3.2)
+        { label: t("fork.shortcuts.undo"), keys: ["Z", "Ctrl Z"] },
       ],
     },
     {
