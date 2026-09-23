@@ -443,7 +443,8 @@
     white-space: nowrap;
   }
   .unread .subject {
-    color: var(--text);
+    /* Fork (2.0, variant C, Patrick 2026-09-23): unread subject in the unread blue. */
+    color: var(--unread);
     font-weight: 600;
   }
 
@@ -456,7 +457,7 @@
     white-space: nowrap;
   }
 
-  /* Compact (2.6): one line — sender, subject, snippet, date. ~36px rows.
+  /* Compact (2.6): one line: sender, subject, snippet, date. ~36px rows.
      At the list's 372px the snippet is the first thing to give way. */
   .compact .row {
     padding-top: 9px;

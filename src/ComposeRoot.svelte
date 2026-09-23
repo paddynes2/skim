@@ -7,6 +7,10 @@
   import { ui } from "./lib/stores/ui.svelte";
   import { prefs } from "./fork/stores/prefs.svelte";
   import { applyZoom, zoomKey } from "./fork/zoom";
+  // Fork (7.6 / 8): the compose window needs its own popover and toast host,
+  // or `/slots` and Add Meet link act on a popover that only the main window has.
+  import SlotsPopover from "./fork/slots/SlotsPopover.svelte";
+  import Toast from "./fork/Toast.svelte";
 
   let { draftId }: { draftId: number } = $props();
   let ready = $state(false);
@@ -38,4 +42,6 @@
 
 {#if ready}
   <Composer {draftId} />
+  <SlotsPopover />
+  <Toast />
 {/if}

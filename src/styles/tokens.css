@@ -32,7 +32,7 @@
   --text-faint: #6b6b75;
   /* fork: state colours (never violet). --unread/--star/--focus clear 3:1 on
      every list background; scripts/fork/contrast.mjs is the gate. */
-  --unread: #1f6fd1;
+  --unread: #1a62c0;
   --star: #b7791f;
   --focus: #1f6fd1;
   --row-unread-tint: rgba(31, 111, 209, 0.06);
@@ -105,7 +105,7 @@
   --text: #1c1712;
   --text-dim: #5f584d;
   --text-faint: #6d6354;
-  --unread: #1f6fd1;
+  --unread: #1a62c0;
   --star: #b0751e;
   --focus: #1f6fd1;
   --row-unread-tint: rgba(31, 111, 209, 0.06);

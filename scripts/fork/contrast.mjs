@@ -69,7 +69,8 @@ export const RULES = [
   { token: "--text", min: 7 },
   { token: "--text-dim", min: 4.5 },
   { token: "--text-faint", min: 4.5 },
-  { token: "--unread", min: 3 },
+  // Variant C sets unread subjects in this colour, so it is held to text contrast.
+  { token: "--unread", min: 4.5 },
   { token: "--star", min: 3 },
   { token: "--focus", min: 3 },
 ];
