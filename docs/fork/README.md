@@ -201,48 +201,29 @@ Done in a throwaway worktree (`trial/upstream-merge`, cut from `paddy` at
 
 ## Known limits, stated plainly
 
-From the `## status` sections of the pending files, 2026-09-23:
+State at the v1.1.0 install, 2026-09-23:
 
-- No live call to Google was made during the build. No client was configured on
-  the build box; the Calendar v3 and Meet request shapes were written from the
-  reference and tested against JSON fixtures. The first real Connect is the
-  test. If Google 404s on the raw `@` in a calendar path, percent-encode the
-  segment in `gapi::events_url`.
-- No live call to Rebound was made. No credentials were entered; the login,
-  refresh, lookup and cache paths are unit-tested against route-shaped
-  fixtures. The first check is Settings, CRM, Connect, then `i` on a known
-  contact's thread.
-- The MCP server is verified on paper until the Phase 13 smoke test: 22 tests
-  drive every tool through the real HTTP path on port 0 against an in-memory
-  database, but no Claude Code session has called it yet. If Claude Code
-  insists on an SSE reply, the fix is one content type in `handle_request`.
+- No live call to Google was made. No OAuth client exists yet (human step 1),
+  so the Calendar v3 and Meet request shapes were written from the reference
+  and tested against JSON fixtures. The first real Connect is the test. If
+  Google 404s on the raw `@` in a calendar path, percent-encode the segment in
+  `gapi::events_url`.
+- No live call to Rebound was made. No credentials were entered (human step 2);
+  login, refresh, lookup and cache are unit-tested against route-shaped
+  fixtures. First check: Settings, CRM, Connect, then `i` on a known contact.
+- The MCP server was checked live on the installed build: 401 without the
+  token, 403 for a foreign Origin, 12 tools listed, `search_mail` answered with
+  real results, and `claude mcp list` shows `skim` connected.
 - The Ball-in-my-court AI pass has never run live (no key in the build
-  environment; network is forbidden in tests). It is off by default. Every
-  outbound mail ever sent reads as "waiting" until answered (D-10b); if that is
-  noise, a `since` floor belongs in the view or a setting.
+  environment). It is off by default. Every outbound mail reads as "waiting"
+  until answered (D-10b); if that is noise, a `since` floor belongs in the view.
 - Freshness (3.4) and the Gmail archive path (1.1, 1.2) are tested at the
-  predicate, not against a live IMAP server: upstream has no scripted IMAP
-  session for tests (D15).
-- Several phases could not take in-app screenshots from their agent, because
-  the mock cases live in main-session files: 3.4 (no visual change), 4, 5
-  (stylesheet checked outside the app), 6.5 (static mock shots), 9, 10, 11, 12.
-  Those shots are taken once the main session merges the pending files.
-- Until the main session merges each pending file, that phase's commands are
-  unregistered in `generate_handler!` and unreachable from the UI. The pending
-  files spell out what breaks in the meantime (for example a search shows
-  "couldn't load", held sends fire on the next drain, the Scheduled folder is
-  unreachable).
-- `htmlToText` in the rich editor is exercised only in the browser; it has no
-  node test.
-- The whole `cargo test` run was green (495 passed) only at moments when every
-  concurrent agent's file compiled. Individual agents recorded 2 to 7 failures
-  in other agents' in-flight files at various times, plus the
-  `STATUS_ENTRYPOINT_NOT_FOUND` loader fault when run from Git Bash (D25). Run
-  `gates.sh` on a settled tree before trusting any number.
-- The 6.5 rules export (`6b401a78d`) is committed in the OS repo on `trunk` and
-  not pushed; the port row for 8342 was added to `OS/meta/PORTS.md` and not
-  committed.
+  predicate, not against a scripted IMAP server (D15).
+- `htmlToText` in the rich editor is exercised only in the browser.
+- Run `cargo test` through `scripts/fork/gates.sh`, or from PowerShell: from
+  Git Bash the test binary dies with STATUS_ENTRYPOINT_NOT_FOUND (D25).
 - Send later needs the app running: Skim autostarts to the tray, and the
   Scheduled view says so.
-- Nothing has been pushed to `origin` and no tag exists yet; that is the last
-  step of Phase 13.
+- The port row for 8342 is in `OS/meta/PORTS.md` but not committed there: that
+  file carried other sessions' uncommitted edits, so a path commit would have
+  swept them in.

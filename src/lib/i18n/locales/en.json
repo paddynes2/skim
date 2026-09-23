@@ -339,6 +339,8 @@
   "fork.shortcuts.zoom_in": "Zoom in",
   "fork.shortcuts.zoom_out": "Zoom out",
   "fork.shortcuts.zoom_reset": "Reset zoom",
+  "fork.court.settings_window": "Look back",
+  "fork.court.settings_window_unit": "days (0 = everything)",
   "fork.cal.meet_new_opened": "Opened meet.new in your browser",
   "fork.compose.share_availability": "Share availability",
   "fork.compose.add_meet": "Add Meet link",

@@ -55,6 +55,18 @@
   </div>
 
   <div class="field">
+    <label class="label" for="fork-court-window">{t("fork.court.settings_window")}</label>
+    <input
+      id="fork-court-window"
+      type="number"
+      min="0"
+      value={courtPrefs.windowDays}
+      onchange={(e) => courtPrefs.setWindowDays(num(e))}
+    />
+    <span class="unit">{t("fork.court.settings_window_unit")}</span>
+  </div>
+
+  <div class="field">
     <span class="label">{t("fork.court.settings_colours")}</span>
     <label class="inline">
       <span class="swatch amber"></span>

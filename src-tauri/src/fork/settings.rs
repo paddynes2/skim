@@ -31,12 +31,13 @@ pub const ALLOWED: &[&str] = &[
     "fork_crm_anon_key",     // Supabase anon key (public); "" = SKIM_REBOUND_SUPABASE_ANON_KEY
     "fork_crm_workspace_id", // chosen Rebound workspace id
     // Phase 10
-    "fork_court_ai",         // on | off
-    "fork_court_ai_cap",     // threads/day
-    "fork_court_amber_days", // default 2
-    "fork_court_red_days",   // default 5
-    "fork_court_nudge",      // HH:MM or "off"
-    "fork_court_nudged_at",  // internal: unix seconds of the last nudge toast
+    "fork_court_ai",          // on | off
+    "fork_court_ai_cap",      // threads/day
+    "fork_court_amber_days",  // default 2
+    "fork_court_red_days",    // default 5
+    "fork_court_nudge",       // HH:MM or "off"
+    "fork_court_nudged_at",   // internal: unix seconds of the last nudge toast
+    "fork_court_window_days", // look-back of On me / Waiting; default 30, "all" = everything
     // Phase 12
     "fork_mcp", // on | off
 ];

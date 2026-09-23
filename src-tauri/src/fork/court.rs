@@ -733,6 +733,42 @@ pub fn list(
     offset: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<CourtRow>> {
+    list_since(conn, state, 0, offset, limit)
+}
+
+/// Default look-back of the court views, in days (`fork_court_window_days`).
+/// Without one, a mailbox's whole history lands in On me / Waiting: the first
+/// live install showed 4,013 and 2,588 threads, which is not a to-do list.
+pub const WINDOW_DAYS_DEFAULT: i64 = 30;
+
+/// The oldest `since` the views show: now minus the window. `0` or `all` in
+/// the setting shows everything (floor 0).
+pub fn window_floor(conn: &Connection, now: i64) -> rusqlite::Result<i64> {
+    let raw = queries::get_setting(conn, "fork_court_window_days")?;
+    Ok(floor_from(raw.as_deref(), now))
+}
+
+fn floor_from(raw: Option<&str>, now: i64) -> i64 {
+    let days = match raw.map(str::trim) {
+        Some("all") | Some("0") => return 0,
+        Some(s) => s
+            .parse::<i64>()
+            .ok()
+            .filter(|d| *d > 0)
+            .unwrap_or(WINDOW_DAYS_DEFAULT),
+        None => WINDOW_DAYS_DEFAULT,
+    };
+    now - days * 86_400
+}
+
+/// [`list`], limited to threads whose `since` is at or after `floor`.
+pub fn list_since(
+    conn: &Connection,
+    state: &str,
+    floor: i64,
+    offset: i64,
+    limit: i64,
+) -> rusqlite::Result<Vec<CourtRow>> {
     let pred = visible_pred(state)?;
     let sql = format!(
         "SELECT t.id,
@@ -746,6 +782,7 @@ pub fn list(
          JOIN threads t ON t.id = c.thread_id
          JOIN messages m ON m.thread_id = t.id
          WHERE {pred}
+           AND coalesce(c.since, 0) >= ?3
            AND m.date = (SELECT max(m2.date) FROM messages m2 WHERE m2.thread_id = t.id)
          GROUP BY t.id
          ORDER BY c.since ASC, t.id ASC
@@ -753,7 +790,7 @@ pub fn list(
     );
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt
-        .query_map(params![limit, offset], |r| {
+        .query_map(params![limit, offset, floor], |r| {
             let from_name: Option<String> = r.get(1)?;
             let from_addr: Option<String> = r.get(2)?;
             Ok(CourtRow {
@@ -783,11 +820,17 @@ pub fn list(
 }
 
 pub fn counts(conn: &Connection) -> rusqlite::Result<CourtCounts> {
+    counts_since(conn, 0)
+}
+
+/// [`counts`], limited to threads whose `since` is at or after `floor`.
+pub fn counts_since(conn: &Connection, floor: i64) -> rusqlite::Result<CourtCounts> {
     let sql = format!(
         "SELECT sum({VISIBLE_ON_ME}), sum({VISIBLE_WAITING})
-         FROM fork_court c JOIN threads t ON t.id = c.thread_id"
+         FROM fork_court c JOIN threads t ON t.id = c.thread_id
+         WHERE coalesce(c.since, 0) >= ?1"
     );
-    conn.query_row(&sql, [], |r| {
+    conn.query_row(&sql, [floor], |r| {
         Ok(CourtCounts {
             on_me: r.get::<_, Option<i64>>(0)?.unwrap_or(0),
             waiting: r.get::<_, Option<i64>>(1)?.unwrap_or(0),
@@ -805,7 +848,8 @@ pub async fn fork_court_list(
     state
         .db
         .read("fork_court_list", move |conn| {
-            list(conn, &court_state, offset, limit)
+            let floor = window_floor(conn, chrono::Utc::now().timestamp())?;
+            list_since(conn, &court_state, floor, offset, limit)
         })
         .await
 }
@@ -814,7 +858,9 @@ pub async fn fork_court_list(
 pub async fn fork_court_counts(state: State<'_, AppState>) -> Result<CourtCounts> {
     state
         .db
-        .read("fork_court_counts", |conn| counts(conn))
+        .read("fork_court_counts", |conn| {
+            counts_since(conn, window_floor(conn, chrono::Utc::now().timestamp())?)
+        })
         .await
 }
 
@@ -842,7 +888,8 @@ pub fn nudge_line(conn: &Connection) -> rusqlite::Result<Option<String>> {
 }
 
 pub fn nudge_line_at(conn: &Connection, now: i64) -> rusqlite::Result<Option<String>> {
-    let n = counts(conn)?.on_me;
+    let floor = window_floor(conn, now)?;
+    let n = counts_since(conn, floor)?.on_me;
     if n == 0 {
         return Ok(None);
     }
@@ -851,9 +898,10 @@ pub fn nudge_line_at(conn: &Connection, now: i64) -> rusqlite::Result<Option<Str
             &format!(
                 "SELECT m.from_name, m.from_addr, c.since
                  FROM fork_court c JOIN messages m ON m.id = c.last_message_id
-                 WHERE {VISIBLE_ON_ME} ORDER BY c.since ASC LIMIT 1"
+                 WHERE {VISIBLE_ON_ME} AND coalesce(c.since, 0) >= ?1
+                 ORDER BY c.since ASC LIMIT 1"
             ),
-            [],
+            [floor],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?;
@@ -994,6 +1042,25 @@ mod tests {
 
     fn run(conn: &mut Connection) -> PassStats {
         pass(conn, &Scope::All, false).unwrap()
+    }
+
+    #[test]
+    fn window_floor_defaults_to_30_days_and_all_shows_everything() {
+        let now = 1_800_000_000;
+        assert_eq!(floor_from(None, now), now - 30 * 86_400);
+        assert_eq!(floor_from(Some("7"), now), now - 7 * 86_400);
+        assert_eq!(floor_from(Some("all"), now), 0);
+        assert_eq!(floor_from(Some("0"), now), 0);
+        assert_eq!(
+            floor_from(Some("junk"), now),
+            now - 30 * 86_400,
+            "bad value = default"
+        );
+        assert_eq!(
+            floor_from(Some("-3"), now),
+            now - 30 * 86_400,
+            "negative = default"
+        );
     }
 
     #[test]

@@ -16,6 +16,8 @@ const state = $state({
   ai: false,
   /** Threads per local day the AI pass may judge. */
   aiCap: AI_CAP_DEFAULT,
+  /** How far back On me / Waiting look, in days; 0 = everything (Rust default 30). */
+  windowDays: 30,
   /** Row age turns amber past this many days ... */
   amberDays: AMBER_DAYS_DEFAULT,
   /** ... and red past this many. */
@@ -46,6 +48,8 @@ export const courtPrefs = {
     if (s.fork_court_ai !== undefined) state.ai = s.fork_court_ai === "on";
     if (s.fork_court_ai_cap !== undefined) state.aiCap = posInt(s.fork_court_ai_cap, AI_CAP_DEFAULT);
     if (s.fork_court_amber_days !== undefined) state.amberDays = posInt(s.fork_court_amber_days, AMBER_DAYS_DEFAULT);
+    if (s.fork_court_window_days !== undefined)
+      state.windowDays = s.fork_court_window_days.trim() === "all" ? 0 : posInt(s.fork_court_window_days, 30);
     if (s.fork_court_red_days !== undefined) state.redDays = posInt(s.fork_court_red_days, RED_DAYS_DEFAULT);
     if (s.fork_court_nudge !== undefined) {
       const v = s.fork_court_nudge.trim();
@@ -88,6 +92,14 @@ export const courtPrefs = {
     if (!Number.isInteger(n) || n < 0) return;
     state.aiCap = n;
     persist("fork_court_ai_cap", String(n));
+  },
+  get windowDays() {
+    return state.windowDays;
+  },
+  setWindowDays(n: number) {
+    if (!Number.isInteger(n) || n < 0) return;
+    state.windowDays = n;
+    persist("fork_court_window_days", n === 0 ? "all" : String(n));
   },
   get amberDays() {
     return state.amberDays;

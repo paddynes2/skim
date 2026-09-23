@@ -466,7 +466,8 @@ async fn list_court(server: &Server, a: &Args<'_>) -> ToolResult {
     let rows = server
         .db
         .read("mcp_list_court", move |conn| {
-            court::list(conn, &state, 0, limit)
+            let floor = court::window_floor(conn, chrono::Utc::now().timestamp())?;
+            court::list_since(conn, &state, floor, 0, limit)
         })
         .await?;
     Ok(json!({
@@ -1048,6 +1049,12 @@ mod tests {
                  VALUES (?1, 'a2', 'on_me', 1_700_000_300, ?2, NULL),
                         (?3, 'a1', 'waiting', 1_700_000_400, ?4, NULL)",
                 rusqlite::params![threads[2], ids[2], threads[0], ids[3]],
+            )?;
+            // The rows are dated 2023: look back over everything (the 30-day
+            // default window is tested in fork::court).
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('fork_court_window_days', 'all')",
+                [],
             )
             .map(|_| ())
         })
