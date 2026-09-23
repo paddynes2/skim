@@ -37,6 +37,8 @@ async function openHero(page) {
 export const SCENARIOS = {
   // Phase 0: today's inbox, reading pane open.
   inbox: { phase: "0", setup: async (page) => { await openHero(page); } },
+  // Phase 2.0: the static A/B/C mock (one full-page shot, all themes inside).
+  "mock-list-states": { phase: "2", file: "docs/fork/mocks/list-states.html", out: "docs/fork/mocks", full: true },
   // Phase 1.4: Starred in the sidebar with its total count.
   "sidebar-starred": { phase: "1", setup: async (page) => { await openInbox(page); } },
 };
@@ -91,13 +93,28 @@ async function main() {
   const names = only.length ? only : Object.keys(SCENARIOS).filter((k) => SCENARIOS[k].phase === phase);
   if (!names.length) throw new Error("no scenarios for phase " + phase);
   for (const n of names) if (!SCENARIOS[n]) throw new Error("unknown scenario " + n);
-  const server = await startServer();
+  const needsServer = names.some((n) => !SCENARIOS[n].file);
+  const server = needsServer ? await startServer() : { kill() {} };
   const browser = await chromium.launch();
   const written = [];
   try {
     for (const name of names) {
+      const sc = SCENARIOS[name];
+      if (sc.file) {
+        // A static page (mock): one shot of the whole document.
+        const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+        await page.goto("file:///" + resolve(ROOT, sc.file).replace(/\\/g, "/"));
+        await sleep(300);
+        const dir = sc.out ? resolve(ROOT, sc.out) : resolve(OUT, phase);
+        mkdirSync(dir, { recursive: true });
+        const file = resolve(dir, `${name}.png`);
+        await page.screenshot({ path: file, fullPage: !!sc.full });
+        await page.close();
+        written.push(file);
+        continue;
+      }
       for (const theme of THEMES) {
-        written.push(await shoot(browser, phase, name, SCENARIOS[name], theme));
+        written.push(await shoot(browser, phase, name, sc, theme));
       }
     }
   } finally {

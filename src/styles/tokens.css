@@ -28,8 +28,14 @@
   --surface: #ffffff;
   --surface-raised: #ffffff;
   --text: #17171b;
-  --text-dim: #6f6f76;
-  --text-faint: #a3a3ab;
+  --text-dim: #5e5e66;
+  --text-faint: #6b6b75;
+  /* fork: state colours (never violet). --unread/--star/--focus clear 3:1 on
+     every list background; scripts/fork/contrast.mjs is the gate. */
+  --unread: #1f6fd1;
+  --star: #b7791f;
+  --focus: #1f6fd1;
+  --row-unread-tint: rgba(31, 111, 209, 0.06);
   --hairline: rgba(17, 17, 20, 0.07);
   --hairline-strong: rgba(17, 17, 20, 0.12);
   --hover: rgba(17, 17, 20, 0.035);
@@ -60,8 +66,12 @@
   --surface: #141418;
   --surface-raised: #1a1a20;
   --text: #ececef;
-  --text-dim: #94949c;
-  --text-faint: #5c5c64;
+  --text-dim: #a3a3ab;
+  --text-faint: #85858f;
+  --unread: #6aa6ff;
+  --star: #f2b544;
+  --focus: #6aa6ff;
+  --row-unread-tint: rgba(106, 166, 255, 0.08);
   --hairline: rgba(236, 236, 239, 0.08);
   --hairline-strong: rgba(236, 236, 239, 0.14);
   --hover: rgba(236, 236, 239, 0.045);
@@ -93,8 +103,12 @@
   --surface: #fbfaf5;
   --surface-raised: #fbf8ef;
   --text: #1c1712;
-  --text-dim: #6d665b;
-  --text-faint: #a79d8d;
+  --text-dim: #5f584d;
+  --text-faint: #6d6354;
+  --unread: #1f6fd1;
+  --star: #b0751e;
+  --focus: #1f6fd1;
+  --row-unread-tint: rgba(31, 111, 209, 0.06);
   --hairline: rgba(28, 23, 18, 0.08);
   --hairline-strong: rgba(28, 23, 18, 0.14);
   --hover: rgba(28, 23, 18, 0.04);
@@ -131,8 +145,12 @@
   --surface: #1a1712;
   --surface-raised: #241f17;
   --text: #ece7dd;
-  --text-dim: #a49a88;
-  --text-faint: #6b6353;
+  --text-dim: #b3a996;
+  --text-faint: #958a76;
+  --unread: #6aa6ff;
+  --star: #f2b544;
+  --focus: #6aa6ff;
+  --row-unread-tint: rgba(106, 166, 255, 0.08);
   --hairline: rgba(236, 231, 221, 0.09);
   --hairline-strong: rgba(236, 231, 221, 0.15);
   --hover: rgba(236, 231, 221, 0.05);

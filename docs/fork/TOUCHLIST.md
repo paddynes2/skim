@@ -31,3 +31,4 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/App.svelte` | `actOnSelected` | early return when `!archiveOffered(role)` | no Archive in Sent/Trash/Spam (1.2) |
 | `src-tauri/src/lib.rs` | `generate_handler!` | `fork::commands::fork_role_total` | Starred total (1.4) |
 | `demo/mock/tauri-core.ts` | `invoke` switch | `fork_role_total` fixture | demo harness (1.4) |
+| `src/styles/tokens.css` | all four theme blocks | `--text-dim`/`--text-faint` raised to clear 4.5:1; new `--unread`, `--star`, `--focus`, `--row-unread-tint` | contrast + state colours (2.1) |
