@@ -363,7 +363,7 @@ export const calendar = {
     if (state.selectedId === id) state.selectedId = null;
     return true;
   },
-  /** RSVP: the organiser is someone else by definition, so the prompt always shows (D27). */
+  /** RSVP: the organiser is someone else by definition, so the prompt always shows (D-7f). */
   async rsvp(id: number, response: RsvpResponse): Promise<boolean> {
     const su = await guestsPrompt.ask("rsvp", 1);
     if (su === null) return false;

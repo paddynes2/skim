@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+> **On branch `paddy` (Patrick's fork):** read `docs/fork/README.md` first. The fork
+> deliberately adds calendar, CRM and other features the principles below exclude.
+> Where they conflict, `docs/fork/` wins on this branch.
+
 Guidance for AI agents (and humans) working on Skim. Read this before writing code.
 Skim is a **minimalist native email client** for Windows (Rust + Tauri 2 core, Svelte 5 UI).
 

@@ -1,5 +1,9 @@
 # Rules for build agents (fanned out from the main session)
 
+> Used for the v1.1.0 build. Every handback in `pending/` is merged and kept
+> as a record. A new fan-out writes new handback files; once the main session
+> merges one, it adds the file name to the list in `pending/README.md`.
+
 You are one of several agents building `docs/fork/PLAN.md` phases in the SAME
 working tree at the same time. Read `PLAN.md` (your phase, plus section 0),
 `CLAUDE.md`, `CONTRIBUTING.md`, and `docs/fork/DECISIONS.md` first.

@@ -2,11 +2,13 @@
 
 D1-D12 are copied from `PLAN.md` section 3 so this file is the single log.
 Anything decided during the build is appended below with a date.
+Ids are unique. The Phase 7 backend agent reused D22-D29, which the main
+session had already taken; its eight were renamed D-7a to D-7h after the build.
 
 | # | Decision | Why |
 |---|---|---|
 | D1 | Fork state in `fork_*` tables + own version key `fork_schema_version` in `settings` | Upstream's single `user_version` sequence would collide with any fork 0016 |
-| D2 | Unread = blue dot + bold; read dimmed; star = amber in a fixed gutter | Two signals, not colour-only (WCAG 1.4.1); violet is reserved for AI |
+| D2 | Unread = blue dot + bold; read dimmed; star = amber in a fixed gutter (the shipped variant C also colours the subject, D46) | Two signals, not colour-only (WCAG 1.4.1); violet is reserved for AI |
 | D3 | Undo = 8s client-side hold, then server restore by Message-ID | Local rows are deleted on archive, so a pure local undo is impossible after the op runs |
 | D4 | Held sends excluded from the drain, 1s cancel margin | The drain is strict FIFO; a held op must not block others |
 | D5 | Rich text keeps `body_text` as the full text body; HTML only for the user's words | Every upstream path (AI splitTail, Drafts save, send) keeps working unchanged |
@@ -51,14 +53,14 @@ Anything decided during the build is appended below with a date.
 - **2026-09-23 D-5f (5.3):** toggling rebuilds `srcdoc`; the existing poll + ResizeObserver re-measure height.
 - **2026-09-23 D25 (gates):** `cargo test` binaries exit with STATUS_ENTRYPOINT_NOT_FOUND when run from Git Bash with `/mingw64/bin` on PATH (a MinGW DLL shadows the system one once the MCP/HTTP crates joined). `scripts/fork/gates.sh` strips the MSYS dirs for the test step; run from PowerShell otherwise.
 - **2026-09-23 D26 (3.3 fix):** `keys.ts` held the `g` flag in `$state` inside a plain `.ts` file, which Vite never compiles as Svelte; the demo threw `rune_outside_svelte` on boot and every screenshot after 3.3 was blocked. The flag moved to `src/fork/stores/go.svelte.ts`.
-- **2026-09-23 D22 (7.2):** `resolve_email` matches the required scope as a whole
-- **2026-09-23 D23 (7.3):** all three tables use `CREATE TABLE IF NOT EXISTS`
-- **2026-09-23 D24 (7.4):** engine registry is a process-wide
-- **2026-09-23 D25 (7.4):** window replace = upsert the fresh rows, then delete
-- **2026-09-23 D26 (7.4):** ops reference the local **row id** (`event_id`) and
-- **2026-09-23 D27 (7.4):** `fork_cal_rsvp` also takes `send_updates`
-- **2026-09-23 D28 (7.2):** the account-mismatch error (`gcal_account_mismatch`)
-- **2026-09-23 D29 (8):** `fork_free_slots` takes the walking zone `tz` (IANA)
+- **2026-09-23 D-7a (7.2):** `resolve_email` matches the required scope as a whole
+- **2026-09-23 D-7b (7.3):** all three tables use `CREATE TABLE IF NOT EXISTS`
+- **2026-09-23 D-7c (7.4):** engine registry is a process-wide
+- **2026-09-23 D-7d (7.4):** window replace = upsert the fresh rows, then delete
+- **2026-09-23 D-7e (7.4):** ops reference the local **row id** (`event_id`) and
+- **2026-09-23 D-7f (7.4):** `fork_cal_rsvp` also takes `send_updates`
+- **2026-09-23 D-7g (7.2):** the account-mismatch error (`gcal_account_mismatch`)
+- **2026-09-23 D-7h (8):** `fork_free_slots` takes the walking zone `tz` (IANA)
 - **2026-09-23 D-9a (workspaces):** `GET /api/v1/workspaces` in Rebound is
 - **2026-09-23 D-9b (stage names):** the lookup route returns deals as
 - **2026-09-23 D-9c (reminders):** the route returns no reminders today. The

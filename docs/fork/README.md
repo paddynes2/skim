@@ -8,10 +8,11 @@ upstream file is one row in `docs/fork/TOUCHLIST.md`.
 
 Where to read next:
 
+- `STATUS.md`: where the fork stands today and every open item. The only status file.
 - `PLAN.md`: the full build plan, phase by phase, with the file and line facts it rests on.
 - `DECISIONS.md`: every decision and every deviation from the plan, dated.
 - `TOUCHLIST.md`: every upstream file the fork touches, one line each.
-- `AGENT-RULES.md` and `pending/`: how the parallel build agents worked and what each handed back.
+- `AGENT-RULES.md` and `pending/`: how the parallel build agents worked and what each handed back. The handbacks are kept as the record that code comments point to.
 - `mocks/`: the static A/B/C list mock and the AI-smell state mock.
 - `shots/<phase>/`: screenshots from the visual check harness, per phase.
 
@@ -24,7 +25,7 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 |---|---|
 | 0 | Foundation: `paddy` branch and remotes, fork migration runner with its own `fork_schema_version` key (upstream's `user_version` sequence is untouched), `fork::ForkState` in `AppState`, own updater keypair and endpoint, version line 1.1.0, `scripts/fork/build-install.ps1`, the screenshot harness `demo/fork-shots.mjs`. |
 | 1 | Correctness fixes: Gmail detected by IMAP host and MX, not only by the provider string; archive on Gmail expunges the label instead of moving; no duplicate Sent copies on Gmail-host accounts; Important is its own role, not Starred; Starred shows a real total in the sidebar; no Archive button in Sent, Trash or Spam. |
-| 2 | Wave 1 visuals: unread = blue dot plus bold (variant A of the mock), amber star in a fixed gutter, contrast tokens gated by `scripts/fork/contrast.mjs` (96 ratios), compact density, zoom keys, hover actions on rows, advance after archive, a global focus ring. |
+| 2 | Wave 1 visuals: unread = blue dot, bold and a blue subject (variant C of the mock, D46), amber star in a fixed gutter, contrast tokens gated by `scripts/fork/contrast.mjs` (96 ratios), compact density, zoom keys, hover actions on rows, advance after archive, a global focus ring. |
 | 3 | Triage: All / Unread / Starred chips with unread-first order, undo for archive, delete, spam, move and bulk removals (8 s client hold, then server restore by Message-ID), `g` sequences with a hint, `z` / Ctrl+Z, navigation hooks for later phases. |
 | 3.4 | Sent and Drafts refresh at once after a send or a draft save, and on opening or focusing either folder (20 s debounce per folder), instead of waiting for the 5-minute poll. |
 | 4 | Search operators in the palette: `from:`, `to:`, `cc:`, `subject:`, `is:`, `has:`, `in:`, `before:`, `after:`, `older_than:`, `newer_than:`, quoted values, `-word` negation; results grouped by thread with removable chips. |
@@ -34,10 +35,10 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 | 7 | Google connection, Calendar and Meet: OAuth Desktop flow with the client ID and secret held in Credential Manager, calendar tables under `fork_*`, a windowed pull (-60 d / +180 d) every 5 minutes, an offline op queue for create / patch / delete / RSVP, a Meet space from the toolbar. |
 | 8 | Share availability: `fork_free_slots` walks working hours in a chosen zone over the selected calendars and returns slots on a 30-minute grid, for pasting into a reply. |
 | 9 | CRM sidebar: a right drawer that looks the focused sender up in Rebound (person, company, open deals, activities), read-only, with Supabase login held in Credential Manager and a 10-minute lookup cache. |
-| 10 | Ball in my court: a deterministic pass classifies every thread as on me / waiting / none, two sidebar views (`g o`, `g w`) with age badges, an optional AI pass (off by default, day cap), a daily nudge toast. |
+| 10 | Ball in my court: a deterministic pass classifies every thread as on me / waiting / none, two sidebar views (`g o`, `g w`) with age badges, a 30-day look-back (Settings, Look back; `all` shows everything), an optional AI pass (off by default, day cap), a daily nudge toast. |
 | 11 | Meeting prep: for an event with external guests, a panel with each guest's CRM card and last threads, a streamed brief, and a reminder 10 minutes before. |
 | 12 | MCP server: loopback HTTP on port 8342 with a bearer token, twelve tools (`search_mail`, `get_thread`, `list_unread`, `list_court`, `get_calendar`, `find_free_slots`, `create_draft`, `archive`, `star`, `mark_read`, `create_event`, `crm_lookup`). There is no send tool and no invite tool. |
-| 13 | Release: this README, the touch list and decisions log brought current, gates green, shots regenerated, an installed 1.1.0 build, the live smoke test, tag `v1.1.0` on `paddy`. |
+| 13 | Release: `build-install.ps1`, the live smoke test on the installed app, and the fixes it forced (D41-D47). Phase 13 has no shots folder; it re-ran the earlier phases' scenarios. |
 
 Not in this fork by decision (D12): snooze, split inbox, screener, bundles,
 templates.
@@ -47,7 +48,33 @@ its own (no feature, timer or MCP tool submits an email or an external invite
 without Patrick pressing Send), and secrets live only in Windows Credential
 Manager under `fork:` keys, never in the database, settings, logs or repo.
 
+## Where the code is
+
+| Feature | Rust (`src-tauri/src/fork/`) | UI (`src/fork/`) |
+|---|---|---|
+| Migrations, settings allowlist, command list | `db.rs`, `migrations/`, `settings.rs`, `commands.rs`, `mod.rs` | `SettingsFork.svelte`, `keys.ts`, `actions.ts` |
+| Gmail fixes, Starred total | `gmail.rs`, `list.rs` | |
+| Undo and restore | `restore.rs` | `stores/`, `Toast.svelte` |
+| Sent / Drafts freshness | `freshness.rs` | |
+| Search operators | `search_query.rs` | `search/` |
+| Quote folding | `fold.rs` | |
+| Compose HTML, send later, holds | `compose.rs`, `scheduler.rs` | `RichEditor.svelte`, `compose/`, `scheduled/` |
+| AI-smell | `smell.rs` | `smell/` |
+| Google, Calendar, Meet | `google.rs`, `calendar/` | `calendar/` |
+| Share availability | `availability.rs` | `slots/` |
+| CRM drawer | `crm.rs` | `crm/` |
+| Ball in my court | `court.rs` | `court/` |
+| Meeting prep | `prep.rs` | `prep/` |
+| MCP server | `mcp/` | `mcp/` |
+
+Upstream files the fork edits are in `TOUCHLIST.md`. Node tests live in
+`src/fork/tests/`; Rust tests sit next to the code.
+
 ## Build and install
+
+Needs Windows, Node 22 (the node tests use its type stripping), a stable Rust
+toolchain (built with 1.91) and the Tauri 2 Windows prerequisites (WebView2,
+MSVC build tools). Remotes: `origin` = `paddynes2/skim`, `upstream` = `nikserg/skim`.
 
 The one command:
 
@@ -126,67 +153,63 @@ The main session merges those mechanically and commits per step with the
 `fork(<phase>):` prefix. Agents never commit, never run history-changing git,
 and never send anything.
 
-Read the `## status` section of a pending file for what that phase really
-finished, what it left for the main session, and which gates it ran.
+Each pending file's `## status` section records what the phase had finished
+at handback. That was true at the time. What is open now is in `STATUS.md`.
 
-## Human steps that remain
+## One-time setup on a new machine
 
-Only these three (PLAN.md section 5):
+1. Google, about ten minutes: in the Google Cloud project owned by the
+   autospark.ai Workspace, enable the Google Calendar API and the Google Meet
+   REST API, set the OAuth consent screen to Internal, and create an OAuth
+   client of type Desktop app. Paste its ID and secret into Skim Settings,
+   Calendar, then click Connect and approve. Internal apps skip Google
+   verification and the weekly token expiry.
+2. Rebound: Settings, CRM. The URLs and anon key are prefilled from the build.
+   Enter the Rebound email and password and click Connect. A workspace is
+   picked automatically. Open a thread from a known contact and press `i` to
+   see the card.
+3. MCP: Settings, Claude Code (MCP), turn it on, and run the `claude mcp add`
+   line shown there.
 
-1. Google, about ten minutes, once: in the Google Cloud project owned by the
-   autospark.ai Workspace, enable the Google Calendar API and the Google Meet REST
-   API, set the OAuth consent screen to Internal, create an OAuth client of type
-   Desktop app. Paste the client ID and secret into Skim Settings, Calendar, then
-   click Connect and approve. Internal apps skip Google verification and the
-   weekly token expiry.
-2. Rebound, once: Settings, CRM. The URLs and anon key are prefilled from the
-   build; enter the Rebound email and password and click Connect. A workspace is
-   auto-picked; open a thread from a known contact and press `i` to see the card.
-3. Choose the list variant if A is not right: open
-   `docs/fork/mocks/list-states.html`. A ships; B (row tint plus a 3 px left bar)
-   and C (blue subject) are documented as CSS deltas in D18.
+Which of these is done on Patrick's machine is in `STATUS.md`.
 
-Then the Phase 13 smoke test on the real app, read-only except where the plan
-says otherwise: inbox renders, unread dot and amber star visible, chips work,
-J / K, E then Z restores the thread, palette `from:` search, a thread with
-quotes folds, inline reply opens, Ctrl+Enter present, zoom keys, the Calendar
-screen shows its connect state (or events after step 1), Meet now opens
-meet.new, and `search_mail` answers from Claude Code after the `claude mcp add`
-line shown in Settings. No email is sent and no event with guests is created or
-changed during the smoke test.
+## Smoke test after an install
+
+Read-only except where marked. Check that:
+
+- the inbox renders, with the unread dot, blue subject and amber star
+- the filter chips work, and J / K open threads
+- E then Z restores the thread
+- a palette `from:` search works
+- a thread with quotes folds
+- the inline reply opens, shows Ctrl+Enter, and Esc discards it when untouched
+- the zoom keys work
+- the Calendar screen shows its events or its connect state
+- Meet opens meet.new when Google is not connected; when it is, it creates a
+  Meet, copies the link and opens it
+- `search_mail` answers from Claude Code
+
+No email is sent. No event with guests is created or changed.
+
+To drive the installed app from a script:
+
+1. Relaunch Skim with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`.
+2. Connect Playwright with `chromium.connectOverCDP("http://127.0.0.1:9333")`.
+   Do not close the browser from the script, because that can close the app window.
+3. Afterwards, relaunch Skim without the variable.
+
+Screenshots of real mail go to a scratch folder, never into the repo.
 
 ## Upstream sync
-
-### Trial merge record, 2026-09-23
-
-Done in a throwaway worktree (`trial/upstream-merge`, cut from `paddy` at
-`d44ef77`, removed afterwards; the shared tree was not touched).
-
-- `git fetch upstream`: upstream `main` is at `cd60077` ("scoop: skim 1.0.30"),
-  the same commit the plan was written against.
-- `upstream/main` is 0 commits ahead of `paddy`. `paddy` is 12 commits ahead of
-  `upstream/main`, and `cd60077` is their merge base.
-- `git merge upstream/main --no-commit --no-ff` answered "Already up to date."
-  No conflicting files, so there is nothing to classify as trivial or structural
-  yet. The TOUCHLIST rows are the list of files that would conflict when
-  upstream moves: hook lines in `db/mod.rs`, `state.rs`, `lib.rs`, `mail/sync.rs`,
-  `commands/invites.rs`, `mail/autoconfig.rs`, `commands/accounts.rs`,
-  `db/queries.rs`, `mail/sanitize.rs`, `mail/oauth.rs`, and the Svelte
-  components listed there; plus the version line in `package.json`,
-  `Cargo.toml`, `Cargo.lock` and `tauri.conf.json`, which will conflict on every
-  upstream release and is always resolved in the fork's favour (1.1.x).
-- Caveat: the trial ran against `paddy`'s committed state. The working tree
-  holds later phases not yet committed; their upstream touches are in the
-  pending files and will join the touch list as the main session merges them.
 
 ### Re-syncing when upstream moves
 
 1. `git fetch upstream`, then `git log --oneline paddy..upstream/main` to see
    what came in, and `git diff --stat paddy...upstream/main -- <touchlist files>`
    to see which touched files upstream changed.
-2. Rebase `paddy` on `upstream/main` (or merge, as PLAN.md Phase 13 says; the
-   rebase keeps the `fork(<phase>):` history linear). Fork-owned directories
-   never conflict.
+2. Merge `upstream/main` into `paddy`. Do not rebase: `paddy` is pushed and
+   tagged, so a rebase would need a force-push. Fork-owned directories never
+   conflict.
 3. For each conflict, open `docs/fork/TOUCHLIST.md`, find the row for that file
    and symbol, and re-apply the fork's hook line, parameter or prop on top of
    upstream's new version of the function. The row tells you what the edit was
@@ -199,31 +222,22 @@ Done in a throwaway worktree (`trial/upstream-merge`, cut from `paddy` at
    phase whose components upstream touched, and look at the PNGs.
 7. Bump the fork patch version and build with `build-install.ps1`.
 
-## Known limits, stated plainly
+## Traps worth knowing
 
-State at the v1.1.0 install, 2026-09-23:
-
-- No live call to Google was made. No OAuth client exists yet (human step 1),
-  so the Calendar v3 and Meet request shapes were written from the reference
-  and tested against JSON fixtures. The first real Connect is the test. If
-  Google 404s on the raw `@` in a calendar path, percent-encode the segment in
-  `gapi::events_url`.
-- No live call to Rebound was made. No credentials were entered (human step 2);
-  login, refresh, lookup and cache are unit-tested against route-shaped
-  fixtures. First check: Settings, CRM, Connect, then `i` on a known contact.
-- The MCP server was checked live on the installed build: 401 without the
-  token, 403 for a foreign Origin, 12 tools listed, `search_mail` answered with
-  real results, and `claude mcp list` shows `skim` connected.
-- The Ball-in-my-court AI pass has never run live (no key in the build
-  environment). It is off by default. Every outbound mail reads as "waiting"
-  until answered (D-10b); if that is noise, a `since` floor belongs in the view.
+- Run `cargo test` through `scripts/fork/gates.sh`, or from PowerShell or cmd.
+  From Git Bash the test binary dies with STATUS_ENTRYPOINT_NOT_FOUND (D25).
+- A Svelte rune (`$state`, `$derived`) in a plain `.ts` file passes
+  `npm run check` and throws at runtime. Runes belong in `.svelte` or
+  `.svelte.ts` files (D26).
+- `npm ci` fails with EPERM while a demo Vite server is running, because it
+  holds a native rollup file open. Stop the demo first.
+- A token that starts being used as text must clear 4.5:1 in
+  `scripts/fork/contrast.mjs`, not the 3:1 used for icons (D46).
+- `drafts.id` is not AUTOINCREMENT, so ids are reused. Anything keyed on a
+  draft id must be removed when the draft is deleted (see `delete_draft`).
+- The pop-out compose window (`ComposeRoot.svelte`) is a separate app root. A
+  popover or toast mounted only in `App.svelte` does not exist there (D47).
+- Send later needs the app running. Skim autostarts to the tray, and the
+  Scheduled view says so.
 - Freshness (3.4) and the Gmail archive path (1.1, 1.2) are tested at the
   predicate, not against a scripted IMAP server (D15).
-- `htmlToText` in the rich editor is exercised only in the browser.
-- Run `cargo test` through `scripts/fork/gates.sh`, or from PowerShell: from
-  Git Bash the test binary dies with STATUS_ENTRYPOINT_NOT_FOUND (D25).
-- Send later needs the app running: Skim autostarts to the tray, and the
-  Scheduled view says so.
-- The port row for 8342 is in `OS/meta/PORTS.md` but not committed there: that
-  file carried other sessions' uncommitted edits, so a path commit would have
-  swept them in.
