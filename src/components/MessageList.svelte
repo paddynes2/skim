@@ -8,6 +8,7 @@
   import MessageRow from "./MessageRow.svelte";
   import SelectionBar from "./SelectionBar.svelte";
   import { prefs } from "../fork/stores/prefs.svelte";
+  import SearchChips from "../fork/search/SearchChips.svelte";
 
   const title = $derived.by(() => {
     const f = mail.selectedFolder;
@@ -108,6 +109,15 @@
       <!-- The header becomes the action bar rather than a second strip
            appearing: same height, no rows covered, no chrome when idle. -->
       <SelectionBar />
+    {:else if mail.searching}
+      <!-- Fork (4.3): search mode — the query as the title, its operators as
+           removable chips, ✕ / Esc back to the folder the search came from. -->
+      <SearchChips
+        query={mail.searchQuery ?? ""}
+        count={mail.threads.length}
+        onremove={(chip) => void mail.removeSearchToken(chip.token)}
+        onclose={() => void mail.exitSearch()}
+      />
     {:else}
       <h1>{title}</h1>
       {#if editableFolder}

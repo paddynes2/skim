@@ -5,8 +5,12 @@ import { api, reportError } from "../api";
 import { t } from "../i18n/index.svelte";
 import type { Account, Folder, SyncState, ThreadRow } from "../types";
 import { prefs, type ListOrder } from "../../fork/stores/prefs.svelte";
+// Fork (4.3): search results as a virtual folder.
+import { searchApi, SEARCH_FOLDER_ID } from "../../fork/search/api";
+import { withoutToken } from "../../fork/search/query";
 import { undo } from "../../fork/stores/undo.svelte";
 import { insertAt, withoutPending } from "../../fork/undo-filter";
+import { folderSelected } from "../../fork/freshness";
 
 /** Fork (3.1): which rows the list shows. */
 export type ListFilter = "all" | "unread" | "starred";
@@ -50,6 +54,10 @@ const state = $state({
   // Fork (3.1): the list header's All / Unread / Starred chip. Not persisted:
   // a filter is a moment's view, not a preference.
   listFilter: "all" as ListFilter,
+  // Fork (4.3): the query behind the "Search: …" virtual folder (id -900),
+  // and the folder to go back to when the search closes.
+  searchQuery: null as string | null,
+  searchPrevFolderId: null as number | null,
 });
 
 /** Membership lookup for the selection. Rebuilt only when the selection
@@ -237,6 +245,9 @@ async function refreshFolders() {
   // the previous mailbox.
   if (state.activeAccountId !== accountId) return;
   state.folders = folders;
+  // Fork (4.3): the search folder is never in this list; a sync must not
+  // bounce an open search back to the inbox.
+  if (state.selectedFolderId === SEARCH_FOLDER_ID) return;
   // Auto-select inbox once it appears — also when the selected folder is gone
   // (e.g. a virtual label vanished with its last message).
   if (
@@ -316,6 +327,11 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
   // Fork (3.1): the active chip and the persisted order ride every page read.
   const filter = state.listFilter;
   const order = prefs.listOrder;
+  // Fork (4.3): the search folder is served by the operator search, grouped
+  // by thread, scoped to the active mailbox (every mailbox when unified).
+  if (folderId === SEARCH_FOLDER_ID) {
+    return searchApi.searchThreads(state.searchQuery ?? "", offset, limit, activeAccount()?.id ?? null);
+  }
   if (folderId < 0) {
     const virtual = state.folders.find((f) => f.id === folderId);
     if (!virtual) return Promise.resolve([]);
@@ -381,6 +397,7 @@ async function refreshThreads() {
 
 async function selectFolder(id: number) {
   state.selectedFolderId = id;
+  void folderSelected(state.folders.find((f) => f.id === id)); // fork (3.4)
   state.selectedThreadId = null;
   state.selectedMessageId = null;
   clearSelection();
@@ -399,6 +416,52 @@ async function selectFolder(id: number) {
     state.threadsLoading = false;
   }
 }
+
+// ── Fork (4.3): search as a virtual folder ───────────────────────────────────
+// The list shows the results of an operator query under the id -900, which
+// no real or unified folder ever has. Entering remembers the folder the user
+// came from; leaving goes back to it. `fetchPage` routes the id to
+// `fork_search_threads`, so paging and `mail:updated` refreshes work as for
+// any other folder.
+
+/** Show the results of `query` in the list. An empty query closes the search. */
+async function enterSearch(query: string) {
+  const q = query.trim();
+  if (q === "") {
+    await exitSearch();
+    return;
+  }
+  if (state.selectedFolderId !== SEARCH_FOLDER_ID) state.searchPrevFolderId = state.selectedFolderId;
+  state.searchQuery = q;
+  await selectFolder(SEARCH_FOLDER_ID);
+}
+
+/** Back to the folder the search started from (the inbox when unknown). */
+async function exitSearch() {
+  const wasSearching = state.selectedFolderId === SEARCH_FOLDER_ID;
+  state.searchQuery = null;
+  const back = state.searchPrevFolderId;
+  state.searchPrevFolderId = null;
+  if (!wasSearching) return;
+  const target =
+    (back !== null && state.folders.some((f) => f.id === back) ? back : null) ??
+    state.folders.find((f) => f.role === "inbox")?.id ??
+    null;
+  if (target === null) {
+    state.selectedFolderId = null;
+    state.threads = [];
+    state.fetched = 0;
+    return;
+  }
+  await selectFolder(target);
+}
+
+/** Drop one operator token (a chip) and search again. */
+async function removeSearchToken(token: string) {
+  if (state.searchQuery === null) return;
+  await enterSearch(withoutToken(state.searchQuery, token));
+}
+// ── end fork (4.3) ───────────────────────────────────────────────────────────
 
 let loadingMore = false;
 
@@ -726,6 +789,17 @@ export const mail = {
   },
   setListFilter,
   setListOrder,
+  // Fork (4.3): search as a virtual folder.
+  /** The query the list is showing results for; `null` outside search mode. */
+  get searchQuery(): string | null {
+    return state.selectedFolderId === SEARCH_FOLDER_ID ? state.searchQuery : null;
+  },
+  get searching() {
+    return state.selectedFolderId === SEARCH_FOLDER_ID;
+  },
+  enterSearch,
+  exitSearch,
+  removeSearchToken,
   switchAccount,
   openLocation,
   // In the unified view the active account is null, so this syncs every engine.

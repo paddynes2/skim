@@ -85,6 +85,10 @@ pub enum SyncCommand {
     /// Get the fetch connection ready for a click that is probably coming.
     WarmFetch,
     RunOps,
+    /// Fork (3.4): one targeted sync of a folder (Sent/Drafts on open or focus).
+    SyncFolder {
+        folder_id: i64,
+    },
     Stop,
 }
 
@@ -102,6 +106,10 @@ impl SyncHandle {
     }
     pub fn run_ops(&self) {
         let _ = self.tx.send(SyncCommand::RunOps);
+    }
+    /// Fork (3.4): drain the queue, then sync just this folder.
+    pub fn sync_folder(&self, folder_id: i64) {
+        let _ = self.tx.send(SyncCommand::SyncFolder { folder_id });
     }
     pub fn stop(&self) {
         let _ = self.tx.send(SyncCommand::Stop);
@@ -353,7 +361,18 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
                             engine.drain_ops().await;
                             engine.sync_inbox().await;
                         }
-                        Some(SyncCommand::RunOps) => engine.drain_ops().await,
+                        Some(SyncCommand::RunOps) => {
+                            engine.drain_ops().await;
+                        }
+                        // Fork (3.4): a pending send/save_draft lands first and
+                        // already resyncs its folders; only sync again if the
+                        // drain did not reach this one.
+                        Some(SyncCommand::SyncFolder { folder_id }) => {
+                            let drained = engine.drain_ops().await;
+                            if !drained.contains(&folder_id) {
+                                engine.resync_folder_id(folder_id).await;
+                            }
+                        }
                         // Body work — interactive fetches, arrival prefetch and
                         // the warm-up that precedes them — runs on the dedicated
                         // fetch connection (see `spawn`), never here: opening a
@@ -1702,7 +1721,8 @@ impl Engine {
 
     // ---- offline op queue ----------------------------------------------
 
-    async fn drain_ops(&mut self) {
+    /// Returns the folder ids it resynced afterwards (fork 3.4).
+    async fn drain_ops(&mut self) -> std::collections::HashSet<i64> {
         let mut affected: std::collections::HashSet<i64> = std::collections::HashSet::new();
         loop {
             let account_id = self.account.id.clone();
@@ -1712,7 +1732,9 @@ impl Engine {
                     use rusqlite::OptionalExtension;
                     conn.query_row(
                         "SELECT id, kind, payload, attempts FROM pending_ops
-                         WHERE account_id = ?1 AND state = 'pending' ORDER BY id LIMIT 1",
+                         WHERE account_id = ?1 AND state = 'pending'
+                           AND id NOT IN (SELECT op_id FROM fork_op_schedule WHERE not_before > unixepoch())
+                         ORDER BY id LIMIT 1",
                         rusqlite::params![account_id],
                         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                     )
@@ -1742,6 +1764,16 @@ impl Engine {
             match self.execute_op(&kind, &parsed).await {
                 Ok(folder_ids) => {
                     affected.extend(folder_ids);
+                    // Fork (3.4): Sent/Drafts change on the server when a
+                    // send or draft save lands (Gmail files Sent itself).
+                    affected.extend(
+                        crate::fork::freshness::folders_after_op_db(
+                            &self.db,
+                            &self.account.id,
+                            &kind,
+                        )
+                        .await,
+                    );
                     let _ = self.finish_op(op_id, true).await;
                 }
                 Err(e) => {
@@ -1850,19 +1882,30 @@ impl Engine {
         }
 
         // Ops mutate server state; refresh the folders they touched.
-        for folder_id in affected {
-            let name: std::result::Result<String, _> = self
-                .db
-                .call(move |conn| {
-                    conn.query_row(
-                        "SELECT imap_name FROM folders WHERE id = ?1",
-                        rusqlite::params![folder_id],
-                        |r| r.get(0),
-                    )
-                })
-                .await;
-            if let Ok(name) = name {
-                let _ = self.sync_folder(folder_id, &name).await;
+        for folder_id in &affected {
+            self.resync_folder_id(*folder_id).await;
+        }
+        affected
+    }
+
+    /// Sync one folder by its local id (fork 3.4 factored this out of
+    /// `drain_ops` so a targeted sync shares the path). A missing row or a
+    /// failed sync is logged, never fatal: the poll retries.
+    async fn resync_folder_id(&mut self, folder_id: i64) {
+        let name: std::result::Result<String, _> = self
+            .db
+            .call(move |conn| {
+                conn.query_row(
+                    "SELECT imap_name FROM folders WHERE id = ?1",
+                    rusqlite::params![folder_id],
+                    |r| r.get(0),
+                )
+            })
+            .await;
+        if let Ok(name) = name {
+            if let Err(e) = self.sync_folder(folder_id, &name).await {
+                tracing::warn!(folder_id, error = %e, "folder resync failed");
+                self.reset_session();
             }
         }
     }

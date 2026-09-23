@@ -107,6 +107,48 @@ export const SCENARIOS = {
       await page.locator(".go-hint").waitFor();
     },
   },
+  // Phase 4: palette with an operator query typed.
+  "search-palette": {
+    phase: "4",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.keyboard.press("Control+K");
+      await page.locator(".panel input").fill("from:anna is:unread launch");
+      await sleep(400);
+    },
+  },
+  // Phase 4: the list in search mode (title, chips with x, grouped results).
+  "search-list": {
+    phase: "4",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.keyboard.press("Control+K");
+      await page.locator(".panel input").fill("from:anna is:unread launch");
+      await page.keyboard.press("Shift+Enter");
+      await page.locator(".search-chips .schip").first().waitFor();
+      await sleep(300);
+    },
+  },
+  // Phase 4: a chip removed (from: gone, is:unread stays) and the list re-run.
+  "search-chip-removed": {
+    phase: "4",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.keyboard.press("Control+K");
+      await page.locator(".panel input").fill("from:anna is:unread launch");
+      await page.keyboard.press("Shift+Enter");
+      await page.locator(".search-chips .schip").first().waitFor();
+      await page.locator(".search-chips .schip-x").first().click();
+      await sleep(300);
+    },
+  },
+  // Phase 5: quote folding. The pill is `button.fold-pill`; a lone forward has none.
+  "fold-gmail-folded": { phase: "5", flags: { "skimdemo.fork_body": "gmail" }, setup: async (page) => { await openHero(page); await page.locator("button.fold-pill").waitFor(); } },
+  "fold-gmail-unfolded": { phase: "5", flags: { "skimdemo.fork_body": "gmail" }, setup: async (page) => { await openHero(page); await page.locator("button.fold-pill").click(); await sleep(400); } },
+  "fold-outlook-folded": { phase: "5", flags: { "skimdemo.fork_body": "outlook" }, setup: async (page) => { await openHero(page); await page.locator("button.fold-pill").waitFor(); } },
+  "fold-outlook-unfolded": { phase: "5", flags: { "skimdemo.fork_body": "outlook" }, setup: async (page) => { await openHero(page); await page.locator("button.fold-pill").click(); await sleep(400); } },
+  "fold-plain-folded": { phase: "5", flags: { "skimdemo.fork_body": "plain" }, setup: async (page) => { await openHero(page); await page.locator("button.fold-pill").waitFor(); } },
+  "fold-forward-whole": { phase: "5", flags: { "skimdemo.fork_body": "forward" }, setup: async (page) => { await openHero(page); await sleep(400); } },
   "settings-list": {
     phase: "2",
     setup: async (page) => {

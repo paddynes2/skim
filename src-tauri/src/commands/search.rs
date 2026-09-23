@@ -55,25 +55,52 @@ pub async fn search_messages(
     limit: i64,
     account_id: Option<String>,
 ) -> Result<Vec<SearchHit>> {
-    let Some(fts_query) = build_fts_query(&query) else {
+    // Fork (4.2): operators (`from:`, `is:unread`, ...) come off the query as
+    // SQL filters; the words that remain are the FTS query as before.
+    let parsed = crate::fork::search_query::parse(&query);
+    let fts_query = build_fts_query(&parsed.text);
+    if fts_query.is_none() && parsed.filters.is_empty() {
         return Ok(Vec::new());
-    };
+    }
     let limit = limit.clamp(1, 50);
     state
         .db
         .read("search_messages", move |conn| {
-            let mut stmt = conn.prepare_cached(
-                "SELECT m.id, m.thread_id, m.folder_id, m.subject, m.from_name, m.from_addr,
-                        m.date, snippet(messages_fts, 3, '', '', '…', 12)
-                 FROM messages_fts
-                 JOIN messages m ON m.id = messages_fts.rowid
-                 WHERE messages_fts MATCH ?1
-                   AND (?3 IS NULL OR m.account_id = ?3)
-                 ORDER BY bm25(messages_fts)
-                 LIMIT ?2",
-            )?;
+            let (filter, filter_params) = crate::fork::search_query::filter_sql(&parsed.filters);
+            let mut params: Vec<rusqlite::types::Value> = Vec::new();
+            let sql = match &fts_query {
+                Some(q) => {
+                    params.push(rusqlite::types::Value::Text(q.clone()));
+                    format!(
+                        "SELECT m.id, m.thread_id, m.folder_id, m.subject, m.from_name, m.from_addr,
+                                m.date, snippet(messages_fts, 3, '', '', '…', 12)
+                         FROM messages_fts
+                         JOIN messages m ON m.id = messages_fts.rowid
+                         WHERE messages_fts MATCH ?{filter}
+                           AND (? IS NULL OR m.account_id = ?)
+                         ORDER BY bm25(messages_fts)
+                         LIMIT ?"
+                    )
+                }
+                None => format!(
+                    "SELECT m.id, m.thread_id, m.folder_id, m.subject, m.from_name, m.from_addr,
+                            m.date, COALESCE(m.snippet, '')
+                     FROM messages m
+                     WHERE 1=1{filter}
+                       AND (? IS NULL OR m.account_id = ?)
+                     ORDER BY m.date DESC
+                     LIMIT ?"
+                ),
+            };
+            params.extend(filter_params);
+            let acct =
+                account_id.map_or(rusqlite::types::Value::Null, rusqlite::types::Value::Text);
+            params.push(acct.clone());
+            params.push(acct);
+            params.push(rusqlite::types::Value::Integer(limit));
+            let mut stmt = conn.prepare(&sql)?;
             let rows = stmt
-                .query_map(rusqlite::params![fts_query, limit, account_id], |r| {
+                .query_map(rusqlite::params_from_iter(params.iter()), |r| {
                     let from_name: Option<String> = r.get(4)?;
                     let from_addr: Option<String> = r.get(5)?;
                     Ok(SearchHit {

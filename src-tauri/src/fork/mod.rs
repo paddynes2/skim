@@ -5,10 +5,12 @@
 pub mod availability;
 pub mod calendar;
 pub mod commands;
+pub mod compose;
 pub mod court;
 pub mod crm;
 pub mod db;
 pub mod fold;
+pub mod freshness;
 pub mod gmail;
 pub mod google;
 pub mod list;

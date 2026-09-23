@@ -19,6 +19,7 @@
   import { prefs } from "./fork/stores/prefs.svelte";
   import { applyZoom, zoomKey } from "./fork/zoom";
   import { forkKey } from "./fork/keys";
+  import { windowFocused } from "./fork/freshness";
   import { undo } from "./fork/stores/undo.svelte";
   import Toast from "./fork/Toast.svelte";
   import GoHint from "./fork/GoHint.svelte";
@@ -466,7 +467,7 @@
 
 <!-- Fork (3.2): a removal still inside its undo window was intended; fire it
      before the window goes away rather than losing it. -->
-<svelte:window onkeydown={onKeydown} onbeforeunload={() => undo.flushAll()} />
+<svelte:window onkeydown={onKeydown} onbeforeunload={() => undo.flushAll()} onfocus={windowFocused} />
 
 <div class="app">
   <Titlebar />

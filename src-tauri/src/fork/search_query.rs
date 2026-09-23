@@ -1099,8 +1099,13 @@ mod tests {
                 subjects(&run(conn, "from:weber")?),
                 vec!["Q3 launch checklist"]
             );
+            // The Q3 thread survives through its reply, which Anna did not send.
             assert_eq!(
                 subjects(&run(conn, "launch -from:anna -from:other")?),
+                vec!["Re: Q3 launch checklist", "Client launch plan"]
+            );
+            assert_eq!(
+                subjects(&run(conn, "launch -from:anna -from:other -from:me@x")?),
                 vec!["Client launch plan"]
             );
             // to: / cc: read the JSON recipient columns.

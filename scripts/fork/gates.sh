@@ -9,7 +9,10 @@ run npm run check --silent
 if [ "${1:-}" != "--no-build" ]; then run npm run build --silent; fi
 run cargo fmt --check --manifest-path $M
 run cargo clippy --all-targets --manifest-path $M -- -D warnings
-run cargo test --manifest-path $M
+# Test exes die with STATUS_ENTRYPOINT_NOT_FOUND when /mingw64/bin is on PATH
+# (a MinGW DLL shadows the system one), so run them with the MSYS dirs removed.
+PATH="$(echo "$PATH" | tr ":" "
+" | grep -vi "mingw64\|/usr/bin$" | paste -sd:)" run cargo test --manifest-path $M
 if [ -f scripts/fork/contrast.mjs ]; then run node scripts/fork/contrast.mjs; fi
 if [ -d src/fork/tests ]; then run node --test src/fork/tests/; fi
 echo "ALL GATES GREEN"

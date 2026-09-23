@@ -58,3 +58,19 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/components/FolderPicker.svelte` | `activate` | move through `fork/actions.moveRows` (held, undoable) | 3.2 |
 | `src/App.svelte` | keydown, window, markup | Ctrl+Z before the Ctrl guard; `beforeunload` flushes held removals; `<Toast />` mounted | 3.2 |
 | `src/components/ShortcutsOverlay.svelte` | actions group | Undo row | 3.2 |
+| `src-tauri/src/mail/sync.rs` | `SyncCommand`, `SyncHandle::sync_folder`, engine loop, `drain_ops`, `resync_folder_id` | `SyncFolder` variant + handle method; drain returns the resynced set and extends it with `fork::freshness::folders_after_op_db(kind)` after each op; the id -> imap_name -> sync tail factored into `resync_folder_id` (logs + `reset_session` on failure) | 3.4: Sent (Gmail too) + Drafts resync right after send / save_draft / rsvp, and on demand |
+| `src/lib/stores/mail.svelte.ts` | imports, `selectFolder` | `folderSelected(...)` call after `selectedFolderId` is set | 3.4: Sent/Drafts sync on open |
+| `src/App.svelte` | window | `onfocus={windowFocused}` | 3.4: refresh Sent/Drafts on focus |
+| `src-tauri/src/ai/agent.rs` | `search_emails` | clause builder replaced by `search_query::Filters` + `filter_sql` | 4.2: one filter builder |
+| `src-tauri/src/commands/search.rs` | `search_messages` | parses operators with `fork::search_query::parse`, appends `filter_sql`; filters-only query runs a plain `messages` query | 4.2 |
+| `src/lib/stores/mail.svelte.ts` | state, `fetchPage`, `refreshFolders`, fork section, `mail` | search as virtual folder -900 (`enterSearch`/`exitSearch`/`removeSearchToken`, getters); one-line guard so `folders:updated` never bounces an open search | 4.3 |
+| `src/components/MessageList.svelte` | header | `{:else if mail.searching}` branch rendering `SearchChips` | 4.3 |
+| `src/components/CommandPalette.svelte` | `onKeydown`, input row, styles | `showInList()`; ArrowUp reaches -1; Enter with no row / Shift+Enter = show in list; hint button | 4.3 |
+| `src/fork/keys.ts` | `forkKey` | Esc leaves search (guarded so upstream's Esc runs first) | 4.3 |
+| `src/components/ShortcutsOverlay.svelte` | nav group | search rows | 4.3 |
+| `src-tauri/src/mail/sanitize.rs` | builder, `attribute_filter`, `text_to_html`, tests | quote/signature markers rewritten to `skim-quote` / `skim-sig` via `fold_marker()`, nothing arbitrary survives; plain text split at `fork::fold::plain_fold_point`; +10 tests | 5.1 / 5.2 |
+| `src-tauri/src/db/models.rs` | `RenderedBody` | `+ has_fold: bool` | 5.3 |
+| `src-tauri/src/commands/mail.rs` | `get_message_body` | `has_fold` computed after sanitising (the struct's only constructor) | 5.3 |
+| `src/lib/types.ts` | `RenderedBody` | `+ hasFold?: boolean` | 5.3 |
+| `src/components/HtmlViewer.svelte` | props, `buildDoc` | `folded` prop adds the fold rule (`display:none !important`) to the document stylesheet | 5.3 |
+| `src/components/ReadingPane.svelte` | `unfolded`, `isFolded()`, `toggleFold()`, markup, style | the "..." pill under the body; default folded except a lone Fwd/FW/WG/TR | 5.3 |

@@ -175,15 +175,32 @@
     }
   }
 
+  // Fork (4.3): show the whole result set in the message list, as the
+  // "Search: <query>" folder with operator chips. Shift+Enter always; plain
+  // Enter when no row is highlighted (ArrowUp past the first row, or nothing
+  // to highlight).
+  function showInList() {
+    const q = input.trim();
+    if (q === "") return;
+    palette.hide();
+    void mail.enterSearch(q);
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       active = Math.min(active + 1, totalItems - 1);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      active = Math.max(active - 1, 0);
+      // Fork (4.3): -1 = no row highlighted, so Enter searches the list.
+      active = Math.max(active - 1, input.trim() === "" ? 0 : -1);
     } else if (e.key === "Enter") {
       e.preventDefault();
+      // Fork (4.3)
+      if (e.shiftKey || active < 0 || totalItems === 0) {
+        showInList();
+        return;
+      }
       void activate(active);
     }
   }
@@ -242,6 +259,12 @@
           placeholder={ai.keyPresent ? t("palette.placeholder_ai") : t("palette.placeholder")}
           spellcheck="false"
         />
+        <!-- Fork (4.3): the list-search affordance, only once there is a query. -->
+        {#if input.trim() !== ""}
+          <button class="list-hint" onclick={showInList} title={t("fork.search.show_in_list")}>
+            <kbd>⇧ ↵</kbd><span class="microlabel">{t("fork.search.list")}</span>
+          </button>
+        {/if}
         <kbd>ESC</kbd>
       </div>
 
@@ -424,6 +447,18 @@
     text-align: center;
     color: var(--text-faint);
     font-size: 13px;
+  }
+
+  /* Fork (4.3): the "show in list" hint beside the input. */
+  .list-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+  .list-hint:hover {
+    color: var(--text);
   }
 
   /* AI — violet accent */

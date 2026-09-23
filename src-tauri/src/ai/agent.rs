@@ -14,6 +14,7 @@ use crate::ai::{
 use crate::commands::search::{build_fts_query, build_fts_query_any};
 use crate::db::{bodies, Db};
 use crate::error::{Result, SkimError};
+use crate::fork::search_query;
 use crate::mail::sync::SyncHandle;
 use chrono::TimeZone;
 use rusqlite::types::Value as SqlValue;
@@ -839,48 +840,20 @@ async fn search_emails(
         .unwrap_or(SEARCH_LIMIT_DEFAULT)
         .clamp(1, SEARCH_LIMIT_MAX);
 
-    // Shared filter clauses + params, in `?`-order.
-    let mut clauses: Vec<&str> = Vec::new();
-    let mut params: Vec<SqlValue> = Vec::new();
-    if let Some(a) = after {
-        clauses.push("m.date >= ?");
-        params.push(SqlValue::Integer(a));
-    }
-    if let Some(b) = before {
-        clauses.push("m.date < ?");
-        params.push(SqlValue::Integer(b));
-    }
-    if let Some(f) = &from {
-        clauses.push("(m.from_name LIKE ? OR m.from_addr LIKE ?)");
-        let like = format!("%{f}%");
-        params.push(SqlValue::Text(like.clone()));
-        params.push(SqlValue::Text(like));
-    }
-    if let Some(s) = &subject {
-        clauses.push("m.subject LIKE ?");
-        params.push(SqlValue::Text(format!("%{s}%")));
-    }
-    if let Some(fr) = &folder {
-        clauses.push("m.folder_id IN (SELECT id FROM folders WHERE role = ?)");
-        params.push(SqlValue::Text(fr.clone()));
-    } else {
-        // Deleted and junk mail is out unless the model asks for it explicitly.
-        clauses.push("m.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('trash','junk'))");
-    }
-    if has_attachment {
-        clauses.push("m.has_attachments = 1");
-    }
-    if unread {
-        clauses.push("m.is_read = 0");
-    }
-    if starred {
-        clauses.push("m.is_starred = 1");
-    }
-    let filter_sql = if clauses.is_empty() {
-        String::new()
-    } else {
-        format!(" AND {}", clauses.join(" AND "))
+    // Fork (4.2): one filter builder, shared with the palette search. Deleted
+    // and junk mail is out unless the model asks for a folder explicitly.
+    let filters = search_query::Filters {
+        from: from.iter().map(search_query::Term::plain).collect(),
+        subject: subject.iter().map(search_query::Term::plain).collect(),
+        place: folder.clone().map(search_query::Place::Role),
+        has_attachment: has_attachment.then_some(true),
+        unread: unread.then_some(true),
+        starred: starred.then_some(true),
+        after,
+        before,
+        ..Default::default()
     };
+    let (filter_sql, params) = search_query::filter_sql(&filters);
 
     // The AND query first; if it matches nothing, silently retry matching ANY
     // keyword so the model doesn't burn a round reformulating.

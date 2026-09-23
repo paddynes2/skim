@@ -5,6 +5,8 @@
 // UI runs unchanged in a plain browser, served entirely fake data.
 
 import * as db from "./data";
+import { forkRenderedBody } from "./fork-bodies";
+import { forkSearchThreads } from "./fork-search";
 
 // The app checks `"__TAURI_INTERNALS__" in window` to decide whether to boot
 // (vs. show onboarding). Presence is enough — our aliased invoke does the work.
@@ -211,8 +213,13 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     }
     case "get_thread":
       return ok(db.threadDetail(args.threadId));
-    case "get_message_body":
+    case "get_message_body": {
+      // Fork (5.3): `skimdemo.fork_body` swaps in a quoted-reply fixture.
+      const kind = (globalThis as any).localStorage?.getItem("skimdemo.fork_body");
+      if (kind === "gmail" || kind === "outlook" || kind === "plain" || kind === "forward")
+        return ok(forkRenderedBody(args.messageId, kind));
       return ok(db.renderedBody(args.messageId));
+    }
     case "thread_message_ids":
       return ok([args.threadId * 10 + 1]);
     case "thread_message_ids_bulk":
@@ -241,6 +248,10 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       ]);
     case "fork_restore":
       return ok(undefined);
+    case "fork_sync_folder":
+      return ok(undefined);
+    case "fork_search_threads":
+      return ok(forkSearchThreads(args.query ?? "", args.offset ?? 0));
     case "take_pending_open":
       return ok(null);
     case "search_messages":

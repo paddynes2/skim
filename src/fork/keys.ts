@@ -3,6 +3,7 @@
 // so every new binding lives here and upstream's switch stays as it was.
 import { mail } from "../lib/stores/mail.svelte";
 import { navHooks } from "./nav";
+import { goState } from "./stores/go.svelte";
 import { prefs } from "./stores/prefs.svelte";
 import { undo } from "./stores/undo.svelte";
 
@@ -20,16 +21,15 @@ export const GO_TARGETS: { key: string; code: string; label: string; role?: stri
 
 const GO_WINDOW_MS = 1000;
 let goTimer: ReturnType<typeof setTimeout> | null = null;
-let goArmed = $state(false);
 
 function armGo() {
-  goArmed = true;
+  goState.armed = true;
   if (goTimer) clearTimeout(goTimer);
   goTimer = setTimeout(disarmGo, GO_WINDOW_MS);
 }
 
 function disarmGo() {
-  goArmed = false;
+  goState.armed = false;
   if (goTimer) clearTimeout(goTimer);
   goTimer = null;
 }
@@ -65,8 +65,16 @@ export function goTo(key: string): void {
 
 /** Returns true when the event was consumed. */
 export function forkKey(e: KeyboardEvent): boolean {
+  // Esc leaves the search list (4.3). Upstream's Escape case runs first for
+  // a ticked selection and an open thread, so this fires on the third Esc
+  // at most and never steals the first one.
+  if (e.key === "Escape" && mail.searching && !mail.selecting && mail.selectedThreadId === null) {
+    e.preventDefault();
+    void mail.exitSearch();
+    return true;
+  }
   // A pending `g`: the next key picks the destination (1 s window).
-  if (goArmed) {
+  if (goState.armed) {
     disarmGo();
     const target = GO_TARGETS.find((t) => t.code === e.code);
     if (target && !e.shiftKey) {
@@ -116,7 +124,7 @@ export function forkKey(e: KeyboardEvent): boolean {
 export const goSequence = {
   /** True while `g` waits for its second key: the hint is shown. */
   get armed() {
-    return goArmed;
+    return goState.armed;
   },
   cancel: disarmGo,
 };

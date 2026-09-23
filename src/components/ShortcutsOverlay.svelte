@@ -28,6 +28,9 @@
         { label: t("fork.shortcuts.filter_unread"), keys: ["Shift U"] },
         { label: t("fork.shortcuts.filter_starred"), keys: ["Shift S"] },
         { label: t("fork.shortcuts.goto"), keys: ["G  I/S/T/D/A/C/O/W"] },
+        // Fork (4.3)
+        { label: t("fork.shortcuts.search_list"), keys: ["Shift Enter"] },
+        { label: t("fork.shortcuts.search_close"), keys: ["Esc"] },
       ],
     },
     {
