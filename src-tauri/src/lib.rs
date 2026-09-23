@@ -404,6 +404,7 @@ pub fn run() {
             commands::settings::open_credential_manager,
             commands::settings::prepare_update,
             // Fork commands (see fork/mod.rs).
+            fork::commands::fork_role_total,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

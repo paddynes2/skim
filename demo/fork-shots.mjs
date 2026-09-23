@@ -37,6 +37,8 @@ async function openHero(page) {
 export const SCENARIOS = {
   // Phase 0: today's inbox, reading pane open.
   inbox: { phase: "0", setup: async (page) => { await openHero(page); } },
+  // Phase 1.4: Starred in the sidebar with its total count.
+  "sidebar-starred": { phase: "1", setup: async (page) => { await openInbox(page); } },
 };
 
 async function startServer() {

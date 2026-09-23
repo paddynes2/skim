@@ -10,8 +10,11 @@
   import AttachmentChips from "./AttachmentChips.svelte";
   import HtmlViewer from "./HtmlViewer.svelte";
   import InviteCard from "./InviteCard.svelte";
+  import { archiveOffered } from "../fork/actions";
 
   let detail = $state<ThreadDetail | null>(null);
+  // Fork (1.2): no Archive in Sent / Trash / Spam.
+  const canArchive = $derived(archiveOffered(mail.selectedFolder?.role));
   // "loading" = already in the local cache, back in milliseconds; "fetching" =
   // still has to be pulled off the server, which can take seconds.
   let bodies = $state<Record<number, RenderedBody | "loading" | "fetching" | "error">>({});
@@ -380,7 +383,7 @@
   const isRead = $derived(mail.selectedThread?.isRead ?? true);
 
   function archive() {
-    if (!detail) return;
+    if (!detail || !canArchive) return;
     const threadId = detail.id;
     const ids = allIds;
     mail.removeThreadFromList(threadId);
@@ -498,10 +501,12 @@
   {:else}
     <header class="toolbar">
       <div class="spacer"></div>
-      <button class="tool" onclick={archive} title={t("reading.archive")}>
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 3h12v3H2V3zm1 3v7h10V6M6.5 9h3" /></svg>
-        <kbd>E</kbd>
-      </button>
+      {#if canArchive}
+        <button class="tool" onclick={archive} title={t("reading.archive")}>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 3h12v3H2V3zm1 3v7h10V6M6.5 9h3" /></svg>
+          <kbd>E</kbd>
+        </button>
+      {/if}
       <button class="tool" onclick={remove} title={t("reading.delete")}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.5 9.5h6l.5-9.5M6.7 6.5v5M9.3 6.5v5" /></svg>
         <kbd>Del</kbd>

@@ -204,6 +204,9 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
           (f) => !["inbox", "starred", "drafts", "all"].includes(f.role ?? ""),
         ),
       );
+    // ---- fork commands (src/fork/api.ts) ----
+    case "fork_role_total":
+      return ok(args.role === "starred" ? (MULTI() ? 3 : 2) : 0);
     case "take_pending_open":
       return ok(null);
     case "search_messages":

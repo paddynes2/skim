@@ -2,7 +2,9 @@
 //! to the Rust core lives under this module; upstream files get at most a hook
 //! call each, logged in `docs/fork/TOUCHLIST.md`.
 
+pub mod commands;
 pub mod db;
+pub mod gmail;
 
 use tauri::AppHandle;
 

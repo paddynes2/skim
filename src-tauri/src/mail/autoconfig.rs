@@ -45,20 +45,23 @@ const EXCHANGE_ONLINE: ServerPreset = ServerPreset {
     supports_oauth: true,
 };
 
+/// Gmail, and (fork) every Google Workspace domain whose MX points at Google.
+pub const GMAIL: ServerPreset = ServerPreset {
+    provider: "gmail",
+    imap_host: "imap.gmail.com",
+    imap_port: 993,
+    smtp_host: "smtp.gmail.com",
+    smtp_port: 587,
+    smtp_security: "starttls",
+    needs_app_password: true,
+    supports_oauth: true,
+};
+
 /// Well-known server settings by mail domain.
 pub fn lookup(email: &str) -> Option<ServerPreset> {
     let domain = email.rsplit('@').next()?.to_lowercase();
     let preset = match domain.as_str() {
-        "gmail.com" | "googlemail.com" => ServerPreset {
-            provider: "gmail",
-            imap_host: "imap.gmail.com",
-            imap_port: 993,
-            smtp_host: "smtp.gmail.com",
-            smtp_port: 587,
-            smtp_security: "starttls",
-            needs_app_password: true,
-            supports_oauth: true,
-        },
+        "gmail.com" | "googlemail.com" => GMAIL,
         "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => OUTLOOK_CONSUMER,
         "yahoo.com" => ServerPreset {
             provider: "yahoo",
@@ -145,6 +148,12 @@ fn mx_cache() -> &'static Mutex<HashMap<String, Option<MicrosoftKind>>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Fork: domains whose MX pointed at Google, memoised beside `mx_cache`.
+fn google_mx_cache() -> &'static Mutex<std::collections::HashSet<String>> {
+    static CACHE: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
 /// Well-known settings first (instant, offline); on a miss, ask DNS who runs the
 /// mail for this domain. Microsoft answers for far more domains than any table
 /// can list: every Exchange Online tenant, plus the country-specific consumer
@@ -162,13 +171,28 @@ pub async fn lookup_async(email: &str) -> Option<ServerPreset> {
         .ok()
         .and_then(|cache| cache.get(&domain).copied())
     {
+        // Fork: a Google-hosted domain was memoised alongside.
+        if cached.is_none()
+            && google_mx_cache()
+                .lock()
+                .is_ok_and(|cache| cache.contains(&domain))
+        {
+            return Some(GMAIL);
+        }
         return cached.map(preset_for);
     }
 
     let probe = domain.clone();
-    let kind = match tokio::time::timeout(
+    // Fork: one DNS answer, two questions (Microsoft? Google?).
+    let (kind, google) = match tokio::time::timeout(
         MX_TIMEOUT,
-        tokio::task::spawn_blocking(move || microsoft_mx_kind(&dns::mx_hosts(&probe))),
+        tokio::task::spawn_blocking(move || {
+            let hosts = dns::mx_hosts(&probe);
+            (
+                microsoft_mx_kind(&hosts),
+                crate::fork::gmail::is_google_mx(&hosts),
+            )
+        }),
     )
     .await
     {
@@ -178,7 +202,13 @@ pub async fn lookup_async(email: &str) -> Option<ServerPreset> {
         _ => return None,
     };
     if let Ok(mut cache) = mx_cache().lock() {
-        cache.insert(domain, kind);
+        cache.insert(domain.clone(), kind);
+    }
+    if google && kind.is_none() {
+        if let Ok(mut cache) = google_mx_cache().lock() {
+            cache.insert(domain);
+        }
+        return Some(GMAIL);
     }
     kind.map(preset_for)
 }

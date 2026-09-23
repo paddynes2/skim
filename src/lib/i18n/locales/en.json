@@ -69,6 +69,7 @@
   "nav.trash": "Trash",
   "nav.junk": "Spam",
   "nav.all_mail": "All Mail",
+  "nav.important": "Important",
   "sync.syncing": "Syncing…",
   "sync.error": "Sync error — retry",
   "update.available": "Update available",

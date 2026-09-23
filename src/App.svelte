@@ -15,6 +15,7 @@
   import type { ChatSession } from "./lib/ai-chat";
   import { api, reportError, type Citation } from "./lib/api";
   import { bulkAct, bulkMove } from "./lib/bulk";
+  import { archiveOffered } from "./fork/actions";
   import { setLocale, t } from "./lib/i18n/index.svelte";
   import { ai } from "./lib/stores/ai.svelte";
   import { aiSessions } from "./lib/stores/aiSession.svelte";
@@ -240,6 +241,8 @@
     // Ticked rows are what the action keys act on; the highlighted row is the
     // target only when nothing is ticked. Star has no bulk form — it is not a
     // batch verb — so it stays on the highlighted row either way.
+    // Fork (1.2): no Archive in Sent / Trash / Spam.
+    if (action === "archive" && !archiveOffered(mail.selectedFolder?.role)) return;
     if (mail.selecting && action !== "star") {
       void bulkAct(action === "unread" ? "read" : action);
       return;

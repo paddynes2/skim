@@ -16,7 +16,10 @@ pub const VERSION_KEY: &str = "fork_schema_version";
 
 /// Fork migrations, in order. Index + 1 is the version they bring the schema to.
 /// Never reorder, never edit a shipped file: add the next one.
-pub const FORK_MIGRATIONS: &[&str] = &[];
+pub const FORK_MIGRATIONS: &[&str] = &[
+    include_str!("migrations/f0001_gmail_provider.sql"),
+    include_str!("migrations/f0002_important_role.sql"),
+];
 
 pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {
     let stored: Option<String> = conn
@@ -150,5 +153,48 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(before, after);
+    }
+}
+
+#[cfg(test)]
+mod repair_tests {
+    use super::*;
+
+    /// Run the shipped fork migrations again over rows shaped like the live
+    /// database before the fork: a hand-added Gmail account and Important
+    /// mapped to starred.
+    #[test]
+    fn f0001_and_f0002_repair_live_rows() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            conn.execute_batch(
+                "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
+                   VALUES ('a1','p@autospark.ai','custom','imap.gmail.com','smtp.gmail.com',0),
+                          ('a2','q@example.com','custom','imap.example.com','smtp.example.com',0);
+                 INSERT INTO folders (id, account_id, imap_name, role, display_name, sort_order)
+                   VALUES (1,'a1','[Gmail]/Important','starred','Important',1),
+                          (2,'a1','[Gmail]/Starred','starred','Starred',1),
+                          (3,'a2','Important','starred','Important',1);
+                 DELETE FROM settings WHERE key = 'fork_schema_version';",
+            )?;
+            migrate(conn).unwrap();
+            let provider = |id: &str| -> String {
+                conn.query_row("SELECT provider FROM accounts WHERE id = ?1", [id], |r| {
+                    r.get(0)
+                })
+                .unwrap()
+            };
+            assert_eq!(provider("a1"), "gmail");
+            assert_eq!(provider("a2"), "custom", "a non-Gmail host is left alone");
+            let role = |id: i64| -> String {
+                conn.query_row("SELECT role FROM folders WHERE id = ?1", [id], |r| r.get(0))
+                    .unwrap()
+            };
+            assert_eq!(role(1), "important");
+            assert_eq!(role(2), "starred");
+            assert_eq!(role(3), "important");
+            Ok(())
+        })
+        .unwrap();
     }
 }

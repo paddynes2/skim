@@ -8,6 +8,7 @@
   import { ui } from "../lib/stores/ui.svelte";
   import { updater } from "../lib/stores/update.svelte";
   import Settings from "./settings/Settings.svelte";
+  import { starredCount } from "../fork/stores/starred.svelte";
 
   async function compose() {
     const draft = await api.createDraft(await mail.composeAccountId());
@@ -19,9 +20,15 @@
   const noUnreadRoles = new Set(["sent", "drafts"]);
   const showsUnread = (role: string | null) => !(role && noUnreadRoles.has(role));
 
+  // Fork: Starred is shown (Mimestream rule: total count, not unread);
+  // Gmail's Important classifier is hidden like All Mail.
   const mainFolders = $derived(
-    mail.folders.filter((f) => f.role !== null && f.role !== "all" && f.role !== "starred"),
+    mail.folders.filter((f) => f.role !== null && f.role !== "all" && f.role !== "important"),
   );
+  const starredTotal = $derived.by(() => {
+    const starred = mail.folders.find((f) => f.role === "starred");
+    return starred ? starredCount.for(starred, mail.unified ? null : mail.account?.id ?? null) : 0;
+  });
   // The user's own folders, as a tree: a nested folder prints only what its
   // parent row does not already say, and leans on an indent for the rest.
   const labels = $derived(folderTree(mail.folders.filter((f) => f.role === null)));
@@ -63,7 +70,9 @@
             <path d={folderIcon(folder.role)} />
           </svg>
           <span class="name">{name}</span>
-          {#if folder.unreadCount > 0 && showsUnread(folder.role)}
+          {#if folder.role === "starred"}
+            {#if starredTotal > 0}<span class="count total">{starredTotal}</span>{/if}
+          {:else if folder.unreadCount > 0 && showsUnread(folder.role)}
             <span class="count">{folder.unreadCount}</span>
           {/if}
         </button>

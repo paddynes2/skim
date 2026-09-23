@@ -345,6 +345,8 @@ pub fn virtual_folder_id(role: Option<&str>, display_name: &str) -> i64 {
         Some("trash") => -6,
         Some("junk") => -7,
         Some("all") => -8,
+        // Fork: Gmail's Important classifier, kept apart from Starred.
+        Some("important") => -9,
         _ => {
             let key = match role {
                 Some(r) => format!("r:{r}"),

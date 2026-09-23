@@ -150,10 +150,15 @@ pub async fn open_invite_ics(
             };
             let provider: Option<String> = conn
                 .query_row(
-                    "SELECT a.provider FROM messages m JOIN accounts a ON a.id = m.account_id
+                    "SELECT a.provider, a.imap_host FROM messages m JOIN accounts a ON a.id = m.account_id
                      WHERE m.id = ?1",
                     rusqlite::params![message_id],
-                    |r| r.get(0),
+                    |r| {
+                        // Fork: Gmail by host (fork::gmail).
+                        let provider: String = r.get(0)?;
+                        let host: String = r.get(1)?;
+                        Ok(crate::fork::gmail::effective_provider(&provider, &host).to_string())
+                    },
                 )
                 .optional()?;
             Ok(Some((path, provider)))

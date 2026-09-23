@@ -13,6 +13,7 @@ const roleKey: Record<string, string> = {
   trash: "nav.trash",
   junk: "nav.junk",
   all: "nav.all_mail",
+  important: "nav.important",
 };
 
 /** 16×16 path data, drawn as a stroked outline. */

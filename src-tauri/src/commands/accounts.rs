@@ -148,7 +148,9 @@ pub async fn add_account(
         email: input.email,
         imap_user,
         display_name: input.display_name,
-        provider: input.provider,
+        // Fork: a hand-configured Gmail host is a Gmail account (fork::gmail).
+        provider: crate::fork::gmail::effective_provider(&input.provider, &input.imap_host)
+            .to_string(),
         imap_host: input.imap_host,
         imap_port: input.imap_port,
         smtp_host: input.smtp_host,

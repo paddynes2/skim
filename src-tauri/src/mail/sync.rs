@@ -1950,9 +1950,13 @@ impl Engine {
                 }
             }
             "archive" => {
-                let is_gmail_inbox =
-                    self.account.provider == "gmail" && imap_name.eq_ignore_ascii_case("INBOX");
-                if is_gmail_inbox {
+                // Fork: Gmail by host, and labels count too (fork::gmail).
+                let source_role = self.folder_role(folder_id).await;
+                if crate::fork::gmail::archive_by_expunge(
+                    &self.account,
+                    &imap_name,
+                    source_role.as_deref(),
+                ) {
                     // Gmail archive = remove the INBOX label; the message
                     // stays in All Mail.
                     self.delete_and_expunge(&uids).await?;
@@ -2354,7 +2358,7 @@ impl Engine {
     async fn mirror_to_sent(&mut self, raw: &[u8]) -> Option<i64> {
         // Gmail files sent mail automatically; appending would duplicate it.
         let mut sent_folder_id = None;
-        if self.account.provider != "gmail" {
+        if !crate::fork::gmail::is_gmail(&self.account) {
             match self.role_folder("sent", "Sent").await {
                 Ok(dest) => {
                     match self.session().await {
@@ -2479,6 +2483,26 @@ impl Engine {
                 self.delete_and_expunge_set(uid_set).await
             }
         }
+    }
+
+    /// Fork: the stored role of a folder, `None` for a user label or an
+    /// unknown id.
+    async fn folder_role(&self, folder_id: Option<i64>) -> Option<String> {
+        let id = folder_id?;
+        self.db
+            .call(move |conn| {
+                use rusqlite::OptionalExtension;
+                conn.query_row(
+                    "SELECT role FROM folders WHERE id = ?1",
+                    rusqlite::params![id],
+                    |r| r.get::<_, Option<String>>(0),
+                )
+                .optional()
+            })
+            .await
+            .ok()
+            .flatten()
+            .flatten()
     }
 
     /// Find (or create) the folder with the given role.
@@ -2804,7 +2828,9 @@ fn detect_role(imap_name: &str, attrs_lower: &str) -> Option<String> {
                 "archive"
             }
         }
-        "important" | "starred" => "starred",
+        // Fork: Gmail's Important is a classifier, not the user's stars.
+        "important" => "important",
+        "starred" => "starred",
         _ => return None,
     };
     Some(role.to_string())
