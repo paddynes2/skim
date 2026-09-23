@@ -442,6 +442,75 @@ Data model, chosen to keep every upstream text path working:
 - Tests: drain skips held ops but processes the ones behind; cancel refused inside
   the margin; scheduler re-arms after restart.
 
+### Phase 6.5: AI-smell underlines in the composer ("humanizer")
+
+**Why not an OSS humanizer:** measured in the OS estate (memory
+`reference_de_ai_measurement_2026_09_17`, `reference_anti_slop_skills_survey`): the
+public humanizers and detectors score within 0.45 points of each other and rated
+the two artefacts real buyers called AI-generated as human. The rules that do
+separate them already live in OS: `tools/outreach/slop_scrub.py` (113 regex rules,
+hard/warn/info tiers, each with a suggestion) and `tools/no-smell/nosmell/structural.py`
+(contrast-frame repetition, disclaimers/1k, positions/1k). Reuse them; do not
+install another tool.
+
+**Gaps measured 2026-09-23** on a sample draft: `slop_scrub` returns no character
+offsets (only `matched` text), and misses "I wanted to reach out", "Let me know if
+you have any questions", "not just X, it is Y". `no-smell` caught the repeated
+"rather than" (40/1k vs 6) but is document-level.
+
+**6.5.1 One rule source, exported (edit in OS, trunk).** In
+`C:\Users\Patrick\OS\tools\outreach\slop_scrub.py` add the three missing rules
+(warn tier) with recall rows in `test_slop_scrub.py`, and a `--export-rules`
+flag that writes JSON: `[{category, severity, pattern, flags, suggestion, min_hits}]`
+plus the no-smell phrase lists (contrast frames, disclaimer/hedge phrases, stance
+phrases) and thresholds from `nosmell/structural.py`. Keep both suites green.
+Vendor the export into Skim at `src/fork/smell/rules.json` with
+`scripts/fork/sync-smell-rules.ps1` (re-runnable; the JSON records the OS commit it
+came from). OS stays the canonical home; Skim holds a copy.
+
+**6.5.2 Scanner in the webview (TS).** `src/fork/smell/scan.ts`: compiles every rule
+as a JS `RegExp` (V8 supports the lookbehinds `slop_scrub` uses; Rust `regex` does
+not, which is why this runs in TS). Returns spans `{start, end, category, severity,
+suggestion}` over the editor's plain text, applies `min_hits` density gating, skips
+the quoted original and the signature (only the user's own words are scanned),
+and adds the document-level checks: a contrast phrase repeated past threshold
+underlines every occurrence; disclaimers/1k and positions/1k feed the health line.
+Patrick's own hard rule is added as `hard`: em dash and en dash in outbound mail.
+- Parity test: a node script runs the TS scanner and `slop_scrub.py --json` over the
+  same 30-sample corpus (include `tools/outreach` test fixtures) and asserts the same
+  findings. A pattern that fails to compile in JS fails the build.
+
+**6.5.3 Underlines.** In the Squire editor (6.3) use the CSS Custom Highlight API
+(`CSS.highlights`, `Highlight`, `Range`; WebView2 supports it) so the DOM is never
+mutated: `::highlight(smell-hard)` red wavy underline, `smell-warn` amber dotted,
+`smell-info` off by default. Re-scan debounced 300ms after typing. Plain-text mode
+(rich text off) uses a mirrored overlay behind the textarea.
+- A one-line **health bar** under the editor: "3 AI tells · 'rather than' ×2 ·
+  no clear position" (only what fired), click to jump to the first.
+
+**6.5.4 Suggestions popover.** Clicking (or `Alt+Enter` on) an underline opens a
+popover: the rule's reason, its static suggestion, and actions:
+- **Ignore** (this occurrence), **Ignore rule** (setting, reversible in Settings).
+- **✦ Rewrite** (violet, AI, needs a key): sends the sentence plus one sentence of
+  context either side, the rule reason, Patrick's writer profile (`ai_style_profile`
+  from `ai_analyze_style`) and the house drafting rules (write the position first,
+  no hedges, no contrast frames, no em dashes, plain words, keep it short) to the
+  configured model via a new one-shot command `fork_smell_rewrite` (reuses
+  `ai_context` + `anthropic::stream` / `openai_compat::stream`). Returns 3 options.
+  **Fact guard:** reject any option that drops or changes a number, date, amount,
+  URL, email address or capitalised name present in the original sentence; show
+  only options that pass. Accept replaces the sentence as one undoable edit.
+- **✦ Clean whole draft**: same, per flagged sentence, shown as a before/after diff
+  to accept per sentence. Never applied without Patrick clicking accept.
+
+**6.5.5 Send check.** On Send (and Send later): `hard` findings (em/en dash, invisible
+characters, unfilled `{{placeholder}}`, homoglyphs) open a one-line prompt "2 must-fix
+items" with Fix / Send anyway; `warn` findings do not block. Setting `fork_smell`
+(on/off) and `fork_smell_block_hard` (default on).
+- Tests: scanner spans are exact on fixtures; quote/signature excluded; fact guard
+  rejects a rewrite that changes "R140,000" or "Tuesday 14:00".
+- Shots: underlines in all 4 themes, popover with 3 options, health bar, send prompt.
+
 ### Phase 7: Google connection, Calendar, Meet
 
 **Human step (Patrick, ~10 minutes, one time).** In Google Cloud (project owned by

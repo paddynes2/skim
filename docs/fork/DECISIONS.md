@@ -19,3 +19,5 @@ Anything decided during the build is appended below with a date.
 | D12 | Snooze, split inbox, screener, bundles, templates: not in this plan | Not requested; v1.2 candidates |
 
 ## Build-time decisions
+- **2026-09-23 D13 (0.4):** the "latest.json in a draft release" check is done by the tag push at Phase 13 (the release workflow writes it); nothing is pushed before Phase 13 per the build rules. Locally 0.5 asserts the signed `.sig` exists next to the NSIS installer, which is the same signing path.
+- **2026-09-23 D14 (0.5):** the backup runs after Skim is closed and before the installer, so `skim.db`, `-wal` and `-shm` are a consistent set. Build first, close second: a failed build never interrupts the running app.

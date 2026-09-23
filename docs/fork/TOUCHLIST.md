@@ -14,3 +14,6 @@ a hook call, a parameter, a prop; this table is what makes
 | `src-tauri/src/lib.rs` | `setup` | `fork::start(app.handle().clone())` at the end | fork background tasks (0.3) |
 | `src-tauri/src/lib.rs` | `generate_handler!` | fork commands appended under a comment | IPC surface for fork commands (0.3) |
 | `src-tauri/src/mail/suspicion.rs` | `sender_signals` (name/addr mismatch) | boolean pulled into a `let` with `#[allow(clippy::nonminimal_bool)]` | upstream fails clippy on rustc 1.91 (`-D warnings`); no behaviour change |
+| `src-tauri/tauri.conf.json` | `plugins.updater`, `version` | fork pubkey + `paddynes2/skim` latest.json endpoint; version 1.1.0 | own updater (0.4) |
+| `package.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` | `version` | 1.1.0 | fork version line (0.4) |
+| `.github/workflows/release.yml` | `scoop` job | removed | the fork has no bucket (0.4) |

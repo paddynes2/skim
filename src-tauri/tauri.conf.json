@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Skim",
-  "version": "1.0.30",
+  "version": "1.1.0",
   "identifier": "com.skim.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,8 +31,8 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdFOUVGQjI1RkQ2Nzc0MDYKUldRR2RHZjlKZnVlZnFVaXBEeFlmSlIxNGF5dkFTcVVIeVgrV05seFd4bEM5U0tGZ052Rkk0RnAK",
-      "endpoints": ["https://github.com/nikserg/skim/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY1MDVENUQ3QThFQ0I4RTMKUldUanVPeW8xOVVGWmJkUlZpZi95aUU0Z1E4cjdFZzAydWpzQ0VZRTFJblU1VUNIbGV1MU5jMnoK",
+      "endpoints": ["https://github.com/paddynes2/skim/releases/latest/download/latest.json"],
       "windows": {
         "installMode": "passive"
       }
