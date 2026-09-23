@@ -162,6 +162,8 @@ function listOpts<T extends { isRead: boolean; isStarred: boolean; date: number 
 
 // ---- Plain command surface ----------------------------------------------
 export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
+  // Probes can watch which commands the UI issued: `window.__skimCalls = []`.
+  (globalThis as any).__skimCalls?.push(cmd);
   if (AI_COMMANDS.has(cmd)) {
     handleAi(cmd, args);
     return Promise.resolve(undefined as T);

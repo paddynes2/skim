@@ -74,6 +74,16 @@
   // Set once the draft has been committed to the Drafts folder, so closing the
   // window keeps it instead of dropping the (now real) draft.
   let committed = $state(false);
+  // Fork (6.2): what the draft said when it was loaded. `dirty` alone is not
+  // proof of an edit: the rich editor reports its first render as input, so
+  // an untouched inline reply looked edited and Esc saved it to Drafts.
+  let loadedShape = "";
+  function shapeOf(d: Draft | null): string {
+    return d ? JSON.stringify([d.to, d.cc, d.bcc, d.subject, d.body]) : "";
+  }
+  function edited(): boolean {
+    return dirty && shapeOf(draft) !== loadedShape;
+  }
 
   // For the From picker (several mailboxes, fresh compose only). Replies keep
   // the account of the message they answer; once a draft is committed to a
@@ -573,6 +583,7 @@
           wordsHtml = typeof stored === "string" && htmlToText(stored) === w ? stored : textToHtml(w);
         }
         draft = d;
+        loadedShape = shapeOf(d);
         showCc = d.cc.length > 0 || d.bcc.length > 0;
         attachments = await api.listDraftAttachments(draftId);
         accounts = await api.listAccounts();
@@ -607,7 +618,7 @@
    *  to the IMAP Drafts folder; for a local-only draft it just saves locally. */
   async function flushServer() {
     // Nothing the user changed → don't rewrite the server copy.
-    if (!draft || !dirty) return;
+    if (!draft || !edited()) return;
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -706,7 +717,7 @@
     if (variant !== "reply" || e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation();
-    if (dirty) void close();
+    if (edited()) void close();
     else void discard();
   }
 
@@ -750,7 +761,7 @@
     } else if (variant === "reply") {
       // Fork (6.2): the thread changed under the inline reply. Untouched, the
       // empty draft goes; edited, it is kept like a closed inline editor.
-      if (dirty) void flushServer();
+      if (edited()) void flushServer();
       else if (draft) void api.deleteDraft(draft.id).catch(() => {});
       onClose?.();
     } else {

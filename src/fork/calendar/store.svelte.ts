@@ -378,7 +378,10 @@ export const calendar = {
   async meetNow(): Promise<void> {
     const acc = accountId();
     if (!acc || !state.statuses[acc]?.connected) {
-      void openUrl(MEET_NEW);
+      // openUrl only reports failure; say what happened either way.
+      openUrl(MEET_NEW)
+        .then(() => toast.show({ text: t("fork.cal.meet_new_opened"), ms: 4000 }))
+        .catch((e: unknown) => toast.show({ text: String(e) }));
       return;
     }
     const linkPromise = googleApi.meetCreate(acc);
