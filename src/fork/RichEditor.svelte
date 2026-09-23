@@ -100,6 +100,34 @@
     editor?.insertPlainText(text, false);
   }
 
+  /** When the text from the start of the caret's line up to the caret is
+   *  exactly `token` (e.g. "/slots"), delete it, keep the caret there and
+   *  return true. The composer's slash-command trigger (8). */
+  export function takeLineToken(token: string): boolean {
+    if (!editor) return false;
+    const root = editor.getRoot();
+    const sel = editor.getSelection();
+    if (!sel.collapsed || !root.contains(sel.startContainer)) return false;
+    let block: Node = sel.startContainer;
+    while (block !== root && block.parentNode && block.parentNode !== root) block = block.parentNode;
+    if (block === root) return false;
+    const r = document.createRange();
+    r.setStart(block, 0);
+    r.setEnd(sel.startContainer, sel.startOffset);
+    if (r.toString() !== token) return false;
+    r.deleteContents();
+    if (!block.textContent && block instanceof HTMLElement && !block.querySelector("br")) block.appendChild(document.createElement("br"));
+    r.setStart(block, 0);
+    r.collapse(true);
+    editor.setSelection(r);
+    const h = editor.getHTML();
+    reported = h;
+    html = h;
+    empty = !root.textContent;
+    onchange?.(h, htmlToText(h));
+    return true;
+  }
+
   /** The contenteditable, for the AI-tell underlines (6.5). */
   export function hostEl(): HTMLElement | null {
     return host;

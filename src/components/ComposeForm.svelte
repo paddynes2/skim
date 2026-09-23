@@ -135,6 +135,8 @@
     wordsText = text;
     if (draft) draft.body = text + tail;
     scheduleSave();
+    // Fork (8): `/slots` at a line start in the rich editor opens the popover.
+    if (text.includes("/slots") && editorRef?.takeLineToken("/slots")) shareAvailability();
   }
 
   /** The user edits the signature / quote as plain text. */
