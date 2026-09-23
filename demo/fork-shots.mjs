@@ -98,6 +98,15 @@ export const SCENARIOS = {
       await sleep(250);
     },
   },
+  // Phase 3.3: `g` pressed, the destination hint is up.
+  "go-hint": {
+    phase: "3",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.keyboard.press("g");
+      await page.locator(".go-hint").waitFor();
+    },
+  },
   "settings-list": {
     phase: "2",
     setup: async (page) => {

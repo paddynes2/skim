@@ -21,6 +21,7 @@
   import { forkKey } from "./fork/keys";
   import { undo } from "./fork/stores/undo.svelte";
   import Toast from "./fork/Toast.svelte";
+  import GoHint from "./fork/GoHint.svelte";
   import { setLocale, t } from "./lib/i18n/index.svelte";
   import { ai } from "./lib/stores/ai.svelte";
   import { aiSessions } from "./lib/stores/aiSession.svelte";
@@ -518,6 +519,7 @@
       <CommandPalette />
       <FolderPicker />
       <Toast />
+      <GoHint />
       <FolderEditor />
       {#if ui.shortcutsOpen}
         <ShortcutsOverlay />

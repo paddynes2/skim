@@ -27,6 +27,7 @@
         // Fork (3.1)
         { label: t("fork.shortcuts.filter_unread"), keys: ["Shift U"] },
         { label: t("fork.shortcuts.filter_starred"), keys: ["Shift S"] },
+        { label: t("fork.shortcuts.goto"), keys: ["G  I/S/T/D/A/C/O/W"] },
       ],
     },
     {

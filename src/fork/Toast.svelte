@@ -32,7 +32,8 @@
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 18px;
+    /* Above the reading pane footer (its buttons sit at ~60px). */
+    bottom: 72px;
     display: flex;
     justify-content: center;
     pointer-events: none;
