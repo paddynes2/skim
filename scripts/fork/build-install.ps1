@@ -39,6 +39,11 @@ Get-Content $envFile | ForEach-Object {
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY -and -not $env:TAURI_SIGNING_PRIVATE_KEY_PATH) {
     throw "build.env must set TAURI_SIGNING_PRIVATE_KEY_PATH (or TAURI_SIGNING_PRIVATE_KEY)"
 }
+# The Tauri CLI wants the key's CONTENT in TAURI_SIGNING_PRIVATE_KEY; a path
+# alone is not honoured by the bundler's updater signing step (seen 2026-09-23).
+if (-not $env:TAURI_SIGNING_PRIVATE_KEY -and $env:TAURI_SIGNING_PRIVATE_KEY_PATH) {
+    $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content $env:TAURI_SIGNING_PRIVATE_KEY_PATH -Raw)
+}
 # Rebound defaults (Phase 9): read from the OS .env, baked in via option_env!.
 $osEnv = "C:\Users\Patrick\OS\.env"
 if (Test-Path $osEnv) {
