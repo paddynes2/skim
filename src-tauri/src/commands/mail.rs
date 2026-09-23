@@ -407,8 +407,12 @@ pub async fn get_message_body(
         _ => None,
     };
 
+    // Fork (5.3): computed on the sanitized output, which is the only HTML
+    // that can carry a marker.
+    let has_fold = crate::fork::fold::has_fold(&rendered.html);
     Ok(RenderedBody {
         message_id,
+        has_fold,
         html: rendered.html,
         blocked_images: rendered.blocked_images,
         from_addr,
@@ -508,29 +512,7 @@ async fn queue_op(
     let ids = message_ids.clone();
     let account_ids: Vec<String> = state
         .db
-        .call(move |conn| {
-            // Resolve coordinates BEFORE the optimistic mutation removes rows.
-            let groups = bodies::resolve_uids(conn, &ids)?;
-            let mut accounts = Vec::new();
-            for g in &groups {
-                let mut payload = json!({
-                    "imapName": g.imap_name,
-                    "folderId": g.folder_id,
-                    "uids": g.uids,
-                });
-                if let Some(obj) = payload.as_object_mut() {
-                    if let Some(extra_obj) = extra.as_object() {
-                        for (k, v) in extra_obj {
-                            obj.insert(k.clone(), v.clone());
-                        }
-                    }
-                }
-                bodies::enqueue_op(conn, &g.account_id, kind, &payload)?;
-                accounts.push(g.account_id.clone());
-            }
-            local(conn, &ids)?;
-            Ok(accounts)
-        })
+        .call(move |conn| queue_op_local(conn, &ids, kind, &extra, local))
         .await?;
 
     let engines = state.engines.lock().await;
@@ -544,6 +526,41 @@ async fn queue_op(
     // right away, without waiting for the next sync.
     crate::badge::refresh(app).await;
     Ok(())
+}
+
+/// The database half of [`queue_op`]: one `pending_ops` row per folder the
+/// messages sit in, then the optimistic local change. Returns the account ids
+/// whose engines should be poked. Shared with the fork's MCP tools
+/// (`fork::mcp`) so an external archive/star/read takes the same path as a
+/// keypress.
+pub(crate) fn queue_op_local(
+    conn: &mut rusqlite::Connection,
+    ids: &[i64],
+    kind: &str,
+    extra: &serde_json::Value,
+    local: impl FnOnce(&mut rusqlite::Connection, &[i64]) -> rusqlite::Result<()>,
+) -> rusqlite::Result<Vec<String>> {
+    // Resolve coordinates BEFORE the optimistic mutation removes rows.
+    let groups = bodies::resolve_uids(conn, ids)?;
+    let mut accounts = Vec::new();
+    for g in &groups {
+        let mut payload = json!({
+            "imapName": g.imap_name,
+            "folderId": g.folder_id,
+            "uids": g.uids,
+        });
+        if let Some(obj) = payload.as_object_mut() {
+            if let Some(extra_obj) = extra.as_object() {
+                for (k, v) in extra_obj {
+                    obj.insert(k.clone(), v.clone());
+                }
+            }
+        }
+        bodies::enqueue_op(conn, &g.account_id, kind, &payload)?;
+        accounts.push(g.account_id.clone());
+    }
+    local(conn, ids)?;
+    Ok(accounts)
 }
 
 #[tauri::command]

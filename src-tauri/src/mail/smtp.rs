@@ -73,6 +73,32 @@ pub fn build_message(
     message_id: Option<&str>,
     allow_empty_recipients: bool,
 ) -> Result<Vec<u8>> {
+    build_message_with_html(
+        account,
+        draft,
+        refs,
+        attachments,
+        message_id,
+        allow_empty_recipients,
+        None,
+    )
+}
+
+/// Fork (6.3): [`build_message`] with an optional HTML rendition of the body.
+/// With `html`, the body becomes `multipart/alternative[text/plain, text/html]`
+/// (wrapped in `multipart/mixed` with attachments, like the plain path); the
+/// text part is `draft.body` unchanged, so a reader without HTML sees exactly
+/// what a plain send would have carried. `None` is byte-identical to before.
+#[allow(clippy::too_many_arguments)]
+pub fn build_message_with_html(
+    account: &Account,
+    draft: &Draft,
+    refs: &OutgoingRefs,
+    attachments: &[(String, String, Vec<u8>)],
+    message_id: Option<&str>,
+    allow_empty_recipients: bool,
+    html: Option<&str>,
+) -> Result<Vec<u8>> {
     let from = from_mailbox(account)?;
 
     let mut builder = Message::builder().from(from);
@@ -129,10 +155,23 @@ pub fn build_message(
         builder = builder.references(refs.references.join(" "));
     }
 
+    // Fork (6.3): with an HTML rendition the body is an alternative of the
+    // same text plus that HTML; without one it is text/plain, as before.
+    let alternative = html.map(|h| {
+        MultiPart::alternative()
+            .singlepart(SinglePart::plain(draft.body.clone()))
+            .singlepart(SinglePart::html(h.to_string()))
+    });
     let message = if attachments.is_empty() {
-        builder.body(draft.body.clone())
+        match alternative {
+            None => builder.body(draft.body.clone()),
+            Some(alt) => builder.multipart(alt),
+        }
     } else {
-        let mut multipart = MultiPart::mixed().singlepart(SinglePart::plain(draft.body.clone()));
+        let mut multipart = match alternative {
+            Some(alt) => MultiPart::mixed().multipart(alt),
+            None => MultiPart::mixed().singlepart(SinglePart::plain(draft.body.clone())),
+        };
         for (filename, mime_type, bytes) in attachments {
             let content_type = ContentType::parse(mime_type)
                 .unwrap_or(ContentType::parse("application/octet-stream").unwrap());

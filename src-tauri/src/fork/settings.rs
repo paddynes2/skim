@@ -25,13 +25,18 @@ pub const ALLOWED: &[&str] = &[
     "fork_cal_second_tz",   // IANA zone
     "fork_booking_link",
     // Phase 9
-    "fork_crm_drawer", // open | closed
+    "fork_crm_drawer",       // open | closed
+    "fork_crm_base_url",     // Rebound base URL; "" = build-time SKIM_REBOUND_BASE_URL
+    "fork_crm_supabase_url", // Supabase project URL; "" = SKIM_REBOUND_SUPABASE_URL
+    "fork_crm_anon_key",     // Supabase anon key (public); "" = SKIM_REBOUND_SUPABASE_ANON_KEY
+    "fork_crm_workspace_id", // chosen Rebound workspace id
     // Phase 10
     "fork_court_ai",         // on | off
     "fork_court_ai_cap",     // threads/day
     "fork_court_amber_days", // default 2
     "fork_court_red_days",   // default 5
     "fork_court_nudge",      // HH:MM or "off"
+    "fork_court_nudged_at",  // internal: unix seconds of the last nudge toast
     // Phase 12
     "fork_mcp", // on | off
 ];

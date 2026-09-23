@@ -205,6 +205,9 @@ pub struct RenderedBody {
     /// the wire nothing and the UI shows nothing.
     pub security: Option<SecuritySignals>,
     pub translate: Option<TranslateState>,
+    /// Fork (5.3): a quote / signature marker with visible content above it,
+    /// so the viewer can fold the tail behind a pill.
+    pub has_fold: bool,
 }
 
 /// Headers of a message as parsed from the wire, ready for insertion.

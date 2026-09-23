@@ -199,6 +199,10 @@ pub fn run() {
                 // costs a FETCH instead of a login. Free when already warm.
                 tauri::WindowEvent::Focused(true) if window.label() == "main" => {
                     let app = window.app_handle().clone();
+                    // Fork (7.4): calendar engines sync on focus too.
+                    fork::calendar::on_window_focus();
+                    // Fork (7.4): calendar engines sync on focus too.
+                    fork::calendar::on_window_focus();
                     tauri::async_runtime::spawn(async move {
                         for handle in app.state::<AppState>().engines.lock().await.values() {
                             handle.warm_fetch();
@@ -409,6 +413,42 @@ pub fn run() {
             fork::commands::fork_restore,
             fork::freshness::fork_sync_folder,
             fork::search_query::fork_search_threads,
+            fork::google::fork_google_client_get,
+            fork::google::fork_google_client_set,
+            fork::google::fork_google_client_clear,
+            fork::google::fork_meet_create,
+            fork::calendar::commands::fork_cal_status,
+            fork::calendar::commands::fork_cal_connect,
+            fork::calendar::commands::fork_cal_disconnect,
+            fork::calendar::commands::fork_cal_list_calendars,
+            fork::calendar::commands::fork_cal_set_selected,
+            fork::calendar::commands::fork_cal_events,
+            fork::calendar::commands::fork_cal_create,
+            fork::calendar::commands::fork_cal_patch,
+            fork::calendar::commands::fork_cal_delete,
+            fork::calendar::commands::fork_cal_rsvp,
+            fork::calendar::commands::fork_cal_sync_now,
+            fork::availability::fork_free_slots,
+            fork::crm::fork_crm_status,
+            fork::crm::fork_crm_connect,
+            fork::crm::fork_crm_pick_workspace,
+            fork::crm::fork_crm_disconnect,
+            fork::crm::fork_crm_set_config,
+            fork::crm::fork_crm_lookup,
+            fork::court::fork_court_list,
+            fork::court::fork_court_counts,
+            fork::court::fork_court_recompute,
+            fork::prep::fork_prep,
+            fork::prep::fork_prep_upcoming,
+            fork::prep::fork_prep_brief,
+            fork::mcp::fork_mcp_status,
+            fork::mcp::fork_mcp_set_enabled,
+            fork::smell::fork_smell_rewrite,
+            fork::compose::fork_draft_html_get,
+            fork::compose::fork_draft_html_set,
+            fork::scheduler::fork_cancel_scheduled,
+            fork::scheduler::fork_scheduled_list,
+            fork::scheduler::fork_send_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

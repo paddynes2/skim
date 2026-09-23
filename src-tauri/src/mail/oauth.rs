@@ -65,7 +65,9 @@ impl OauthProvider {
         }
     }
 
-    fn scopes(self) -> &'static str {
+    /// The scopes the mail sign-in asks for. Callers pass these to
+    /// [`authorize`]; the fork's calendar grant passes its own set.
+    pub fn scopes(self) -> &'static str {
         match self {
             OauthProvider::Google => "https://mail.google.com/ openid email",
             OauthProvider::Microsoft => {
@@ -76,6 +78,15 @@ impl OauthProvider {
                 "https://outlook.office.com/IMAP.AccessAsUser.All \
                  https://outlook.office.com/SMTP.Send offline_access openid email profile"
             }
+        }
+    }
+
+    /// The one scope the mail sign-in cannot do without: `resolve_email`
+    /// refuses a Google token that lacks it.
+    pub fn required_scope(self) -> Option<&'static str> {
+        match self {
+            OauthProvider::Google => Some("https://mail.google.com/"),
+            OauthProvider::Microsoft => None,
         }
     }
 }
@@ -209,8 +220,15 @@ fn now_unix() -> i64 {
 
 /// Run the full authorization flow: open the system browser, wait for the
 /// loopback redirect, exchange the code, and resolve the account email.
+///
+/// `scopes` is the space-separated scope string to request; `required_scope`
+/// is the one the granted token must carry (the consent screen lets users
+/// untick individual permissions), or `None` to accept whatever was granted.
+/// The mail flow passes `provider.scopes()` / `provider.required_scope()`.
 pub async fn authorize(
     config: &OauthConfig,
+    scopes: &str,
+    required_scope: Option<&str>,
     open_url: impl FnOnce(&str) -> Result<()>,
 ) -> Result<OauthOutcome> {
     let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -226,7 +244,7 @@ pub async fn authorize(
     let challenge = sha256_base64url(&verifier);
     let state = random_token();
 
-    let auth_url = build_auth_url(config, &redirect_uri, &challenge, &state);
+    let auth_url = build_auth_url(config, scopes, &redirect_uri, &challenge, &state);
 
     open_url(auth_url.as_str())?;
 
@@ -283,7 +301,7 @@ pub async fn authorize(
         )
     })?;
 
-    let email = resolve_email(client, config.provider, &tokens).await?;
+    let email = resolve_email(client, config.provider, &tokens, required_scope).await?;
 
     let display_name = tokens.id_token.as_deref().and_then(name_from_id_token);
     Ok(OauthOutcome {
@@ -298,6 +316,7 @@ pub async fn authorize(
 /// Build the provider-specific authorization URL.
 fn build_auth_url(
     config: &OauthConfig,
+    scopes: &str,
     redirect_uri: &str,
     challenge: &str,
     state: &str,
@@ -308,7 +327,7 @@ fn build_auth_url(
         q.append_pair("client_id", &config.client_id)
             .append_pair("redirect_uri", redirect_uri)
             .append_pair("response_type", "code")
-            .append_pair("scope", config.provider.scopes())
+            .append_pair("scope", scopes)
             .append_pair("code_challenge", challenge)
             .append_pair("code_challenge_method", "S256")
             .append_pair("state", state);
@@ -333,31 +352,35 @@ async fn resolve_email(
     client: &reqwest::Client,
     provider: OauthProvider,
     tokens: &TokenResponse,
+    required_scope: Option<&str>,
 ) -> Result<String> {
     match provider {
         OauthProvider::Google => {
             // The consent screen lets users untick individual permissions —
-            // verify the mail scope actually made it into the token first.
-            let tokeninfo: serde_json::Value = client
-                .get(format!(
-                    "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token={}",
-                    tokens.access_token
-                ))
-                .send()
-                .await
-                .map_err(|e| SkimError::other("network", e.to_string()))?
-                .json()
-                .await
-                .unwrap_or_default();
-            let scope = tokeninfo["scope"].as_str().unwrap_or_default();
-            if !scope.contains("https://mail.google.com/") {
-                return Err(SkimError::other(
-                    "oauth",
-                    "Google did not grant mail access. Make sure the scope \
-                     https://mail.google.com/ is added under Data access in your \
-                     Google Cloud project, and that you approve it on the consent \
-                     screen (it may be an unticked checkbox).",
-                ));
+            // verify the required scope actually made it into the token first.
+            if let Some(required) = required_scope {
+                let tokeninfo: serde_json::Value = client
+                    .get(format!(
+                        "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token={}",
+                        tokens.access_token
+                    ))
+                    .send()
+                    .await
+                    .map_err(|e| SkimError::other("network", e.to_string()))?
+                    .json()
+                    .await
+                    .unwrap_or_default();
+                let scope = tokeninfo["scope"].as_str().unwrap_or_default();
+                if !scope.split_whitespace().any(|s| s == required) {
+                    return Err(SkimError::other(
+                        "oauth",
+                        format!(
+                            "Google did not grant {required}. Make sure that scope is added \
+                             under Data access in your Google Cloud project, and that you \
+                             approve it on the consent screen (it may be an unticked checkbox)."
+                        ),
+                    ));
+                }
             }
             let userinfo: UserInfo = client
                 .get(USERINFO_ENDPOINT)
@@ -558,6 +581,7 @@ mod tests {
     fn microsoft_auth_url_uses_common_authority_and_scopes() {
         let url = build_auth_url(
             &cfg(OauthProvider::Microsoft),
+            OauthProvider::Microsoft.scopes(),
             "http://127.0.0.1:5000",
             "challenge",
             "state-xyz",
@@ -580,6 +604,7 @@ mod tests {
     fn google_auth_url_keeps_offline_consent() {
         let url = build_auth_url(
             &cfg(OauthProvider::Google),
+            OauthProvider::Google.scopes(),
             "http://127.0.0.1:5000",
             "challenge",
             "state-xyz",
@@ -590,6 +615,34 @@ mod tests {
         let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
         assert_eq!(q.get("access_type").map(String::as_str), Some("offline"));
         assert_eq!(q.get("prompt").map(String::as_str), Some("consent"));
+        let scope = q.get("scope").expect("scope present");
+        assert!(scope.contains("https://mail.google.com/"));
+    }
+
+    #[test]
+    fn auth_url_carries_the_scopes_the_caller_passed() {
+        // The fork's calendar grant asks for its own scopes through the same
+        // builder; the mail scope must not sneak back in.
+        let url = build_auth_url(
+            &cfg(OauthProvider::Google),
+            "openid email https://www.googleapis.com/auth/calendar.events",
+            "http://127.0.0.1:5000",
+            "challenge",
+            "state-xyz",
+        );
+        let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        let scope = q.get("scope").expect("scope present");
+        assert!(scope.contains("https://www.googleapis.com/auth/calendar.events"));
+        assert!(!scope.contains("https://mail.google.com/"));
+    }
+
+    #[test]
+    fn mail_flow_still_requires_the_mail_scope() {
+        assert_eq!(
+            OauthProvider::Google.required_scope(),
+            Some("https://mail.google.com/")
+        );
+        assert_eq!(OauthProvider::Microsoft.required_scope(), None);
     }
 
     #[test]

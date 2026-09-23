@@ -200,6 +200,41 @@ pub fn plan_from_payload(
     })
 }
 
+/// The `fork_restore` op, run by the sync engine's `execute_op`. Returns the
+/// source folder id so the drain resyncs it and the rows reappear.
+pub(crate) async fn execute(
+    engine: &mut crate::mail::sync::Engine,
+    payload: &serde_json::Value,
+) -> Result<Option<i64>> {
+    let account_id = engine.account.id.clone();
+    let roles: std::collections::HashMap<String, String> = engine
+        .db
+        .call(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT role, imap_name FROM folders WHERE account_id = ?1 AND role IS NOT NULL",
+            )?;
+            let rows = stmt.query_map([account_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect()
+        })
+        .await?;
+    let is_gmail = crate::fork::gmail::is_gmail(&engine.account);
+    let plan = plan_from_payload(payload, is_gmail, |role| roles.get(role).cloned())?;
+    engine.ensure_selected(&plan.search_in).await?;
+    let session = engine.session().await?;
+    let restored = restore(session, &plan).await?;
+    if restored < plan.message_ids.len() {
+        crate::append_log(
+            "skim-fork.log",
+            &format!(
+                "restore: {restored} of {} message-ids found in {}",
+                plan.message_ids.len(),
+                plan.search_in
+            ),
+        );
+    }
+    Ok(payload["sourceFolderId"].as_i64())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,39 +424,4 @@ mod tests {
         let back: RemovalSnapshot = serde_json::from_value(json).unwrap();
         assert_eq!(back, snap);
     }
-}
-
-/// The `fork_restore` op, run by the sync engine's `execute_op`. Returns the
-/// source folder id so the drain resyncs it and the rows reappear.
-pub(crate) async fn execute(
-    engine: &mut crate::mail::sync::Engine,
-    payload: &serde_json::Value,
-) -> Result<Option<i64>> {
-    let account_id = engine.account.id.clone();
-    let roles: std::collections::HashMap<String, String> = engine
-        .db
-        .call(move |conn| {
-            let mut stmt = conn.prepare(
-                "SELECT role, imap_name FROM folders WHERE account_id = ?1 AND role IS NOT NULL",
-            )?;
-            let rows = stmt.query_map([account_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
-            rows.collect()
-        })
-        .await?;
-    let is_gmail = crate::fork::gmail::is_gmail(&engine.account);
-    let plan = plan_from_payload(payload, is_gmail, |role| roles.get(role).cloned())?;
-    engine.ensure_selected(&plan.search_in).await?;
-    let session = engine.session().await?;
-    let restored = restore(session, &plan).await?;
-    if restored < plan.message_ids.len() {
-        crate::append_log(
-            "skim-fork.log",
-            &format!(
-                "restore: {restored} of {} message-ids found in {}",
-                plan.message_ids.len(),
-                plan.search_in
-            ),
-        );
-    }
-    Ok(payload["sourceFolderId"].as_i64())
 }

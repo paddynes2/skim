@@ -2147,13 +2147,16 @@ impl Engine {
             .call(move |conn| crate::db::draft_attachments::load_for_send(conn, draft_id))
             .await?;
 
-        let raw = smtp::build_message(
+        // Fork (6.3): the HTML rendition, when the rich editor wrote one.
+        let html = crate::fork::compose::outgoing_html(&self.db, draft_id).await;
+        let raw = smtp::build_message_with_html(
             &self.account,
             &draft,
             &refs,
             &attachments,
             imap_message_id.as_deref(),
             false,
+            html.as_deref(),
         )?;
 
         let creds = {
@@ -2250,13 +2253,16 @@ impl Engine {
             .db
             .call(move |conn| crate::db::draft_attachments::load_for_send(conn, draft_id))
             .await?;
-        let raw = smtp::build_message(
+        // Fork (6.3): the HTML rendition, when the rich editor wrote one.
+        let html = crate::fork::compose::outgoing_html(&self.db, draft_id).await;
+        let raw = smtp::build_message_with_html(
             &self.account,
             &draft,
             &refs,
             &attachments,
             Some(&imap_message_id),
             true,
+            html.as_deref(),
         )?;
 
         let drafts_name = self.role_folder("drafts", "Drafts").await?;

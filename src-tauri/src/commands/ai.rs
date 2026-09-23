@@ -214,15 +214,17 @@ pub async fn ollama_models(url: String) -> Result<Vec<ollama::Model>> {
 
 // ---- shared plumbing -----------------------------------------------------
 
-struct AiContext {
+// Fork (10): `pub(crate)` so `fork::court` can make its one-shot batch
+// requests with the same provider / key / model resolution as every command.
+pub(crate) struct AiContext {
     provider: Provider,
     /// Where OpenAI-compatible traffic goes; `None` for Anthropic.
-    endpoint: Option<openai_compat::Endpoint>,
-    key: String,
-    model: String,
+    pub(crate) endpoint: Option<openai_compat::Endpoint>,
+    pub(crate) key: String,
+    pub(crate) model: String,
     locale: String,
     /// e.g. "Monday, 2026-07-13 14:32 (UTC+02:00)"
-    now: String,
+    pub(crate) now: String,
 }
 
 impl AiContext {
@@ -243,7 +245,7 @@ fn now_line() -> String {
     )
 }
 
-async fn ai_context(db: &Db) -> Result<AiContext> {
+pub(crate) async fn ai_context(db: &Db) -> Result<AiContext> {
     let (provider, anthropic_model, openrouter_model, custom_base_url, custom_model, locale) = db
         .call(|conn| {
             Ok((

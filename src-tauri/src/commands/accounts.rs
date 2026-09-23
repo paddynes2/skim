@@ -173,12 +173,18 @@ pub async fn start_google_oauth(app: AppHandle, state: State<'_, AppState>) -> R
     })?;
 
     let opener = app.clone();
-    let outcome = oauth::authorize(&config, move |url| {
-        opener
-            .opener()
-            .open_url(url, None::<&str>)
-            .map_err(|e| SkimError::other("oauth", format!("cannot open browser: {e}")))
-    })
+    let provider = config.provider;
+    let outcome = oauth::authorize(
+        &config,
+        provider.scopes(),
+        provider.required_scope(),
+        move |url| {
+            opener
+                .opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| SkimError::other("oauth", format!("cannot open browser: {e}")))
+        },
+    )
     .await?;
 
     // Verify the token actually works for IMAP before saving anything.
@@ -220,12 +226,18 @@ pub async fn start_microsoft_oauth(app: AppHandle, state: State<'_, AppState>) -
     })?;
 
     let opener = app.clone();
-    let outcome = oauth::authorize(&config, move |url| {
-        opener
-            .opener()
-            .open_url(url, None::<&str>)
-            .map_err(|e| SkimError::other("oauth", format!("cannot open browser: {e}")))
-    })
+    let provider = config.provider;
+    let outcome = oauth::authorize(
+        &config,
+        provider.scopes(),
+        provider.required_scope(),
+        move |url| {
+            opener
+                .opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| SkimError::other("oauth", format!("cannot open browser: {e}")))
+        },
+    )
     .await?;
 
     // Verify the token actually works for IMAP before saving anything.

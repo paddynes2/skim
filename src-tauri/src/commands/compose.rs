@@ -668,8 +668,18 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// Fork (6.4): `not_before` (unix seconds) holds the send until then (undo
+/// send, send later) and `label` names the choice for the Scheduled list;
+/// both absent = send now, as before. Returns the queued op id so the caller
+/// can cancel the hold.
 #[tauri::command]
-pub async fn send_draft(app: AppHandle, state: State<'_, AppState>, draft_id: i64) -> Result<()> {
+pub async fn send_draft(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    draft_id: i64,
+    not_before: Option<i64>,
+    label: Option<String>,
+) -> Result<i64> {
     let draft = state
         .db
         .call(move |conn| drafts::get(conn, draft_id))
@@ -680,7 +690,8 @@ pub async fn send_draft(app: AppHandle, state: State<'_, AppState>, draft_id: i6
     }
 
     let account_id = draft.account_id.clone();
-    state
+    let hold_label = label.clone();
+    let op_id = state
         .db
         .call(move |conn| {
             bodies::enqueue_op(
@@ -688,16 +699,24 @@ pub async fn send_draft(app: AppHandle, state: State<'_, AppState>, draft_id: i6
                 &draft.account_id,
                 "send",
                 &json!({ "draftId": draft.id }),
-            )
+            )?;
+            let op_id = conn.last_insert_rowid();
+            crate::fork::scheduler::hold(conn, op_id, not_before, "send", hold_label.as_deref())?;
+            Ok(op_id)
         })
         .await?;
 
-    let engines = state.engines.lock().await;
-    if let Some(handle) = engines.get(&account_id) {
-        handle.run_ops();
+    match not_before {
+        Some(t) => crate::fork::scheduler::announce(&app, op_id, draft_id, t, label.as_deref()),
+        None => {
+            let engines = state.engines.lock().await;
+            if let Some(handle) = engines.get(&account_id) {
+                handle.run_ops();
+            }
+        }
     }
     let _ = app.emit("drafts:updated", json!({}));
-    Ok(())
+    Ok(op_id)
 }
 
 #[tauri::command]
