@@ -121,9 +121,32 @@
         {#if recapAvailable}
           <button class="recap-chip" onclick={openRecap}>✦ {t("ai.recap")}</button>
         {/if}
-        {#if unread > 0}
-          <span class="microlabel">{t("list.unread", { n: unread })}</span>
-        {/if}
+        <!-- Fork (3.1): All / Unread / Starred chips. The unread count lives
+             on its chip (click filters); the count is the folder's, not the
+             page's. -->
+        <div class="chips" role="group" aria-label={t("fork.list.filter")}>
+          <button class="chip" class:active={mail.listFilter === "all"} aria-pressed={mail.listFilter === "all"} onclick={() => void mail.setListFilter("all")}>
+            {t("fork.list.all")}
+          </button>
+          <button
+            class="chip"
+            class:active={mail.listFilter === "unread"}
+            aria-pressed={mail.listFilter === "unread"}
+            title="{t('fork.list.unread')}  Shift U"
+            onclick={() => void mail.setListFilter(mail.listFilter === "unread" ? "all" : "unread")}
+          >
+            {t("fork.list.unread")}{#if unread > 0}<span class="n">{unread}</span>{/if}
+          </button>
+          <button
+            class="chip"
+            class:active={mail.listFilter === "starred"}
+            aria-pressed={mail.listFilter === "starred"}
+            title="{t('fork.list.starred')}  Shift S"
+            onclick={() => void mail.setListFilter(mail.listFilter === "starred" ? "all" : "starred")}
+          >
+            {t("fork.list.starred")}
+          </button>
+        </div>
         {#if mail.threads.length > 0}
           <span class="nav-hint" title="{t('shortcuts.next')} · {t('shortcuts.prev')}">
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -198,6 +221,40 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
+  }
+  /* Fork (3.1): filter chips, mono microlabel voice, one active at a time. */
+  .chips {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    background: var(--hover);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+  .chip:hover {
+    color: var(--text);
+  }
+  .chip.active {
+    background: var(--surface-raised);
+    color: var(--text);
+    box-shadow: 0 0 0 1px var(--hairline-strong);
+  }
+  .chip .n {
+    color: var(--unread);
+    font-weight: 600;
   }
   /* Sits right after the folder name, quiet until the header is hovered —
      it is a rare action and shouldn't compete with the title. */

@@ -18,6 +18,7 @@
   import { act, archiveOffered } from "./fork/actions";
   import { prefs } from "./fork/stores/prefs.svelte";
   import { applyZoom, zoomKey } from "./fork/zoom";
+  import { forkKey } from "./fork/keys";
   import { setLocale, t } from "./lib/i18n/index.svelte";
   import { ai } from "./lib/stores/ai.svelte";
   import { aiSessions } from "./lib/stores/aiSession.svelte";
@@ -365,6 +366,9 @@
     // The in-pane draft editor owns the keyboard — don't let list shortcuts
     // (archive/reply/star…) act on the draft being edited.
     if (mail.selectedFolder?.role === "drafts" && draftEditorId !== null) return;
+
+    // Fork key map first (Shift+U/S filters, z undo, g-sequences, ...).
+    if (forkKey(e)) return;
 
     switch (e.code) {
       case "KeyJ":

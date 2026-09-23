@@ -69,6 +69,23 @@ export const SCENARIOS = {
     flags: { "skimdemo.fork_density": "compact", "skimdemo.fork_avatars": "on" },
     setup: async (page) => { await openHero(page); },
   },
+  // Phase 3.1: filter chips (All is the default state, shot in rows-hover).
+  "chips-unread": {
+    phase: "3",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.locator(".chips .chip", { hasText: "Unread" }).click();
+      await sleep(300);
+    },
+  },
+  "chips-starred": {
+    phase: "3",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.locator(".chips .chip", { hasText: "Starred" }).click();
+      await sleep(300);
+    },
+  },
   "settings-list": {
     phase: "2",
     setup: async (page) => {

@@ -3,6 +3,7 @@ use crate::db::models::{
 };
 use crate::db::{bodies, queries};
 use crate::error::{Result, SkimError};
+use crate::fork::list::ListOpts;
 use crate::mail::{ics, lang, sanitize, suspicion};
 use crate::state::AppState;
 use serde_json::json;
@@ -113,11 +114,15 @@ pub async fn list_threads(
     folder_id: i64,
     offset: i64,
     limit: i64,
+    filter: Option<String>,
+    order: Option<String>,
 ) -> Result<Vec<ThreadRow>> {
+    // Fork (3.1): optional filter / order; defaults keep upstream behaviour.
+    let opts = ListOpts::parse(filter.as_deref(), order.as_deref());
     state
         .db
         .read("list_threads", move |conn| {
-            queries::list_threads(conn, folder_id, offset, limit.clamp(1, 200))
+            queries::list_threads_opts(conn, folder_id, offset, limit.clamp(1, 200), opts)
         })
         .await
 }
@@ -129,11 +134,14 @@ pub async fn list_messages(
     folder_id: i64,
     offset: i64,
     limit: i64,
+    filter: Option<String>,
+    order: Option<String>,
 ) -> Result<Vec<ThreadRow>> {
+    let opts = ListOpts::parse(filter.as_deref(), order.as_deref());
     state
         .db
         .read("list_messages", move |conn| {
-            queries::list_messages(conn, folder_id, offset, limit.clamp(1, 200))
+            queries::list_messages_opts(conn, folder_id, offset, limit.clamp(1, 200), opts)
         })
         .await
 }
@@ -158,16 +166,20 @@ pub async fn list_unified_threads(
     label: Option<String>,
     offset: i64,
     limit: i64,
+    filter: Option<String>,
+    order: Option<String>,
 ) -> Result<Vec<ThreadRow>> {
+    let opts = ListOpts::parse(filter.as_deref(), order.as_deref());
     state
         .db
         .read("list_unified_threads", move |conn| {
-            queries::list_unified_threads(
+            queries::list_unified_threads_opts(
                 conn,
                 role.as_deref(),
                 label.as_deref(),
                 offset,
                 limit.clamp(1, 200),
+                opts,
             )
         })
         .await
@@ -181,16 +193,20 @@ pub async fn list_unified_messages(
     label: Option<String>,
     offset: i64,
     limit: i64,
+    filter: Option<String>,
+    order: Option<String>,
 ) -> Result<Vec<ThreadRow>> {
+    let opts = ListOpts::parse(filter.as_deref(), order.as_deref());
     state
         .db
         .read("list_unified_messages", move |conn| {
-            queries::list_unified_messages(
+            queries::list_unified_messages_opts(
                 conn,
                 role.as_deref(),
                 label.as_deref(),
                 offset,
                 limit.clamp(1, 200),
+                opts,
             )
         })
         .await

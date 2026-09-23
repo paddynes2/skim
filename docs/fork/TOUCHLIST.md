@@ -43,3 +43,11 @@ a hook call, a parameter, a prop; this table is what makes
 | `src-tauri/src/commands/settings.rs` | `get_settings`, `set_setting` | chain `fork::settings::ALLOWED` | fork settings keys |
 | `src-tauri/capabilities/default.json` | permissions | `core:webview:allow-set-webview-zoom` | 2.7 |
 | `demo/vite.demo.config.ts`, `demo/mock/tauri-core.ts` | aliases, `get_settings` | webview mock; `skimdemo.fork_*` served as settings | harness |
+| `src-tauri/src/db/queries.rs` | `list_threads`, `list_messages`, `list_unified_threads`, `list_unified_messages` | each now wraps a `*_opts` twin that splices `fork::list` filter/order into the same SQL; `LIST_THREADS_SQL` is `pub(crate)` | filter chips + unread first (3.1) |
+| `src-tauri/src/commands/mail.rs` | the four list commands | optional `filter`, `order` args → `ListOpts::parse` | 3.1 |
+| `src/lib/api.ts` | the four list wrappers | optional `filter`, `order` | 3.1 |
+| `src/lib/stores/mail.svelte.ts` | `state.listFilter`, `fetchPage`, `setListFilter/Order`, `reloadList` | filter rides every page read; reload on change | 3.1 |
+| `src/components/MessageList.svelte` | header, styles | unread microlabel → All/Unread/Starred chips | 3.1 |
+| `src/App.svelte` | `onKeydown` | `forkKey(e)` before upstream's switch | fork key map (3.1/3.3) |
+| `src/components/ShortcutsOverlay.svelte` | navigation group | Shift U / Shift S rows | 3.1 |
+| `demo/mock/tauri-core.ts` | list commands | `listOpts` over fixtures | harness |

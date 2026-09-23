@@ -56,15 +56,28 @@ export const api = {
   // mail
   listFolders: (accountId: string) => invoke<Folder[]>("list_folders", { accountId }),
   folderAccountId: (folderId: number) => invoke<string>("folder_account_id", { folderId }),
-  listThreads: (folderId: number, offset = 0, limit = 100) =>
-    invoke<ThreadRow[]>("list_threads", { folderId, offset, limit }),
-  listMessages: (folderId: number, offset = 0, limit = 100) =>
-    invoke<ThreadRow[]>("list_messages", { folderId, offset, limit }),
+  // Fork (3.1): optional `filter` (all|unread|starred) and `order` (date|unread_first).
+  listThreads: (folderId: number, offset = 0, limit = 100, filter?: string, order?: string) =>
+    invoke<ThreadRow[]>("list_threads", { folderId, offset, limit, filter, order }),
+  listMessages: (folderId: number, offset = 0, limit = 100, filter?: string, order?: string) =>
+    invoke<ThreadRow[]>("list_messages", { folderId, offset, limit, filter, order }),
   listUnifiedFolders: () => invoke<Folder[]>("list_unified_folders"),
-  listUnifiedThreads: (role: string | null, label: string | null, offset = 0, limit = 100) =>
-    invoke<ThreadRow[]>("list_unified_threads", { role, label, offset, limit }),
-  listUnifiedMessages: (role: string | null, label: string | null, offset = 0, limit = 100) =>
-    invoke<ThreadRow[]>("list_unified_messages", { role, label, offset, limit }),
+  listUnifiedThreads: (
+    role: string | null,
+    label: string | null,
+    offset = 0,
+    limit = 100,
+    filter?: string,
+    order?: string,
+  ) => invoke<ThreadRow[]>("list_unified_threads", { role, label, offset, limit, filter, order }),
+  listUnifiedMessages: (
+    role: string | null,
+    label: string | null,
+    offset = 0,
+    limit = 100,
+    filter?: string,
+    order?: string,
+  ) => invoke<ThreadRow[]>("list_unified_messages", { role, label, offset, limit, filter, order }),
   folderRef: (folderId: number) =>
     invoke<{ role: string | null; displayName: string }>("folder_ref", { folderId }),
   getThread: (threadId: number) => invoke<ThreadDetail>("get_thread", { threadId }),

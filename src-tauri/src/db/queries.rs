@@ -1,4 +1,5 @@
 use super::models::{Address, Folder, NewMessage, ThreadRow};
+use crate::fork::list::ListOpts;
 use crate::mail::threading;
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -235,7 +236,7 @@ pub fn list_folders(conn: &Connection, account_id: &str) -> rusqlite::Result<Vec
 /// The grouped folder list. Its `m2` subquery runs once per message in the
 /// folder, so it must seek `idx_messages_thread_folder` — see migration 0014
 /// and `list_threads_seeks_the_thread_index`.
-const LIST_THREADS_SQL: &str = "SELECT t.id,
+pub(crate) const LIST_THREADS_SQL: &str = "SELECT t.id,
         m.from_name, m.from_addr, m.subject, m.snippet, t.last_date,
         (NOT EXISTS (SELECT 1 FROM messages m3
                      WHERE m3.thread_id = t.id AND m3.folder_id = ?1
@@ -259,7 +260,26 @@ pub fn list_threads(
     offset: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<ThreadRow>> {
-    let mut stmt = conn.prepare_cached(LIST_THREADS_SQL)?;
+    list_threads_opts(conn, folder_id, offset, limit, ListOpts::default())
+}
+
+/// Fork (3.1): `list_threads` with a filter (all / unread / starred) and an
+/// order (date / unread first). Splices into the same SQL, see `fork::list`.
+pub fn list_threads_opts(
+    conn: &Connection,
+    folder_id: i64,
+    offset: i64,
+    limit: i64,
+    opts: ListOpts,
+) -> rusqlite::Result<Vec<ThreadRow>> {
+    let sql = crate::fork::list::apply(
+        LIST_THREADS_SQL,
+        opts,
+        crate::fork::list::Shape::Grouped {
+            folder_pred: "m3.folder_id = ?1",
+        },
+    );
+    let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt
         .query_map(params![folder_id, limit, offset], |r| {
             let from_name: Option<String> = r.get(1)?;
@@ -296,7 +316,18 @@ pub fn list_messages(
     offset: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<ThreadRow>> {
-    let mut stmt = conn.prepare_cached(
+    list_messages_opts(conn, folder_id, offset, limit, ListOpts::default())
+}
+
+/// Fork (3.1): `list_messages` with filter and order (see `fork::list`).
+pub fn list_messages_opts(
+    conn: &Connection,
+    folder_id: i64,
+    offset: i64,
+    limit: i64,
+    opts: ListOpts,
+) -> rusqlite::Result<Vec<ThreadRow>> {
+    let sql = crate::fork::list::apply(
         "SELECT m.thread_id, m.id,
                 m.from_name, m.from_addr, m.subject, m.snippet, m.date,
                 m.is_read, m.is_starred, m.has_attachments, m.account_id
@@ -304,7 +335,10 @@ pub fn list_messages(
          WHERE m.folder_id = ?1
          ORDER BY m.date DESC, m.id DESC
          LIMIT ?2 OFFSET ?3",
-    )?;
+        opts,
+        crate::fork::list::Shape::Flat,
+    );
+    let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt
         .query_map(params![folder_id, limit, offset], |r| {
             let from_name: Option<String> = r.get(2)?;
@@ -409,7 +443,19 @@ pub fn list_unified_threads(
     offset: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<ThreadRow>> {
-    let sql = format!(
+    list_unified_threads_opts(conn, role, label, offset, limit, ListOpts::default())
+}
+
+/// Fork (3.1): `list_unified_threads` with filter and order (see `fork::list`).
+pub fn list_unified_threads_opts(
+    conn: &Connection,
+    role: Option<&str>,
+    label: Option<&str>,
+    offset: i64,
+    limit: i64,
+    opts: ListOpts,
+) -> rusqlite::Result<Vec<ThreadRow>> {
+    let base = format!(
         "WITH sel(id) AS ({UNIFIED_SEL})
          SELECT t.id,
                 m.from_name, m.from_addr, m.subject, m.snippet, t.last_date,
@@ -428,6 +474,13 @@ pub fn list_unified_threads(
          GROUP BY t.id
          ORDER BY t.last_date DESC
          LIMIT ?3 OFFSET ?4"
+    );
+    let sql = crate::fork::list::apply(
+        &base,
+        opts,
+        crate::fork::list::Shape::Grouped {
+            folder_pred: "m3.folder_id IN (SELECT id FROM sel)",
+        },
     );
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt
@@ -465,7 +518,19 @@ pub fn list_unified_messages(
     offset: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<ThreadRow>> {
-    let sql = format!(
+    list_unified_messages_opts(conn, role, label, offset, limit, ListOpts::default())
+}
+
+/// Fork (3.1): `list_unified_messages` with filter and order (see `fork::list`).
+pub fn list_unified_messages_opts(
+    conn: &Connection,
+    role: Option<&str>,
+    label: Option<&str>,
+    offset: i64,
+    limit: i64,
+    opts: ListOpts,
+) -> rusqlite::Result<Vec<ThreadRow>> {
+    let base = format!(
         "WITH sel(id) AS ({UNIFIED_SEL})
          SELECT m.thread_id, m.id,
                 m.from_name, m.from_addr, m.subject, m.snippet, m.date,
@@ -475,6 +540,7 @@ pub fn list_unified_messages(
          ORDER BY m.date DESC, m.id DESC
          LIMIT ?3 OFFSET ?4"
     );
+    let sql = crate::fork::list::apply(&base, opts, crate::fork::list::Shape::Flat);
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt
         .query_map(params![role, label, limit, offset], |r| {

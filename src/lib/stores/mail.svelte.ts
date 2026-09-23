@@ -4,6 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import { api, reportError } from "../api";
 import { t } from "../i18n/index.svelte";
 import type { Account, Folder, SyncState, ThreadRow } from "../types";
+import { prefs, type ListOrder } from "../../fork/stores/prefs.svelte";
+
+/** Fork (3.1): which rows the list shows. */
+export type ListFilter = "all" | "unread" | "starred";
 
 const PAGE = 100;
 
@@ -41,6 +45,9 @@ const state = $state({
   // this an empty list is ambiguous, and the app answers "nothing to skim" to
   // a mailbox full of mail — the one thing it must never do.
   loadFailed: false,
+  // Fork (3.1): the list header's All / Unread / Starred chip. Not persisted:
+  // a filter is a moment's view, not a preference.
+  listFilter: "all" as ListFilter,
 });
 
 /** Membership lookup for the selection. Rebuilt only when the selection
@@ -303,17 +310,47 @@ async function openLocation(folderId: number, threadId: number | null, messageId
 /** One page of rows for a folder — threads when grouping is on, else messages.
  *  Negative ids are virtual (cross-account) folders, addressed by role/label. */
 function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<ThreadRow[]> {
+  // Fork (3.1): the active chip and the persisted order ride every page read.
+  const filter = state.listFilter;
+  const order = prefs.listOrder;
   if (folderId < 0) {
     const virtual = state.folders.find((f) => f.id === folderId);
     if (!virtual) return Promise.resolve([]);
     const label = virtual.role === null ? virtual.displayName : null;
     return state.groupThreads
-      ? api.listUnifiedThreads(virtual.role, label, offset, limit)
-      : api.listUnifiedMessages(virtual.role, label, offset, limit);
+      ? api.listUnifiedThreads(virtual.role, label, offset, limit, filter, order)
+      : api.listUnifiedMessages(virtual.role, label, offset, limit, filter, order);
   }
   return state.groupThreads
-    ? api.listThreads(folderId, offset, limit)
-    : api.listMessages(folderId, offset, limit);
+    ? api.listThreads(folderId, offset, limit, filter, order)
+    : api.listMessages(folderId, offset, limit, filter, order);
+}
+
+/** Fork (3.1): change the list filter (or order) and reload the current folder
+ *  from the top. Selection and paging reset, like a folder switch. */
+async function setListFilter(filter: ListFilter) {
+  if (state.listFilter === filter) return;
+  state.listFilter = filter;
+  await reloadList();
+}
+
+async function setListOrder(order: ListOrder) {
+  if (prefs.listOrder === order) return;
+  prefs.setListOrder(order);
+  await reloadList();
+}
+
+async function reloadList() {
+  const folderId = state.selectedFolderId;
+  clearSelection();
+  if (folderId === null) return;
+  state.threadsLoading = true;
+  try {
+    const rows = await guard(() => fetchPage(folderId, 0));
+    if (rows !== null) shown(rows);
+  } finally {
+    state.threadsLoading = false;
+  }
 }
 
 /** Deepest a refresh will re-read. A list scrolled thousands of rows down does
@@ -676,6 +713,12 @@ export const mail = {
   loadMoreThreads,
   refreshThreads,
   setGroupThreads,
+  // Fork (3.1)
+  get listFilter() {
+    return state.listFilter;
+  },
+  setListFilter,
+  setListOrder,
   switchAccount,
   openLocation,
   // In the unified view the active account is null, so this syncs every engine.

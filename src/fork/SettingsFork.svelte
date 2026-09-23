@@ -6,6 +6,7 @@
   import { t } from "../lib/i18n/index.svelte";
   import { prefs, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./stores/prefs.svelte";
   import { applyZoom } from "./zoom";
+  import { setListOrder } from "./keys";
 
   const zoomPct = $derived(Math.round(prefs.zoom * 100));
 
@@ -39,6 +40,17 @@
   </div>
 
   {@render toggleRow(t("fork.settings.avatars"), prefs.avatars, () => prefs.setAvatars(!prefs.avatars))}
+
+  <div class="field">
+    <span class="label">{t("fork.settings.list_order")}</span>
+    <div class="chips" role="radiogroup" aria-label={t("fork.settings.list_order")}>
+      {#each ["date", "unread_first"] as const as order (order)}
+        <button class="chip" class:active={prefs.listOrder === order} role="radio" aria-checked={prefs.listOrder === order} onclick={() => setListOrder(order)}>
+          {t(`fork.settings.list_order_${order}`)}
+        </button>
+      {/each}
+    </div>
+  </div>
 
   <div class="field">
     <span class="label">{t("fork.settings.after_archive")}</span>

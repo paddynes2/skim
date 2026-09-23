@@ -24,6 +24,9 @@
         { label: t("shortcuts.select"), keys: ["X"] },
         { label: t("shortcuts.select_all"), keys: ["Ctrl A"] },
         { label: t("shortcuts.clear"), keys: ["Esc"] },
+        // Fork (3.1)
+        { label: t("fork.shortcuts.filter_unread"), keys: ["Shift U"] },
+        { label: t("fork.shortcuts.filter_starred"), keys: ["Shift S"] },
       ],
     },
     {

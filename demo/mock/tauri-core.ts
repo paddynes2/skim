@@ -135,6 +135,19 @@ function handleAi(cmd: string, args: any): void {
   }
 }
 
+// Fork (3.1): the list filter / order the real queries apply, over fixtures.
+function listOpts<T extends { isRead: boolean; isStarred: boolean; date: number }>(
+  rows: T[],
+  args: { filter?: string; order?: string },
+): T[] {
+  let out = rows;
+  if (args.filter === "unread") out = out.filter((r) => !r.isRead);
+  else if (args.filter === "starred") out = out.filter((r) => r.isStarred);
+  if (args.order === "unread_first")
+    out = [...out].sort((a, b) => Number(!b.isRead) - Number(!a.isRead) || b.date - a.date);
+  return out;
+}
+
 // ---- Plain command surface ----------------------------------------------
 export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
   if (AI_COMMANDS.has(cmd)) {
@@ -186,7 +199,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(db.UNIFIED_FOLDERS);
     case "list_unified_threads":
     case "list_unified_messages":
-      return ok(args.offset > 0 ? [] : db.unifiedList(args.role ?? null));
+      return ok(args.offset > 0 ? [] : listOpts(db.unifiedList(args.role ?? null), args));
     case "folder_ref":
       return ok(db.folderRef(args.folderId));
     // Threads vs. flat messages: the app picks one based on the group_threads
@@ -194,7 +207,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     case "list_threads":
     case "list_messages": {
       const list = db.THREADS_BY_FOLDER[args.folderId] ?? [];
-      return ok(args.offset > 0 ? [] : list);
+      return ok(args.offset > 0 ? [] : listOpts(list, args));
     }
     case "get_thread":
       return ok(db.threadDetail(args.threadId));

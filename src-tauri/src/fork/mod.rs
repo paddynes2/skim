@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod db;
 pub mod gmail;
+pub mod list;
 pub mod settings;
 
 use tauri::AppHandle;
