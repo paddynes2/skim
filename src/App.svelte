@@ -15,7 +15,9 @@
   import type { ChatSession } from "./lib/ai-chat";
   import { api, reportError, type Citation } from "./lib/api";
   import { bulkAct, bulkMove } from "./lib/bulk";
-  import { archiveOffered } from "./fork/actions";
+  import { act, archiveOffered } from "./fork/actions";
+  import { prefs } from "./fork/stores/prefs.svelte";
+  import { applyZoom, zoomKey } from "./fork/zoom";
   import { setLocale, t } from "./lib/i18n/index.svelte";
   import { ai } from "./lib/stores/ai.svelte";
   import { aiSessions } from "./lib/stores/aiSession.svelte";
@@ -177,6 +179,9 @@
           const normalized = ui.hydrate(settings.theme);
           if (settings.theme !== normalized) void api.setSetting("theme", normalized).catch(() => {});
           if (settings.sidebar_collapsed) ui.setSidebarCollapsed(settings.sidebar_collapsed === "on");
+          // Fork preferences (density, zoom, ...).
+          prefs.hydrate(settings);
+          void applyZoom(prefs.zoom);
         } catch {
           // settings are best-effort at boot
         }
@@ -249,32 +254,8 @@
     }
     const thread = mail.selectedThread;
     if (!thread) return;
-    const ids = await api.threadMessageIds(thread.id);
-    if (ids.length === 0) return;
-    switch (action) {
-      case "archive":
-        mail.removeThreadFromList(thread.id);
-        void api.archiveMessages(ids);
-        break;
-      case "delete":
-        mail.removeThreadFromList(thread.id);
-        void api.deleteMessages(ids);
-        break;
-      case "spam":
-        mail.removeThreadFromList(thread.id);
-        void api.reportSpam(ids);
-        break;
-      case "star":
-        mail.patchThreadRow(thread.id, { isStarred: !thread.isStarred });
-        void api.setStarred(ids, !thread.isStarred);
-        break;
-      case "unread": {
-        const next = !thread.isRead;
-        mail.patchThreadRow(thread.id, { isRead: next });
-        void api.markRead(ids, next);
-        break;
-      }
-    }
+    // Fork: one code path with the hover buttons and the palette (fork/actions).
+    await act(thread, action === "star" ? "toggle_star" : action === "unread" ? "toggle_read" : action);
   }
 
   /** Open the folder picker for the highlighted thread — works with the reading
@@ -318,6 +299,8 @@
       palette.show();
       return;
     }
+    // Fork (2.7): Ctrl+= / Ctrl+- / Ctrl+0 zoom, before the Ctrl guard below.
+    if (zoomKey(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.code === "KeyN") {
       e.preventDefault();
       void composeNew();

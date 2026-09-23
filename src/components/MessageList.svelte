@@ -7,6 +7,7 @@
   import { ui } from "../lib/stores/ui.svelte";
   import MessageRow from "./MessageRow.svelte";
   import SelectionBar from "./SelectionBar.svelte";
+  import { prefs } from "../fork/stores/prefs.svelte";
 
   const title = $derived.by(() => {
     const f = mail.selectedFolder;
@@ -76,6 +77,12 @@
     void visible;
     const el = rowsEl?.querySelector<HTMLElement>("button.row");
     if (el && el.offsetHeight > rowH) rowH = el.offsetHeight;
+  });
+
+  // Fork (2.6): a density change is a new baseline, set explicitly (never
+  // measured two-way, see above). The ratchet then only grows from here.
+  $effect(() => {
+    rowH = prefs.density === "compact" ? 36 : 76;
   });
 
   // A new folder (or grouping mode) is a new list — start it at the top.

@@ -5,12 +5,12 @@
   import { aiSessions } from "../lib/stores/aiSession.svelte";
   import { mail } from "../lib/stores/mail.svelte";
   import { ui } from "../lib/stores/ui.svelte";
-  import type { MessageMeta, RenderedBody, ThreadDetail } from "../lib/types";
+  import type { MessageMeta, RenderedBody, ThreadDetail, ThreadRow } from "../lib/types";
   import AiAsk from "./AiAsk.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
   import HtmlViewer from "./HtmlViewer.svelte";
   import InviteCard from "./InviteCard.svelte";
-  import { archiveOffered } from "../fork/actions";
+  import { archiveOffered, markRead, removeThread, setStarred } from "../fork/actions";
 
   let detail = $state<ThreadDetail | null>(null);
   // Fork (1.2): no Archive in Sent / Trash / Spam.
@@ -382,28 +382,26 @@
   const anyStarred = $derived(mail.selectedThread?.isStarred ?? false);
   const isRead = $derived(mail.selectedThread?.isRead ?? true);
 
+  // Fork: every action goes through fork/actions (one code path with the
+  // keys, the hover buttons and the palette; auto-advance; undo).
+  function rowOf(): ThreadRow | null {
+    return detail ? (mail.selectedThread ?? null) : null;
+  }
+
   function archive() {
-    if (!detail || !canArchive) return;
-    const threadId = detail.id;
-    const ids = allIds;
-    mail.removeThreadFromList(threadId);
-    void api.archiveMessages(ids);
+    const row = rowOf();
+    if (!row || !canArchive) return;
+    removeThread(row, "archive", allIds);
   }
 
   function remove() {
-    if (!detail) return;
-    const threadId = detail.id;
-    const ids = allIds;
-    mail.removeThreadFromList(threadId);
-    void api.deleteMessages(ids);
+    const row = rowOf();
+    if (row) removeThread(row, "delete", allIds);
   }
 
   function reportSpam() {
-    if (!detail) return;
-    const threadId = detail.id;
-    const ids = allIds;
-    mail.removeThreadFromList(threadId);
-    void api.reportSpam(ids);
+    const row = rowOf();
+    if (row) removeThread(row, "spam", allIds);
   }
 
   function unsubscribe(id: number) {
@@ -422,17 +420,13 @@
   }
 
   function toggleStar() {
-    if (!detail) return;
-    const on = !anyStarred;
-    mail.patchThreadRow(detail.id, { isStarred: on });
-    void api.setStarred(allIds, on);
+    const row = rowOf();
+    if (row) setStarred(row, !anyStarred, allIds);
   }
 
   function toggleRead() {
-    if (!detail) return;
-    const next = !isRead;
-    mail.patchThreadRow(detail.id, { isRead: next });
-    void api.markRead(allIds, next);
+    const row = rowOf();
+    if (row) markRead(row, !isRead, allIds);
   }
 
   function initial(name: string | null): string {

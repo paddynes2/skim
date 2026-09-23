@@ -12,6 +12,8 @@
   import { setLocale, t } from "./lib/i18n/index.svelte";
   import { ai } from "./lib/stores/ai.svelte";
   import { ui } from "./lib/stores/ui.svelte";
+  import { prefs } from "./fork/stores/prefs.svelte";
+  import { applyZoom, zoomKey } from "./fork/zoom";
 
   let { sessionId }: { sessionId: number } = $props();
   let session = $state<ChatSession | null>(null);
@@ -23,6 +25,9 @@
         if (settings.locale) await setLocale(settings.locale as never);
         // Match the stored theme (the main window owns migration write-back).
         ui.hydrate(settings.theme);
+        // Fork: same zoom as the main window.
+        prefs.hydrate(settings);
+        void applyZoom(prefs.zoom);
       } catch {
         // best effort
       }
@@ -66,6 +71,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    if (zoomKey(e)) return; // fork (2.7)
     if (e.key !== "Escape") return;
     e.preventDefault();
     void returnInline();

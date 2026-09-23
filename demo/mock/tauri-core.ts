@@ -164,7 +164,17 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       try {
         theme = (globalThis as any).localStorage?.getItem("skimdemo.theme") || "warm-light";
       } catch {}
-      return ok({ locale: "en", theme, images_policy: "ask", group_threads: "on" });
+      // Fork keys: any `skimdemo.fork_*` localStorage entry is served as a
+      // setting, so the screenshot harness can drive density / avatars / etc.
+      const fork: Record<string, string> = {};
+      try {
+        const ls = (globalThis as any).localStorage;
+        for (let i = 0; i < (ls?.length ?? 0); i++) {
+          const k = ls.key(i) as string;
+          if (k.startsWith("skimdemo.fork_")) fork[k.slice("skimdemo.".length)] = ls.getItem(k);
+        }
+      } catch {}
+      return ok({ locale: "en", theme, images_policy: "ask", group_threads: "on", ...fork });
     }
     case "set_setting":
       return ok(undefined);

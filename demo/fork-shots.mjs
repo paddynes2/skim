@@ -41,6 +41,52 @@ export const SCENARIOS = {
   "mock-list-states": { phase: "2", file: "docs/fork/mocks/list-states.html", out: "docs/fork/mocks", full: true },
   // Phase 1.4: Starred in the sidebar with its total count.
   "sidebar-starred": { phase: "1", setup: async (page) => { await openInbox(page); } },
+  // Phase 2.2-2.4: row states (unread, read, starred, selected, ticked) with
+  // the hero open, plus the hover actions on the third row.
+  "rows-hover": {
+    phase: "2",
+    setup: async (page) => {
+      await openHero(page);
+      // Tick one row (checkbox slot) and hover another so both states show.
+      const marcus = page.locator('.row-wrap:has-text("Marcus Lee")').first();
+      await marcus.locator("button.check").click({ force: true });
+      await page.locator('.row-wrap:has-text("Priya Nair")').first().hover();
+      await sleep(200);
+    },
+  },
+  "rows-compact": {
+    phase: "2",
+    flags: { "skimdemo.fork_density": "compact" },
+    setup: async (page) => { await openHero(page); },
+  },
+  "rows-avatars": {
+    phase: "2",
+    flags: { "skimdemo.fork_avatars": "on" },
+    setup: async (page) => { await openHero(page); },
+  },
+  "rows-compact-avatars": {
+    phase: "2",
+    flags: { "skimdemo.fork_density": "compact", "skimdemo.fork_avatars": "on" },
+    setup: async (page) => { await openHero(page); },
+  },
+  "settings-list": {
+    phase: "2",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.locator("button", { hasText: "Settings" }).first().click();
+      await page.locator("text=Density").first().waitFor();
+      await page.locator("text=Density").first().scrollIntoViewIfNeeded();
+    },
+  },
+  "focus-ring": {
+    phase: "2",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+    },
+  },
 };
 
 async function startServer() {

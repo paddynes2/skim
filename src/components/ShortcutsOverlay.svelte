@@ -63,6 +63,10 @@
           : []),
         { label: t("palette.toggle_sidebar"), keys: ["."] },
         { label: t("shortcuts.title"), keys: ["?"] },
+        // Fork (2.7)
+        { label: t("fork.shortcuts.zoom_in"), keys: ["Ctrl +"] },
+        { label: t("fork.shortcuts.zoom_out"), keys: ["Ctrl -"] },
+        { label: t("fork.shortcuts.zoom_reset"), keys: ["Ctrl 0"] },
       ],
     },
   ]);

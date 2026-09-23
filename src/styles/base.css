@@ -45,6 +45,17 @@ textarea {
   outline: none;
 }
 
+/* Fork (2.3): one visible keyboard focus ring everywhere. Elements that draw
+   their own focus (the toggle switch, the row cursor) override it locally. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+}
+
 a {
   color: inherit;
 }

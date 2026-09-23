@@ -32,3 +32,14 @@ a hook call, a parameter, a prop; this table is what makes
 | `src-tauri/src/lib.rs` | `generate_handler!` | `fork::commands::fork_role_total` | Starred total (1.4) |
 | `demo/mock/tauri-core.ts` | `invoke` switch | `fork_role_total` fixture | demo harness (1.4) |
 | `src/styles/tokens.css` | all four theme blocks | `--text-dim`/`--text-faint` raised to clear 4.5:1; new `--unread`, `--star`, `--focus`, `--row-unread-tint` | contrast + state colours (2.1) |
+| `src/components/MessageRow.svelte` | whole component | rewritten: 20px gutter (dot + star buttons), dimmed read rows, aria-label, paperclip, hover actions, compact density, avatars; checkbox slot logic kept | 2.2 / 2.4 / 2.6 |
+| `src/styles/base.css` | global | `:focus-visible` ring in `--focus` | 2.3 |
+| `src/components/MessageList.svelte` | `rowH` | effect resets the baseline on density change; `prefs` import | 2.6 |
+| `src/components/ReadingPane.svelte` | `archive/remove/reportSpam/toggleStar/toggleRead` | delegate to `fork/actions` | one action path + auto-advance (2.5 / 3.2) |
+| `src/App.svelte` | `actOnSelected`, boot, `onKeydown` | delegate to `fork/actions.act`; `prefs.hydrate` + `applyZoom`; `zoomKey` before the Ctrl guard | 2.5 / 2.7 |
+| `src/ComposeRoot.svelte`, `src/AiChatRoot.svelte` | boot, keydown | `prefs.hydrate` + `applyZoom`; `zoomKey` | zoom in every window (2.7) |
+| `src/components/settings/Settings.svelte` | after the toggles section | `<SettingsFork />` | fork settings panel (2.5-2.7) |
+| `src/components/ShortcutsOverlay.svelte` | global group | zoom rows | 2.7 |
+| `src-tauri/src/commands/settings.rs` | `get_settings`, `set_setting` | chain `fork::settings::ALLOWED` | fork settings keys |
+| `src-tauri/capabilities/default.json` | permissions | `core:webview:allow-set-webview-zoom` | 2.7 |
+| `demo/vite.demo.config.ts`, `demo/mock/tauri-core.ts` | aliases, `get_settings` | webview mock; `skimdemo.fork_*` served as settings | harness |

@@ -46,7 +46,8 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<HashMap<String, 
         .db
         .read("get_settings", move |conn| {
             let mut map = HashMap::new();
-            for key in ALLOWED {
+            // Fork keys ride the same command (fork::settings::ALLOWED).
+            for key in ALLOWED.iter().chain(crate::fork::settings::ALLOWED) {
                 if let Some(v) = queries::get_setting(conn, key)? {
                     map.insert(key.to_string(), v);
                 }
@@ -63,7 +64,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<HashMap<String, 
 
 #[tauri::command]
 pub async fn set_setting(state: State<'_, AppState>, key: String, value: String) -> Result<()> {
-    if !ALLOWED.contains(&key.as_str()) {
+    if !ALLOWED.contains(&key.as_str()) && !crate::fork::settings::ALLOWED.contains(&key.as_str()) {
         return Err(SkimError::other(
             "settings",
             format!("unknown setting: {key}"),

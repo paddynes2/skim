@@ -12,6 +12,7 @@
   import { ui } from "../../lib/stores/ui.svelte";
   import type { Account, Lightness, Temperature } from "../../lib/types";
   import ConnectForm from "../onboarding/ConnectForm.svelte";
+  import SettingsFork from "../../fork/SettingsFork.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -722,6 +723,9 @@
           setGroupThreads(groupThreads === "on" ? "off" : "on"),
         )}
       </section>
+
+      <!-- Fork: list density, avatars, zoom, after-archive (src/fork). -->
+      <SettingsFork />
 
       <section>
         <div class="microlabel">{t("settings.images")}</div>
