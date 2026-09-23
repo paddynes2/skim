@@ -12,6 +12,7 @@
   import { ui } from "../lib/stores/ui.svelte";
   import type { SearchHit } from "../lib/types";
   import AiChat from "./AiChat.svelte";
+  import { forkCommands, gotoHint } from "../fork/palette"; // Fork (3.3)
 
   let input = $state("");
   let hits = $state<SearchHit[]>([]);
@@ -107,9 +108,13 @@
       list.push({
         id: `goto-${folder.id}`,
         label: t("palette.goto", { folder: folderLabel(folder) }),
+        hint: gotoHint(folder.role), // Fork (3.3)
         run: () => mail.selectFolder(folder.id),
       });
     }
+    // Fork (3.3): fork rows (goto views, CRM, Meet, filters, zoom, undo), each
+    // only when its hook or target exists.
+    list.push(...forkCommands());
     return list;
   });
 

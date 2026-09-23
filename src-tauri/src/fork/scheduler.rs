@@ -308,6 +308,18 @@ pub fn start(app: AppHandle) {
     });
 }
 
+/// Drop every queued `send` / `save_draft` op for `draft_id` (and, by the
+/// cascade, its hold). Called when the draft is deleted: `drafts.id` is not
+/// AUTOINCREMENT, so a later draft can reuse the id, and an orphaned op would
+/// then ship that draft's body without anyone pressing Send.
+pub fn drop_ops_for_draft(conn: &Connection, draft_id: i64) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM pending_ops WHERE kind IN ('send', 'save_draft') \
+         AND json_extract(payload, '$.draftId') = ?1",
+        rusqlite::params![draft_id],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,6 +390,28 @@ mod tests {
             let left: i64 =
                 conn.query_row("SELECT count(*) FROM fork_op_schedule", [], |r| r.get(0))?;
             assert_eq!(left, 0);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn deleting_a_draft_drops_its_held_send_so_a_reused_id_cannot_inherit_it() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn)?;
+            let mine = enqueue(conn, "a1", 7);
+            let other = enqueue(conn, "a1", 8);
+            hold(conn, mine, Some(now() + 3600), "send", Some("Tomorrow"))?;
+            assert_eq!(drop_ops_for_draft(conn, 7)?, 1);
+            let ids: Vec<i64> = conn
+                .prepare("SELECT id FROM pending_ops ORDER BY id")?
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            assert_eq!(ids, vec![other], "only draft 7's op is gone");
+            let holds: i64 =
+                conn.query_row("SELECT count(*) FROM fork_op_schedule", [], |r| r.get(0))?;
+            assert_eq!(holds, 0, "its hold went with it");
             Ok(())
         })
         .unwrap();

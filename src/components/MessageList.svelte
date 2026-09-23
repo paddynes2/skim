@@ -9,6 +9,21 @@
   import SelectionBar from "./SelectionBar.svelte";
   import { prefs } from "../fork/stores/prefs.svelte";
   import SearchChips from "../fork/search/SearchChips.svelte";
+  // Fork (10): the court views' header and per-row age + reason badge.
+  import CourtRow from "../fork/court/CourtRow.svelte";
+  import type { CourtRow as CourtRowShape } from "../fork/court/types";
+
+  // "now" for the row ages, refreshed each minute so a row that crosses a
+  // day boundary recolours without a reload.
+  let nowSecs = $state(Math.floor(Date.now() / 1000));
+  $effect(() => {
+    const timer = setInterval(() => (nowSecs = Math.floor(Date.now() / 1000)), 60_000);
+    return () => clearInterval(timer);
+  });
+  const courtOf = (row: unknown): CourtRowShape | null => {
+    const r = row as Partial<CourtRowShape>;
+    return typeof r.since === "number" ? (row as CourtRowShape) : null;
+  };
 
   const title = $derived.by(() => {
     const f = mail.selectedFolder;
@@ -118,6 +133,25 @@
         onremove={(chip) => void mail.removeSearchToken(chip.token)}
         onclose={() => void mail.exitSearch()}
       />
+    {:else if mail.courtView}
+      <!-- Fork (10): a court view. The title names it; the sub-line says the
+           order (oldest first) and how many, since the filter chips do not
+           apply here (the view is its own filter). -->
+      <div class="court-head">
+        <h1>{t(mail.courtView === "on_me" ? "fork.nav.on_me" : "fork.nav.waiting")}</h1>
+        <span class="court-sub">
+          {t(mail.courtView === "on_me" ? "fork.court.sub_on_me" : "fork.court.sub_waiting", { n: mail.threads.length })}
+        </span>
+      </div>
+      {#if mail.threads.length > 0}
+        <span class="nav-hint" title="{t('shortcuts.next')} · {t('shortcuts.prev')}">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3">
+            <path d="M3.5 5L6 2.5 8.5 5" />
+            <path d="M3.5 7L6 9.5 8.5 7" />
+          </svg>
+          <kbd>J</kbd><kbd>K</kbd>
+        </span>
+      {/if}
     {:else}
       <h1>{title}</h1>
       {#if editableFolder}
@@ -187,18 +221,29 @@
     {:else}
       <div class="spacer" style="height: {start * rowH}px"></div>
       {#each visible as thread (thread.messageId ?? thread.id)}
-        <MessageRow
-          {thread}
-          selected={mail.groupThreads
-            ? mail.selectedThreadId === thread.id
-            : mail.selectedMessageId === thread.messageId}
-          checked={mail.isSelected(rowKey(thread))}
-          onselect={() => {
-            mail.selectedThreadId = thread.id;
-            mail.selectedMessageId = thread.messageId ?? null;
-          }}
-          ontoggle={(extend) => mail.toggleRow(rowKey(thread), extend)}
-        />
+        {@const court = mail.courtView ? courtOf(thread) : null}
+        <!-- Fork (10): in a court view the row gets its age + reason as an
+             overlay in a wrapper of its own, so MessageRow (and the fixed
+             height the windowing measures) stays exactly upstream's. -->
+        <div class="court-wrap" class:court={court !== null} class:compact={prefs.density === "compact"}>
+          <MessageRow
+            {thread}
+            selected={mail.groupThreads
+              ? mail.selectedThreadId === thread.id
+              : mail.selectedMessageId === thread.messageId}
+            checked={mail.isSelected(rowKey(thread))}
+            onselect={() => {
+              mail.selectedThreadId = thread.id;
+              mail.selectedMessageId = thread.messageId ?? null;
+            }}
+            ontoggle={(extend) => mail.toggleRow(rowKey(thread), extend)}
+          />
+          {#if court}
+            <div class="court-badge-slot">
+              <CourtRow since={court.since} reason={court.reason} now={nowSecs} />
+            </div>
+          {/if}
+        </div>
       {/each}
       <div class="spacer" style="height: {(mail.threads.length - end) * rowH}px"></div>
     {/if}
@@ -335,6 +380,57 @@
     font-size: 17px;
     font-weight: 800;
     letter-spacing: -0.02em;
+  }
+  /* Fork (10): court header (title + order/count line) and the row overlay. */
+  .court-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    margin-right: auto;
+  }
+  .court-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+  .court-wrap {
+    position: relative;
+  }
+  /* Bottom-right of the row, over the tail of the snippet line; the hover
+     actions live on line 1, so the two never overlap. */
+  .court-badge-slot {
+    position: absolute;
+    right: 14px;
+    bottom: 9px;
+    width: 168px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: none;
+    z-index: 1;
+  }
+  /* Compact rows are one line: sit left of the date instead. */
+  .court-wrap.compact .court-badge-slot {
+    bottom: auto;
+    top: 50%;
+    transform: translateY(-50%);
+    right: 92px;
+    width: 40px;
+  }
+  /* Reserve the badge's room so it never sits on top of text. */
+  .court-wrap.court :global(.snippet) {
+    padding-right: 176px;
+  }
+  .court-wrap.court.compact :global(.snippet) {
+    padding-right: 48px;
+  }
+  /* One line has room for the age only; the reason stays in the tooltip. */
+  .court-wrap.compact :global(.court-badge .sep),
+  .court-wrap.compact :global(.court-badge .why) {
+    display: none;
   }
   .rows {
     overflow-y: auto;

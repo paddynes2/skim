@@ -148,7 +148,10 @@ export const api = {
   deleteDraft: (draftId: number) => invoke<void>("delete_draft", { draftId }),
   getReplyTemplate: (messageId: number, mode: "reply" | "reply_all" | "forward") =>
     invoke<Draft>("get_reply_template", { messageId, mode }),
-  sendDraft: (draftId: number) => invoke<void>("send_draft", { draftId }),
+  /** Fork (6.4): `notBefore` (unix seconds) holds the send (undo send, send
+   *  later) under `label`; both absent = send now. Resolves to the op id. */
+  sendDraft: (draftId: number, notBefore: number | null = null, label: string | null = null) =>
+    invoke<number>("send_draft", { draftId, notBefore, label }),
   addDraftAttachment: (
     draftId: number,
     filename: string,

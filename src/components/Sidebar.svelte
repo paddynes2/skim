@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "../lib/api";
+  import { SCHEDULED_FOLDER_ID } from "../fork/compose/api";
   import { folderIcon, folderLabel, folderTree, ownFoldersHeading } from "../lib/folders";
   import { t } from "../lib/i18n/index.svelte";
   import { ai } from "../lib/stores/ai.svelte";
@@ -9,6 +10,10 @@
   import { updater } from "../lib/stores/update.svelte";
   import Settings from "./settings/Settings.svelte";
   import { starredCount } from "../fork/stores/starred.svelte";
+  // Fork (10): "On me" / "Waiting" with their counts, above the folders.
+  import { VF_ON_ME, VF_WAITING } from "../fork/court/api";
+  import { courtCounts } from "../fork/court/counts.svelte";
+  import { courtStore } from "../fork/court/store.svelte";
 
   async function compose() {
     const draft = await api.createDraft(await mail.composeAccountId());
@@ -57,13 +62,60 @@
       <kbd>Ctrl K</kbd>
     </button>
 
+    <!-- Fork (7.5): Calendar above the folders; `g c` and the palette go the same way. -->
+    <div class="section">
+      <button
+        class="item calendar"
+        class:selected={ui.view === "calendar"}
+        onclick={() => ui.showCalendar()}
+        title={collapsed ? t("fork.nav.calendar") : undefined}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+          <rect x="1.5" y="2.5" width="13" height="12" rx="2" /><path d="M1.5 6h13M5 1v3M11 1v3" stroke-linecap="round" />
+        </svg>
+        <span class="name">{t("fork.nav.calendar")}</span>
+        <kbd>G C</kbd>
+      </button>
+      <!-- Fork (10): the two court views. Counts are totals (rows in the
+           view), never unread, so they take the Starred rule's `total` look. -->
+      <button
+        class="item court"
+        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_ON_ME}
+        onclick={() => courtStore.open("on_me")}
+        title={collapsed ? t("fork.nav.on_me") : undefined}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M2 8.5l3.5 3.5L14 3.5" />
+          <path d="M2 12.5h5" />
+        </svg>
+        <span class="name">{t("fork.nav.on_me")}</span>
+        {#if courtCounts.onMe > 0}<span class="count total">{courtCounts.onMe}</span>{/if}
+      </button>
+      <button
+        class="item court"
+        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_WAITING}
+        onclick={() => courtStore.open("waiting")}
+        title={collapsed ? t("fork.nav.waiting") : undefined}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
+          <circle cx="8" cy="8" r="6" />
+          <path d="M8 4.5V8l2.5 1.5" />
+        </svg>
+        <span class="name">{t("fork.nav.waiting")}</span>
+        {#if courtCounts.waiting > 0}<span class="count total">{courtCounts.waiting}</span>{/if}
+      </button>
+    </div>
+
     <div class="section">
       {#each mainFolders as folder (folder.id)}
         {@const name = folderLabel(folder)}
         <button
           class="item"
-          class:selected={mail.selectedFolderId === folder.id}
-          onclick={() => mail.selectFolder(folder.id)}
+          class:selected={ui.view === "mail" && mail.selectedFolderId === folder.id}
+          onclick={() => {
+            ui.showMail();
+            void mail.selectFolder(folder.id);
+          }}
           title={collapsed ? name : undefined}
         >
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
@@ -77,6 +129,22 @@
           {/if}
         </button>
       {/each}
+      <!-- Fork (6.4): scheduled sends, a list of its own (id -910). -->
+      <button
+        class="item"
+        class:selected={ui.view === "mail" && mail.selectedFolderId === SCHEDULED_FOLDER_ID}
+        onclick={() => {
+          ui.showMail();
+          void mail.selectFolder(SCHEDULED_FOLDER_ID);
+        }}
+        title={collapsed ? t("fork.scheduled.title") : undefined}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="6" />
+          <path d="M8 4.5V8l2.5 1.5" />
+        </svg>
+        <span class="name">{t("fork.scheduled.title")}</span>
+      </button>
     </div>
 
     {#if labels.length > 0}
@@ -86,8 +154,11 @@
           {@const path = folderLabel(folder)}
           <button
             class="item"
-            class:selected={mail.selectedFolderId === folder.id}
-            onclick={() => mail.selectFolder(folder.id)}
+            class:selected={ui.view === "mail" && mail.selectedFolderId === folder.id}
+            onclick={() => {
+              ui.showMail();
+              void mail.selectFolder(folder.id);
+            }}
             style="--depth: {Math.min(depth, 3)}"
             title={collapsed || path !== label ? path : undefined}
           >

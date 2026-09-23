@@ -8,9 +8,14 @@ import { prefs, type ListOrder } from "../../fork/stores/prefs.svelte";
 // Fork (4.3): search results as a virtual folder.
 import { searchApi, SEARCH_FOLDER_ID } from "../../fork/search/api";
 import { withoutToken } from "../../fork/search/query";
+// Fork (10): "On me" / "Waiting" as virtual folders -920 / -921.
+import { COURT_UPDATED, courtApi, VF_ON_ME, VF_WAITING } from "../../fork/court/api";
+import { courtCounts } from "../../fork/court/counts.svelte";
+import type { CourtState } from "../../fork/court/types";
 import { undo } from "../../fork/stores/undo.svelte";
 import { insertAt, withoutPending } from "../../fork/undo-filter";
 import { folderSelected } from "../../fork/freshness";
+import { SCHEDULED_FOLDER_ID } from "../../fork/compose/api";
 
 /** Fork (3.1): which rows the list shows. */
 export type ListFilter = "all" | "unread" | "starred";
@@ -126,6 +131,13 @@ async function attachListeners() {
       void refreshThreads();
     }
     void refreshFolders();
+  });
+  // Fork (10): a court pass moved a row. The two views are not folders, so
+  // `mail:updated` cannot name them; this refreshes an open view and the
+  // sidebar counts. Cheap: one indexed read each.
+  await listen(COURT_UPDATED, () => {
+    if (courtStateOf(state.selectedFolderId) !== null) void refreshThreads();
+    void courtCounts.refresh();
   });
   // Back from the tray. Hiding the window only hides the webview, so nothing
   // here re-runs on its own — and a view left empty by a failed read would
@@ -248,6 +260,8 @@ async function refreshFolders() {
   // Fork (4.3): the search folder is never in this list; a sync must not
   // bounce an open search back to the inbox.
   if (state.selectedFolderId === SEARCH_FOLDER_ID) return;
+  // Fork (10): nor are the court views.
+  if (courtStateOf(state.selectedFolderId) !== null) return;
   // Auto-select inbox once it appears — also when the selected folder is gone
   // (e.g. a virtual label vanished with its last message).
   if (
@@ -324,6 +338,8 @@ async function openLocation(folderId: number, threadId: number | null, messageId
 /** One page of rows for a folder — threads when grouping is on, else messages.
  *  Negative ids are virtual (cross-account) folders, addressed by role/label. */
 function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<ThreadRow[]> {
+  // Fork (6.4): the scheduled list is its own component; never a real query.
+  if (folderId === SCHEDULED_FOLDER_ID) return Promise.resolve([]);
   // Fork (3.1): the active chip and the persisted order ride every page read.
   const filter = state.listFilter;
   const order = prefs.listOrder;
@@ -332,6 +348,10 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
   if (folderId === SEARCH_FOLDER_ID) {
     return searchApi.searchThreads(state.searchQuery ?? "", offset, limit, activeAccount()?.id ?? null);
   }
+  // Fork (10): the court views come from `fork_court_list`, always by thread
+  // (a court row IS a thread), oldest first, across every account.
+  const court = courtStateOf(folderId);
+  if (court !== null) return courtApi.list(court, offset, limit);
   if (folderId < 0) {
     const virtual = state.folders.find((f) => f.id === folderId);
     if (!virtual) return Promise.resolve([]);
@@ -462,6 +482,31 @@ async function removeSearchToken(token: string) {
   await enterSearch(withoutToken(state.searchQuery, token));
 }
 // ── end fork (4.3) ───────────────────────────────────────────────────────────
+
+// ── Fork (10): "On me" / "Waiting" as virtual folders ────────────────────────
+// Same shape as search: ids -920 / -921 that no real or unified folder ever
+// has. `fetchPage` routes them to `fork_court_list`, so paging, the reading
+// pane, keys, bulk actions and undo work unchanged; `court:updated` (above)
+// refreshes an open view. Selecting one leaves search mode like any folder
+// click would.
+
+/** The court state behind a folder id, or null for anything else. */
+function courtStateOf(folderId: number | null): CourtState | null {
+  if (folderId === VF_ON_ME) return "on_me";
+  if (folderId === VF_WAITING) return "waiting";
+  return null;
+}
+
+/** Show one of the two views in the list. */
+async function selectCourt(court: CourtState) {
+  const id = court === "on_me" ? VF_ON_ME : VF_WAITING;
+  if (state.selectedFolderId === SEARCH_FOLDER_ID) {
+    state.searchQuery = null;
+    state.searchPrevFolderId = null;
+  }
+  await selectFolder(id);
+}
+// ── end fork (10) ────────────────────────────────────────────────────────────
 
 let loadingMore = false;
 
@@ -800,6 +845,12 @@ export const mail = {
   enterSearch,
   exitSearch,
   removeSearchToken,
+  // Fork (10): the court views.
+  /** Which court view the list is showing; `null` in every other folder. */
+  get courtView(): CourtState | null {
+    return courtStateOf(state.selectedFolderId);
+  },
+  selectCourt,
   switchAccount,
   openLocation,
   // In the unified view the active account is null, so this syncs every engine.

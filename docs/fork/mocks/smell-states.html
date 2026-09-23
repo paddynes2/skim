@@ -1,0 +1,156 @@
+<!doctype html>
+<html data-theme="warm-dark">
+<head>
+<meta charset="utf-8">
+<title>Skim fork 6.5: AI-smell states</title>
+<!-- Static render check for the composer smell layer (PLAN.md 6.5), shot by
+     docs/fork/shots/6.5/ via a playwright pass that sets data-theme per run.
+     The underline / mirror CSS is a copy of the sheet highlight.ts injects
+     (keep them in step); the popover, health bar and send prompt reproduce the
+     Svelte components' markup and styles with real values from the fixture in
+     demo/mock/fork-smell.ts. -->
+<link rel="stylesheet" href="../../../node_modules/@fontsource-variable/hanken-grotesk/index.css">
+<link rel="stylesheet" href="../../../src/styles/tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font-family: var(--font-ui, "Hanken Grotesk Variable", sans-serif); font-size: 14px; }
+  h2 { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
+  section { margin-bottom: 28px; max-width: 720px; }
+  .composer { border: 1px solid var(--hairline); border-radius: var(--radius-m, 8px); background: var(--surface); padding: 12px 14px; }
+  .field { font-size: 13px; color: var(--text-dim); padding: 4px 0; border-bottom: 1px solid var(--hairline); }
+  .field b { color: var(--text); font-weight: 500; }
+  /* ---- the sheet highlight.ts injects (copy) ---- */
+  :root { --smell-warn: #b7791f; }
+  :root[data-theme="cold-dark"], :root[data-theme="warm-dark"] { --smell-warn: #e0b45a; }
+  .smell-mirror { position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: transparent; white-space: pre-wrap; word-wrap: break-word; z-index: 0; }
+  .smell-mirror mark { background: none; color: transparent; }
+  .smell-mirror mark.smell-hard { text-decoration: underline wavy var(--danger); text-decoration-skip-ink: none; }
+  .smell-mirror mark.smell-warn { text-decoration: underline dotted var(--smell-warn); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+  .smell-host { position: relative; }
+  .smell-host > textarea { position: relative; z-index: 1; background: transparent; }
+  /* ---- textarea like ComposeForm's body ---- */
+  .smell-host { margin-top: 8px; }
+  .smell-host > textarea, .smell-mirror { font: inherit; font-size: 14px; line-height: 1.5; padding: 8px 0; border: 0; width: 100%; min-height: 150px; resize: none; color: var(--text); }
+  .smell-host > textarea:focus { outline: none; }
+  .sig { color: var(--text-dim); font-size: 13px; white-space: pre-wrap; border-top: 1px solid var(--hairline); margin-top: 6px; padding-top: 6px; }
+  .quote-pill { display: inline-block; border: 1px solid var(--hairline); border-radius: 999px; padding: 0 8px; font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+  /* ---- SmellHealth ---- */
+  .smell-health { display: flex; align-items: center; gap: 6px; padding: 4px 0 2px; font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+  .smell-health .dot { color: var(--text-faint); }
+  .smell-health .part { background: none; border: 0; padding: 0; font: inherit; color: inherit; }
+  .smell-health button.part { cursor: pointer; }
+  .smell-health .part.hard { color: var(--danger); }
+  .smell-health .part.tells, .smell-health .part.contrast { color: var(--smell-warn); }
+  /* ---- SmellPopover ---- */
+  .smell-pop { position: relative; width: 360px; background: var(--surface-raised); color: var(--text); border: 1px solid var(--hairline); border-radius: var(--radius-m, 8px); box-shadow: var(--shadow-pop); padding: 10px 12px; font-size: 13px; line-height: 1.4; }
+  .smell-pop .head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .smell-pop .sev { font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--smell-warn); }
+  .smell-pop .sev.hard { color: var(--danger); }
+  .smell-pop .cat { color: var(--text-dim); font-size: 12px; }
+  .smell-pop .x { margin-left: auto; background: none; border: 0; color: var(--text-dim); font-size: 12px; }
+  .smell-pop .reason { margin: 0 0 4px; }
+  .smell-pop .matched { margin: 0 0 8px; color: var(--text-dim); font-style: italic; }
+  .smell-pop .options { display: grid; gap: 6px; margin: 6px 0 8px; }
+  .smell-pop .opt { display: flex; gap: 8px; text-align: left; background: var(--hover); border: 1px solid var(--hairline); border-radius: 8px; color: var(--text); padding: 6px 8px; font: inherit; }
+  .smell-pop .opt .n { color: var(--accent); font-weight: 600; min-width: 1ch; }
+  .smell-pop .note { margin: 0; color: var(--text-dim); font-size: 12px; }
+  .smell-pop .actions { display: flex; gap: 6px; align-items: center; }
+  .smell-pop .ghost { background: none; border: 1px solid var(--hairline); border-radius: 6px; color: var(--text); padding: 4px 8px; font: inherit; font-size: 12px; }
+  .smell-pop .ai { margin-left: auto; background: var(--accent-soft); border: 1px solid var(--accent-dim); border-radius: 6px; color: var(--accent); padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 600; }
+  /* ---- SmellSendPrompt ---- */
+  .smell-send { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--danger); border-radius: var(--radius-m, 8px); background: var(--surface-raised); font-size: 12px; color: var(--text); }
+  .smell-send .msg { color: var(--danger); font-weight: 600; white-space: nowrap; }
+  .smell-send .hint { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .smell-send .fix, .smell-send .anyway { font: inherit; font-size: 12px; border-radius: 6px; padding: 3px 9px; }
+  .smell-send .fix { background: var(--danger); color: var(--on-accent, #fff); border: 1px solid var(--danger); }
+  .smell-send .anyway { background: none; color: var(--text); border: 1px solid var(--hairline); }
+  .send-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .send { background: var(--text); color: var(--bg); border: 0; border-radius: 6px; padding: 5px 14px; font: inherit; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<section id="underlines">
+  <h2>6.5.3 underlines (plain-text mode: mirror behind the textarea) + health bar</h2>
+  <div class="composer">
+    <div class="field">To <b>Jim Carter &lt;jim@acme.com&gt;</b></div>
+    <div class="field">Subject <b>Handover pack</b></div>
+    <div class="smell-host">
+      <div class="smell-mirror" aria-hidden="true">Hi Jim,
+
+<mark class="smell smell-warn">I wanted to reach out</mark> about the handover pack for <mark class="smell smell-hard">{{company}}</mark>. The fee is R140,000, due Tuesday 14:00 <mark class="smell smell-hard">—</mark> that covers the full pack. <mark class="smell smell-warn">Rather than</mark> hire, <mark class="smell smell-warn">rather than</mark> outsource, <mark class="smell smell-warn">rather than</mark> wait, the owner steps back and the buyer pays for a business that runs.
+
+<mark class="smell smell-warn">Let me know if you have any questions</mark>.
+
+Patrick
+</div>
+      <textarea spellcheck="false">Hi Jim,
+
+I wanted to reach out about the handover pack for {{company}}. The fee is R140,000, due Tuesday 14:00 — that covers the full pack. Rather than hire, rather than outsource, rather than wait, the owner steps back and the buyer pays for a business that runs.
+
+Let me know if you have any questions.
+
+Patrick
+</textarea>
+    </div>
+    <div class="sig">--
+Patrick Nesbitt, CA(SA), CFA</div>
+    <span class="quote-pill">•••</span>
+    <div class="smell-health" id="health" role="status">
+      <button class="part hard">2 must-fix</button>
+      <span class="dot">·</span>
+      <button class="part tells">2 AI tells</button>
+      <span class="dot">·</span>
+      <button class="part contrast">‘rather than’ ×3</button>
+    </div>
+  </div>
+</section>
+
+<section id="popover">
+  <h2>6.5.4 popover with three options (after ✦ Rewrite)</h2>
+  <div class="smell-pop" role="dialog">
+    <div class="head"><span class="sev">Tell</span><span class="cat">stock opener</span><button class="x">✕</button></div>
+    <p class="reason">Cut the wind-up. Start with the reason you are writing.</p>
+    <p class="matched">“I wanted to reach out”</p>
+    <div class="options">
+      <button class="opt"><span class="n">1</span><span class="txt">The handover pack for {{company}} is ready.</span></button>
+      <button class="opt"><span class="n">2</span><span class="txt">Here is where the handover pack for {{company}} stands.</span></button>
+      <button class="opt"><span class="n">3</span><span class="txt">The handover pack for {{company}} needs one decision from you.</span></button>
+      <p class="note">1 rewrite changed a fact and was dropped</p>
+    </div>
+    <div class="actions">
+      <button class="ghost">Ignore</button>
+      <button class="ghost">Ignore rule</button>
+      <button class="ai">✦ Rewrite</button>
+    </div>
+  </div>
+</section>
+
+<section id="popover-hard">
+  <h2>6.5.4 popover on a hard finding (no Rewrite: it is a fix, not a rewrite)</h2>
+  <div class="smell-pop" role="dialog">
+    <div class="head"><span class="sev hard">Must fix</span><span class="cat">dash</span><button class="x">✕</button></div>
+    <p class="reason">Em and en dashes are the house hard rule for outbound mail. Use a comma, a colon or a full stop.</p>
+    <p class="matched">“—”</p>
+    <div class="actions">
+      <button class="ghost">Ignore</button>
+      <button class="ghost">Ignore rule</button>
+    </div>
+  </div>
+</section>
+
+<section id="send">
+  <h2>6.5.5 send check</h2>
+  <div class="composer">
+    <div class="smell-send" role="alertdialog">
+      <span class="msg">2 must-fix items</span>
+      <span class="hint">Unrendered merge variable. This ships LITERAL (B-1345).</span>
+      <button class="fix">Fix</button>
+      <button class="anyway">Send anyway</button>
+    </div>
+    <div class="send-row"><button class="send">Send</button><span style="color: var(--text-dim); font-size: 12px">Ctrl+Enter</span></div>
+  </div>
+</section>
+
+</body>
+</html>

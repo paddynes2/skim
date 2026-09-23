@@ -1,0 +1,1049 @@
+{
+  "os_commit": "812e01bbabbbe19c3b2ee00d31fe154dad1f7ad7",
+  "source": {
+    "rules": "tools/outreach/slop_scrub.py",
+    "nosmell": "tools/no-smell/nosmell/structural.py"
+  },
+  "rules": [
+    {
+      "category": "chatbot_markup",
+      "severity": "hard",
+      "pattern": "citeturn\\d\\w*",
+      "flags": "im",
+      "suggestion": "ChatGPT citation token pasted into the draft. Delete it and add a real link.",
+      "min_hits": 1
+    },
+    {
+      "category": "chatbot_markup",
+      "severity": "hard",
+      "pattern": "contentReference\\[oaicite:",
+      "flags": "im",
+      "suggestion": "OpenAI reference markup pasted into the draft. Delete it.",
+      "min_hits": 1
+    },
+    {
+      "category": "chatbot_markup",
+      "severity": "hard",
+      "pattern": "\\boai_citation\\b",
+      "flags": "im",
+      "suggestion": "OpenAI citation token pasted into the draft. Delete it.",
+      "min_hits": 1
+    },
+    {
+      "category": "chatbot_markup",
+      "severity": "hard",
+      "pattern": "\\battributableIndex\\b",
+      "flags": "im",
+      "suggestion": "RAG attribution token pasted into the draft. Delete it.",
+      "min_hits": 1
+    },
+    {
+      "category": "chatbot_markup",
+      "severity": "hard",
+      "pattern": "【\\d+†[^】]*】",
+      "flags": "im",
+      "suggestion": "Chat-window source bracket pasted into the draft. Delete it.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_referral_param",
+      "severity": "hard",
+      "pattern": "utm_source=(?:chatgpt\\.com|openai|copilot\\.com|perplexity\\.ai)",
+      "flags": "im",
+      "suggestion": "AI referral parameter in a URL. Strip the query string before sending.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_referral_param",
+      "severity": "hard",
+      "pattern": "referrer=grok\\.com",
+      "flags": "im",
+      "suggestion": "AI referral parameter in a URL. Strip the query string before sending.",
+      "min_hits": 1
+    },
+    {
+      "category": "placeholder_unfilled",
+      "severity": "hard",
+      "pattern": "\\[(?:your|insert|todo|tbd|name|company|client|firstname|first_name)[^\\]]{0,40}\\]",
+      "flags": "im",
+      "suggestion": "Unfilled bracket placeholder. Fill it or delete the line.",
+      "min_hits": 1
+    },
+    {
+      "category": "placeholder_unfilled",
+      "severity": "hard",
+      "pattern": "\\{\\{[^}\\n]{1,60}\\}\\}",
+      "flags": "im",
+      "suggestion": "Unrendered merge variable. This ships LITERAL (B-1345). Pass --template if this IS the template.",
+      "min_hits": 1
+    },
+    {
+      "category": "placeholder_unfilled",
+      "severity": "hard",
+      "pattern": "\\{[a-z_]{2,30}\\}(?![}\\w])",
+      "flags": "im",
+      "suggestion": "Unrendered format placeholder. Pass --template if this IS the template.",
+      "min_hits": 1
+    },
+    {
+      "category": "placeholder_unfilled",
+      "severity": "hard",
+      "pattern": "\\b20\\d\\d-XX-XX\\b|\\bXX/XX/\\d{2,4}\\b",
+      "flags": "im",
+      "suggestion": "Placeholder date left in the draft.",
+      "min_hits": 1
+    },
+    {
+      "category": "placeholder_unfilled",
+      "severity": "hard",
+      "pattern": "\\bLorem ipsum\\b",
+      "flags": "im",
+      "suggestion": "Placeholder copy left in the draft.",
+      "min_hits": 1
+    },
+    {
+      "category": "reasoning_leak",
+      "severity": "hard",
+      "pattern": "(?:^|\\n)\\s*(?:Let me think|Let's think step by step)\\b",
+      "flags": "im",
+      "suggestion": "Chain-of-thought scaffolding left in the deliverable. Keep the conclusion, cut the reasoning.",
+      "min_hits": 1
+    },
+    {
+      "category": "throat_clearing",
+      "severity": "warn",
+      "pattern": "\\bhere'?s (?:the thing|what|why|the problem|the kicker|the deal)\\b",
+      "flags": "im",
+      "suggestion": "Cut the wind-up. State the point.",
+      "min_hits": 1
+    },
+    {
+      "category": "throat_clearing",
+      "severity": "warn",
+      "pattern": "\\bthe (?:uncomfortable )?truth is\\b",
+      "flags": "im",
+      "suggestion": "Say the thing directly; drop 'the truth is'.",
+      "min_hits": 1
+    },
+    {
+      "category": "throat_clearing",
+      "severity": "warn",
+      "pattern": "\\bit turns out\\b",
+      "flags": "im",
+      "suggestion": "State it as fact, not as a reveal.",
+      "min_hits": 1
+    },
+    {
+      "category": "throat_clearing",
+      "severity": "warn",
+      "pattern": "\\blet me be clear\\b",
+      "flags": "im",
+      "suggestion": "Being clear is the default; delete the announcement.",
+      "min_hits": 1
+    },
+    {
+      "category": "throat_clearing",
+      "severity": "warn",
+      "pattern": "\\bi'?m going to be honest\\b",
+      "flags": "im",
+      "suggestion": "Just be honest; the preamble signals the opposite.",
+      "min_hits": 1
+    },
+    {
+      "category": "throat_clearing",
+      "severity": "warn",
+      "pattern": "\\bmake no mistake\\b",
+      "flags": "im",
+      "suggestion": "Emphasis crutch. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "vague_declarative",
+      "severity": "warn",
+      "pattern": "\\bthe (?:implications|stakes|consequences|reasons) (?:are|is) (?:significant|high|real|structural|clear)\\b",
+      "flags": "im",
+      "suggestion": "Name the actual implication / stake with a concrete number.",
+      "min_hits": 1
+    },
+    {
+      "category": "vague_declarative",
+      "severity": "warn",
+      "pattern": "\\bthis matters because\\b",
+      "flags": "im",
+      "suggestion": "If it matters, the reader sees why; show it, don't label it.",
+      "min_hits": 1
+    },
+    {
+      "category": "vague_declarative",
+      "severity": "warn",
+      "pattern": "\\blet that sink in\\b",
+      "flags": "im",
+      "suggestion": "Trust the reader. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "meta_commentary",
+      "severity": "warn",
+      "pattern": "\\blet me walk you through\\b",
+      "flags": "im",
+      "suggestion": "Walk them through it without announcing it.",
+      "min_hits": 1
+    },
+    {
+      "category": "meta_commentary",
+      "severity": "warn",
+      "pattern": "\\bin this (?:section|post|email|note)\\b",
+      "flags": "im",
+      "suggestion": "Drop the table-of-contents narration.",
+      "min_hits": 1
+    },
+    {
+      "category": "meta_commentary",
+      "severity": "warn",
+      "pattern": "\\bas we'?ll see\\b",
+      "flags": "im",
+      "suggestion": "Just show it.",
+      "min_hits": 1
+    },
+    {
+      "category": "meta_commentary",
+      "severity": "warn",
+      "pattern": "\\b(?:feature|bug),? not a (?:bug|feature)\\b",
+      "flags": "im",
+      "suggestion": "Tired construction. Rephrase.",
+      "min_hits": 1
+    },
+    {
+      "category": "meta_commentary",
+      "severity": "warn",
+      "pattern": "\\bplot twist\\b",
+      "flags": "im",
+      "suggestion": "Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bdeep dive\\b",
+      "flags": "im",
+      "suggestion": "Use 'analysis' or just describe it.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bdouble down\\b",
+      "flags": "im",
+      "suggestion": "Use 'commit' or 'increase'.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\blean into\\b",
+      "flags": "im",
+      "suggestion": "Use 'accept' or 'embrace'.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bmove the needle\\b",
+      "flags": "im",
+      "suggestion": "Name the actual metric that moves.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\btake a step back\\b",
+      "flags": "im",
+      "suggestion": "Use 'reconsider'.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bon the same page\\b",
+      "flags": "im",
+      "suggestion": "Use 'aligned' or 'agreed'.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bat the end of the day\\b",
+      "flags": "im",
+      "suggestion": "Filler. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bin today'?s (?:world|landscape|market|economy)\\b",
+      "flags": "im",
+      "suggestion": "Filler opener. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bin a world where\\b",
+      "flags": "im",
+      "suggestion": "Filler opener. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bwhen it comes to\\b",
+      "flags": "im",
+      "suggestion": "Usually deletable; name the subject.",
+      "min_hits": 1
+    },
+    {
+      "category": "business_jargon",
+      "severity": "warn",
+      "pattern": "\\bit'?s worth noting\\b",
+      "flags": "im",
+      "suggestion": "If it's worth noting, just note it.",
+      "min_hits": 1
+    },
+    {
+      "category": "binary_contrast",
+      "severity": "warn",
+      "pattern": "\\bit'?s not [^.,;:!?]{1,40}[,.] (?:it'?s|that'?s)\\b",
+      "flags": "im",
+      "suggestion": "State Y directly; drop the 'not X' runway.",
+      "min_hits": 1
+    },
+    {
+      "category": "binary_contrast",
+      "severity": "warn",
+      "pattern": "\\bthe (?:answer|problem|point|issue) (?:isn'?t|is not)\\b",
+      "flags": "im",
+      "suggestion": "State what it IS; drop the negation.",
+      "min_hits": 1
+    },
+    {
+      "category": "binary_contrast",
+      "severity": "warn",
+      "pattern": "\\bnot because [^.,;:!?]{1,40}[.,] because\\b",
+      "flags": "im",
+      "suggestion": "Give the reason directly.",
+      "min_hits": 1
+    },
+    {
+      "category": "binary_contrast",
+      "severity": "warn",
+      "pattern": "\\bnot (?:just|only|merely|simply) [^.,;:!?]{1,40}[,;:] (?:it|this|that|which) (?:is|was|becomes)\\b",
+      "flags": "im",
+      "suggestion": "State Y directly; drop the 'not just X' runway.",
+      "min_hits": 1
+    },
+    {
+      "category": "stock_opener",
+      "severity": "warn",
+      "pattern": "\\b(?:i|we) (?:just )?wanted to (?:reach out|touch base|check in|drop you a (?:line|note))\\b",
+      "flags": "im",
+      "suggestion": "Cut the wind-up. Start with the reason you are writing.",
+      "min_hits": 1
+    },
+    {
+      "category": "stock_opener",
+      "severity": "warn",
+      "pattern": "\\b(?:i|we)(?:'m| am|'re| are) (?:just )?reaching out\\b",
+      "flags": "im",
+      "suggestion": "Cut the wind-up. Start with the reason you are writing.",
+      "min_hits": 1
+    },
+    {
+      "category": "stock_closer",
+      "severity": "warn",
+      "pattern": "\\blet (?:me|us) know if you have any (?:questions|thoughts|concerns|feedback)\\b",
+      "flags": "im",
+      "suggestion": "Stock closer. End on the next action or one question.",
+      "min_hits": 1
+    },
+    {
+      "category": "stock_closer",
+      "severity": "warn",
+      "pattern": "\\b(?:do not|don'?t) hesitate to (?:reach out|contact|ask|get in touch)\\b",
+      "flags": "im",
+      "suggestion": "Stock closer. End on the next action or one question.",
+      "min_hits": 1
+    },
+    {
+      "category": "stock_closer",
+      "severity": "warn",
+      "pattern": "\\b(?:please )?feel free to (?:reach out|contact|get in touch)\\b",
+      "flags": "im",
+      "suggestion": "Stock closer. End on the next action or one question.",
+      "min_hits": 1
+    },
+    {
+      "category": "negative_listing",
+      "severity": "warn",
+      "pattern": "\\bnot (?:a|an|just|about|only) [^.,;:!?]{1,40}[,.] (?:not|nor) (?:a|an|just|about|only)\\b",
+      "flags": "im",
+      "suggestion": "List what it IS, not a runway of what it isn't.",
+      "min_hits": 1
+    },
+    {
+      "category": "dramatic_fragment",
+      "severity": "warn",
+      "pattern": "[a-z][.!?]\\s+that'?s it\\.",
+      "flags": "im",
+      "suggestion": "Complete the sentence; drop the 'That's it.' beat.",
+      "min_hits": 1
+    },
+    {
+      "category": "dramatic_fragment",
+      "severity": "warn",
+      "pattern": "(?:^|[.!?]\\s+)(?:full stop|period)\\.",
+      "flags": "im",
+      "suggestion": "Emphasis fragment. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "rhetorical_setup",
+      "severity": "warn",
+      "pattern": "\\bhere'?s what i mean\\b",
+      "flags": "im",
+      "suggestion": "Make the point; skip the setup.",
+      "min_hits": 1
+    },
+    {
+      "category": "rhetorical_setup",
+      "severity": "warn",
+      "pattern": "\\bwhat if [^.?!]{1,60}\\?",
+      "flags": "im",
+      "suggestion": "Deliver the insight as a statement, not a rhetorical question.",
+      "min_hits": 1
+    },
+    {
+      "category": "weasel_attribution",
+      "severity": "warn",
+      "pattern": "\\bexperts?\\s+(?:agree|say|believe|argue|suggest|note)\\b",
+      "flags": "im",
+      "suggestion": "Name the expert or cut the claim. Never invent a source.",
+      "min_hits": 1
+    },
+    {
+      "category": "weasel_attribution",
+      "severity": "warn",
+      "pattern": "\\b(?:studies|research|reports?)\\s+(?:show|shows|suggest|suggests|indicate|indicates)\\b",
+      "flags": "im",
+      "suggestion": "Name the study with its author and year, or cut the claim.",
+      "min_hits": 1
+    },
+    {
+      "category": "weasel_attribution",
+      "severity": "warn",
+      "pattern": "\\bindustry (?:reports?|observers?|analysts?)\\b",
+      "flags": "im",
+      "suggestion": "Name the report or cut it.",
+      "min_hits": 1
+    },
+    {
+      "category": "weasel_attribution",
+      "severity": "warn",
+      "pattern": "\\b(?:many|some|most|critics|observers)\\s+(?:argue|believe|would say|have noted)\\b",
+      "flags": "im",
+      "suggestion": "Name who. An unnamed 'many argue' is a fabricated consensus.",
+      "min_hits": 1
+    },
+    {
+      "category": "weasel_attribution",
+      "severity": "warn",
+      "pattern": "\\bit is (?:widely )?(?:believed|regarded|understood|accepted)\\b",
+      "flags": "im",
+      "suggestion": "By whom? Name the source or state it as your own view.",
+      "min_hits": 1
+    },
+    {
+      "category": "ing_tail",
+      "severity": "warn",
+      "pattern": ",\\s+(?:highlighting|underscoring|emphasi[sz]ing|showcasing|symboli[sz]ing|fostering|encompassing|cultivating|reflecting the|ensuring that)\\b",
+      "flags": "im",
+      "suggestion": "Participle tail faking depth. Delete it, or promote the real information to its own sentence.",
+      "min_hits": 1
+    },
+    {
+      "category": "copula_avoidance",
+      "severity": "warn",
+      "pattern": "\\b(?:serves|stands|functions) as (?:a|an|the)\\b",
+      "flags": "im",
+      "suggestion": "Just say 'is'. The plain copula is clear, not boring.",
+      "min_hits": 1
+    },
+    {
+      "category": "copula_avoidance",
+      "severity": "warn",
+      "pattern": "\\bboasts (?:a|an|over|more than|\\d)\\b",
+      "flags": "im",
+      "suggestion": "Just say 'has'.",
+      "min_hits": 1
+    },
+    {
+      "category": "copula_avoidance",
+      "severity": "warn",
+      "pattern": "\\bpositions? (?:itself|himself|herself|themselves) as\\b",
+      "flags": "im",
+      "suggestion": "Say what it is.",
+      "min_hits": 1
+    },
+    {
+      "category": "copula_avoidance",
+      "severity": "warn",
+      "pattern": "\\brepresents a (?:shift|turning point|milestone|step change)\\b",
+      "flags": "im",
+      "suggestion": "State the fact and let the reader judge whether it is a shift.",
+      "min_hits": 1
+    },
+    {
+      "category": "phantom_objection",
+      "severity": "warn",
+      "pattern": "\\bthis is ?n'?t (?:mainly|really|just|about|primarily)\\b",
+      "flags": "im",
+      "suggestion": "Nobody raised that. State the claim you DO mean.",
+      "min_hits": 1
+    },
+    {
+      "category": "phantom_objection",
+      "severity": "warn",
+      "pattern": "\\bi'?m not (?:saying|arguing|suggesting|claiming|trying to)\\b",
+      "flags": "im",
+      "suggestion": "Nobody accused you. Delete the defence and make the claim.",
+      "min_hits": 1
+    },
+    {
+      "category": "phantom_objection",
+      "severity": "warn",
+      "pattern": "\\bdon'?t get me wrong\\b",
+      "flags": "im",
+      "suggestion": "Concessive pivot (ai_smell Class 2). Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "phantom_objection",
+      "severity": "warn",
+      "pattern": "\\bthis is not to say\\b",
+      "flags": "im",
+      "suggestion": "Delete. If it carries a real claim, state that claim directly.",
+      "min_hits": 1
+    },
+    {
+      "category": "phantom_objection",
+      "severity": "warn",
+      "pattern": "\\bto be (?:fair|clear),",
+      "flags": "im",
+      "suggestion": "Concessive pivot (ai_smell Class 2). Cut it or earn it.",
+      "min_hits": 1
+    },
+    {
+      "category": "phantom_objection",
+      "severity": "warn",
+      "pattern": "\\bsome (?:might|would|may) (?:say|argue|point out)[^.]{0,60},? but\\b",
+      "flags": "im",
+      "suggestion": "You invented the objection. Cut it.",
+      "min_hits": 1
+    },
+    {
+      "category": "fake_alternative",
+      "severity": "warn",
+      "pattern": "\\ba tempting (?:option|approach|solution)\\b",
+      "flags": "im",
+      "suggestion": "Nobody was tempted. State the real constraint.",
+      "min_hits": 1
+    },
+    {
+      "category": "fake_alternative",
+      "severity": "warn",
+      "pattern": "\\bone might be tempted to\\b",
+      "flags": "im",
+      "suggestion": "Cut. State what you did and why.",
+      "min_hits": 1
+    },
+    {
+      "category": "fake_alternative",
+      "severity": "warn",
+      "pattern": "\\b(?:an|the) obvious approach would be\\b",
+      "flags": "im",
+      "suggestion": "Cut the strawman.",
+      "min_hits": 1
+    },
+    {
+      "category": "fake_alternative",
+      "severity": "warn",
+      "pattern": "\\bit would be easy to (?:just|simply)\\b",
+      "flags": "im",
+      "suggestion": "Cut. Say what you actually did.",
+      "min_hits": 1
+    },
+    {
+      "category": "faux_insight",
+      "severity": "warn",
+      "pattern": "\\bwhat (?:most people|everyone|nobody) (?:gets? wrong|misses|tells you)\\b",
+      "flags": "im",
+      "suggestion": "This flatters you as the lone expert. Cut the setup, make the claim stand alone.",
+      "min_hits": 1
+    },
+    {
+      "category": "faux_insight",
+      "severity": "warn",
+      "pattern": "\\bthe part (?:most people skip|everyone misses)\\b",
+      "flags": "im",
+      "suggestion": "Cut the setup; state the claim.",
+      "min_hits": 1
+    },
+    {
+      "category": "faux_insight",
+      "severity": "warn",
+      "pattern": "\\bhere'?s what nobody (?:tells you|talks about)\\b",
+      "flags": "im",
+      "suggestion": "Cut the setup; state the claim.",
+      "min_hits": 1
+    },
+    {
+      "category": "colon_reveal",
+      "severity": "info",
+      "pattern": "(?:^|(?<=[.!?] ))[A-Z][\\w'-]+(?:[ \\t]+[\\w',-]+){1,5}:[ \\t]+[a-z]",
+      "flags": "im",
+      "suggestion": "Possible fake-drama colon. Colons are for lists, labels and quotes, not reveals.",
+      "min_hits": 1
+    },
+    {
+      "category": "metadiscourse",
+      "severity": "warn",
+      "pattern": "\\bthe key point (?:here )?is\\b",
+      "flags": "im",
+      "suggestion": "If it is the key point, just make it. Delete the label.",
+      "min_hits": 1
+    },
+    {
+      "category": "metadiscourse",
+      "severity": "warn",
+      "pattern": "\\bas you can see\\b",
+      "flags": "im",
+      "suggestion": "Delete. They can see.",
+      "min_hits": 1
+    },
+    {
+      "category": "metadiscourse",
+      "severity": "warn",
+      "pattern": "\\bthis distinction matters\\b",
+      "flags": "im",
+      "suggestion": "Show why it matters or delete the aside.",
+      "min_hits": 1
+    },
+    {
+      "category": "metadiscourse",
+      "severity": "warn",
+      "pattern": "\\bin other words,",
+      "flags": "im",
+      "suggestion": "You said it once. Say it right the first time.",
+      "min_hits": 1
+    },
+    {
+      "category": "metadiscourse",
+      "severity": "warn",
+      "pattern": "\\b(?:put simply|that is to say|essentially),",
+      "flags": "im",
+      "suggestion": "Treadmill filler restating the previous sentence. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "recap_ending",
+      "severity": "warn",
+      "pattern": "(?:^|(?<=[.!?]\\s))(?:In conclusion|To summari[sz]e|To sum up|Overall|Ultimately),",
+      "flags": "im",
+      "suggestion": "The reader was just there. End on the last concrete point or the next action.",
+      "min_hits": 1
+    },
+    {
+      "category": "recap_ending",
+      "severity": "warn",
+      "pattern": "\\bwhether you'?re [^.]{5,60}, ",
+      "flags": "im",
+      "suggestion": "SEO recap opener. Cut it and state the point.",
+      "min_hits": 1
+    },
+    {
+      "category": "generic_ending",
+      "severity": "warn",
+      "pattern": "\\bthe future looks bright\\b",
+      "flags": "im",
+      "suggestion": "Cut. End on the last concrete fact.",
+      "min_hits": 1
+    },
+    {
+      "category": "generic_ending",
+      "severity": "warn",
+      "pattern": "\\bexciting times (?:lie ahead|ahead)\\b",
+      "flags": "im",
+      "suggestion": "Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "generic_ending",
+      "severity": "warn",
+      "pattern": "\\ba step in the right direction\\b",
+      "flags": "im",
+      "suggestion": "Name the step.",
+      "min_hits": 1
+    },
+    {
+      "category": "generic_ending",
+      "severity": "warn",
+      "pattern": "\\bthe possibilities are endless\\b",
+      "flags": "im",
+      "suggestion": "Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "generic_ending",
+      "severity": "warn",
+      "pattern": "\\bonly time will tell\\b",
+      "flags": "im",
+      "suggestion": "Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "cutoff_disclaimer",
+      "severity": "warn",
+      "pattern": "\\bas of my last (?:training )?(?:update|knowledge)\\b",
+      "flags": "im",
+      "suggestion": "Knowledge-cutoff disclaimer left in the text. Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "cutoff_disclaimer",
+      "severity": "warn",
+      "pattern": "\\bwhile (?:specific )?details are (?:limited|scarce|not)\\b",
+      "flags": "im",
+      "suggestion": "Say what the source does not show, or cut the sentence. Do not fill the gap.",
+      "min_hits": 1
+    },
+    {
+      "category": "cutoff_disclaimer",
+      "severity": "warn",
+      "pattern": "\\bbased on (?:the )?available information\\b",
+      "flags": "im",
+      "suggestion": "Cut. Either you have the source or you do not.",
+      "min_hits": 1
+    },
+    {
+      "category": "cutoff_disclaimer",
+      "severity": "warn",
+      "pattern": "\\b(?:maintains a low profile|keeps personal details private|prefers to stay out of the spotlight)\\b",
+      "flags": "im",
+      "suggestion": "This is a guess dressed as a fact. Cut it.",
+      "min_hits": 1
+    },
+    {
+      "category": "cutoff_disclaimer",
+      "severity": "warn",
+      "pattern": "\\b(?:likely|probably) (?:grew up|studied|began|started) \\b",
+      "flags": "im",
+      "suggestion": "Speculative gap-fill presented as fact. Cut or attribute.",
+      "min_hits": 1
+    },
+    {
+      "category": "reasoning_scaffold",
+      "severity": "warn",
+      "pattern": "(?:^|\\n)\\s*Breaking this down\\b",
+      "flags": "im",
+      "suggestion": "Scaffolding opener. Keep the conclusion, cut the narration of getting there.",
+      "min_hits": 1
+    },
+    {
+      "category": "reasoning_scaffold",
+      "severity": "warn",
+      "pattern": "(?:^|\\n)\\s*(?:First,? I'?ll|First,? let'?s consider)\\b",
+      "flags": "im",
+      "suggestion": "Scaffolding opener. State the point.",
+      "min_hits": 1
+    },
+    {
+      "category": "correlative_bloat",
+      "severity": "warn",
+      "pattern": "\\bnot only [^.;:!?]{1,50} but also\\b",
+      "flags": "im",
+      "suggestion": "Scaffolding inflating a simple sentence. Split it or simplify.",
+      "min_hits": 1
+    },
+    {
+      "category": "aphorism_formula",
+      "severity": "warn",
+      "pattern": "\\bis the (?:new|currency|language|architecture|bedrock) of\\b",
+      "flags": "im",
+      "suggestion": "Fake-profound formula. State the concrete claim it gestures at.",
+      "min_hits": 1
+    },
+    {
+      "category": "aphorism_formula",
+      "severity": "warn",
+      "pattern": "\\bnot a \\w+ but a \\w+\\b",
+      "flags": "im",
+      "suggestion": "Aphorism template. State the claim.",
+      "min_hits": 1
+    },
+    {
+      "category": "aphorism_formula",
+      "severity": "warn",
+      "pattern": "\\bwhere \\w+ meets \\w+\\b",
+      "flags": "im",
+      "suggestion": "Pull-quote formula. State the claim.",
+      "min_hits": 1
+    },
+    {
+      "category": "importance_flag",
+      "severity": "warn",
+      "pattern": "\\bis ?n'?t (?:a|just a) (?:footnote|detail|small thing)\\b",
+      "flags": "im",
+      "suggestion": "Telling the reader what to feel. Show the consequence.",
+      "min_hits": 1
+    },
+    {
+      "category": "importance_flag",
+      "severity": "warn",
+      "pattern": "\\b(?:marks|marking) a (?:pivotal|defining|watershed) moment\\b",
+      "flags": "im",
+      "suggestion": "State the fact. Let the reader decide if it is pivotal.",
+      "min_hits": 1
+    },
+    {
+      "category": "importance_flag",
+      "severity": "warn",
+      "pattern": "\\bstands as a testament to\\b",
+      "flags": "im",
+      "suggestion": "Puffery. State what the thing is or does.",
+      "min_hits": 1
+    },
+    {
+      "category": "importance_flag",
+      "severity": "warn",
+      "pattern": "\\bwill (?:define|reshape|transform) the next (?:decade|era|generation)\\b",
+      "flags": "im",
+      "suggestion": "Overclaim. Scope it to something defensible.",
+      "min_hits": 1
+    },
+    {
+      "category": "predicate_hyphen",
+      "severity": "warn",
+      "pattern": "\\b(?:is|are|was|were|be|been|seems?|remains?) (?:high|well|data|cross|client|real|long|end|world|state)-\\w+",
+      "flags": "im",
+      "suggestion": "Drop the hyphen after the verb: 'the report is high quality', not 'is high-quality'.",
+      "min_hits": 1
+    },
+    {
+      "category": "formulaic_challenge",
+      "severity": "warn",
+      "pattern": "\\bdespite (?:these|those|the) challenges\\b",
+      "flags": "im",
+      "suggestion": "Stock transition. State the specific problem with a date or a number.",
+      "min_hits": 1
+    },
+    {
+      "category": "formulaic_challenge",
+      "severity": "warn",
+      "pattern": "\\bfaces? (?:several|a number of|various) challenges\\b",
+      "flags": "im",
+      "suggestion": "Name them, with specifics, or cut the section.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\bdelv(?:e|es|ed|ing)\\b",
+      "flags": "im",
+      "suggestion": "Replace with 'look at' / 'go into'.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\btapestry\\b",
+      "flags": "im",
+      "suggestion": "Abstract-noun tell. Replace with the concrete thing.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\bmultifaceted\\b",
+      "flags": "im",
+      "suggestion": "Replace with 'has several parts' or cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\binterplay\\b",
+      "flags": "im",
+      "suggestion": "Replace with 'how X and Y affect each other'.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\ba testament to\\b",
+      "flags": "im",
+      "suggestion": "Puffery. State the fact.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\bunderscor(?:e|es|ed|ing)\\b",
+      "flags": "im",
+      "suggestion": "Replace with 'shows' or cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t1",
+      "severity": "warn",
+      "pattern": "\\bever-evolving\\b",
+      "flags": "im",
+      "suggestion": "Cut.",
+      "min_hits": 1
+    },
+    {
+      "category": "ai_vocab_t2",
+      "severity": "warn",
+      "pattern": "\\b(?:crucial|pivotal|vibrant|robust|foster|fostering|enhance|enhances|enhancing|showcase|showcases|notably|moreover|furthermore|garner|garners|bolster|bolsters|utili[sz]e|utili[sz]es|realm|intricate|meticulous|paramount|transformative|elevate|elevates|embark|myriad|cornerstone|catalyst|nuanced|spearhead|poised to|actionable|impactful|learnings|deep-rooted|deeply rooted)\\b",
+      "flags": "im",
+      "suggestion": "AI vocabulary cluster (2+ in one document). Replace with plain words.",
+      "min_hits": 2
+    },
+    {
+      "category": "wh_opener",
+      "severity": "info",
+      "pattern": "(?:^|[.!?]\\s+)(?:What|Why|When|Where|Which|Who|How)\\b",
+      "flags": "im",
+      "suggestion": "AI loves opening sentences with Wh- words; vary it where it isn't a real question.",
+      "min_hits": 1
+    },
+    {
+      "category": "adverb_crutch",
+      "severity": "info",
+      "pattern": "\\b(?:really|just|literally|genuinely|honestly|simply|actually|truly|basically)\\b",
+      "flags": "im",
+      "suggestion": "Adverb crutch; usually deletable.",
+      "min_hits": 1
+    },
+    {
+      "category": "abstract_metaphor",
+      "severity": "info",
+      "pattern": "\\b(?:substrate|nexus|locus|bedrock|flywheel|north star|gold-plating|vantage point|modality)\\b",
+      "flags": "im",
+      "suggestion": "Abstract metaphor noun. There is usually a plainer concrete word.",
+      "min_hits": 1
+    },
+    {
+      "category": "diff_anchored",
+      "severity": "info",
+      "pattern": "\\b(?:was added to replace|has been updated to|now uses (?:a|the)|replaces the (?:old|previous)|previously,)\\b",
+      "flags": "im",
+      "suggestion": "Docs should describe the thing as it is. Exempt in changelogs and migration guides.",
+      "min_hits": 1
+    },
+    {
+      "category": "hedge_stack",
+      "severity": "info",
+      "pattern": "\\b(?:could potentially|might possibly|may perhaps|it could be argued that|in some cases it may)\\b",
+      "flags": "im",
+      "suggestion": "Stacked qualifiers. One qualifier per claim, or commit.",
+      "min_hits": 1
+    },
+    {
+      "category": "parataxis",
+      "severity": "info",
+      "pattern": "(?:(?:^|[.!?]\\s)[A-Z][^.!?]{1,24}[.!?]\\s){3}",
+      "flags": "im",
+      "suggestion": "Three short declaratives in a row reads as machine cadence. Connect two of them.",
+      "min_hits": 1
+    }
+  ],
+  "invisible_chars": {
+    "U+200B": "zero-width space (U+200B)",
+    "U+200C": "zero-width non-joiner (U+200C)",
+    "U+200D": "zero-width joiner (U+200D)",
+    "U+2060": "word joiner (U+2060)",
+    "U+FEFF": "byte-order mark (U+FEFF)",
+    "U+00AD": "soft hyphen (U+00AD)",
+    "U+202F": "narrow no-break space (U+202F)",
+    "U+00A0": "non-breaking space (U+00A0)"
+  },
+  "homoglyph_scripts": {
+    "cyrillic": "[Ѐ-ӿ]",
+    "greek": "[Ͱ-Ͽ]",
+    "latin": "[A-Za-z]"
+  },
+  "markdown_bleed": {
+    "bold": "\\*\\*[^*\\n]{1,60}\\*\\*",
+    "header": "^#{1,6}\\s+\\S"
+  },
+  "nosmell": {
+    "contrast": {
+      "pattern": "\\b(rather than|not (?:just|only|merely|simply) [^.;]{1,50}? but|it is not [^.;]{1,40}\\. it is|isn't [^.;]{1,40}; it's|is not about [^.;]{1,40}\\. it is about|less [^.;]{1,30} and more)\\b",
+      "flags": "i"
+    },
+    "disclaimer": {
+      "pattern": "\\b(proposed|propose|not asserted|is asserted|not a (?:commitment|guarantee|forecast|customer result)|remains? (?:to be|outstanding|pending|open)|subject to|not (?:yet )?verified|unverified|not (?:yet )?confirmed|confirm(?:ed|s)? (?:before|against)|validate[sd]? (?:before|against)|indicative|illustrative|schematic only|working recommendation|does not independently|to be (?:decided|confirmed|agreed)|for discussion|draft only|directional)\\b",
+      "flags": "i"
+    },
+    "position": {
+      "pattern": "\\b(I think|I'd|I would|I believe|my view|in my view|we should|you should|tell the|the answer is|I need|let's|lets|I guess|I feel|I like|I don't like|no way|I'm happy|I love|recommend|my recommendation|I reckon|I'm not sure|I don't know|I do not know|I could be wrong|not sure|I'd rather|I want|I don't want|I disagree|I agree|my call|my bet|I'd bet|honestly|the call is|yes, later|no\\.)\\b",
+      "flags": "i"
+    },
+    "signpost": {
+      "pattern": "\\b(the short version|two things|three things|one caveat|to be clear|to be fair|here is what|here's what|what follows|in short|in summary|put simply|simply put|the bottom line|at its core|in practice|that said|it is worth noting|it's worth noting|importantly|crucially|notably)\\b",
+      "flags": "i"
+    },
+    "thresholds": {
+      "hedges": {
+        "warn": 3.0,
+        "fail": 8.0,
+        "direction": "hi"
+      },
+      "positions": {
+        "warn": 3.0,
+        "fail": null,
+        "direction": "lo"
+      },
+      "contrast": {
+        "warn": 3.0,
+        "fail": 6.0,
+        "direction": "hi"
+      },
+      "contrast_repeat": {
+        "warn": 3.0,
+        "fail": 5.0,
+        "direction": "hi"
+      },
+      "triads": {
+        "warn": 8.0,
+        "fail": null,
+        "direction": "hi"
+      },
+      "signposts": {
+        "warn": 4.0,
+        "fail": null,
+        "direction": "hi"
+      },
+      "cite_ratio": {
+        "warn": 0.2,
+        "fail": null,
+        "direction": "hi"
+      },
+      "closer_ratio": {
+        "warn": 0.25,
+        "fail": null,
+        "direction": "hi"
+      }
+    },
+    "min_words_for_low_rules": 250
+  }
+}

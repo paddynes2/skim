@@ -10,23 +10,49 @@
   import type { Account, Draft, DraftAttachment } from "../lib/types";
   import AddressInput from "./AddressInput.svelte";
   import WindowControls from "./WindowControls.svelte";
+  // Fork (6.1-6.4): rich text, inline reply, send safety.
+  import { untrack } from "svelte";
+  import RichEditor from "../fork/RichEditor.svelte";
+  import SendLater from "../fork/compose/SendLater.svelte";
+  import { forkComposeApi } from "../fork/compose/api";
+  import { htmlToText, textToHtml } from "../fork/compose/html";
+  import type { WhenPick } from "../fork/compose/when";
+  import { prefs } from "../fork/stores/prefs.svelte";
+  // Fork (6.5): AI-tell underlines, health line, send check.
+  import { attachSmell, type SmellMount } from "../fork/smell/highlight";
+  import { rules as smellRules } from "../fork/smell/rules";
+  import { scan, ownWords, mustFix, type ScanResult, type Span } from "../fork/smell/scan";
+  import { loadSmellSettings, type SmellSettings } from "../fork/smell/api";
+  import SmellPopover from "../fork/smell/SmellPopover.svelte";
+  import SmellHealth from "../fork/smell/SmellHealth.svelte";
+  import SmellSendPrompt from "../fork/smell/SmellSendPrompt.svelte";
+  // Fork (7.6 / 8): Meet link and availability, inserted at the caret.
+  import { openSlotsPopover, isSlotsTrigger } from "../fork/slots/slots";
+  import { addMeetLink } from "../fork/calendar/meet";
 
   let {
     draftId,
     chrome = false,
+    variant = "default",
     onSent,
     onDiscarded,
     onClose,
     onLocalSave,
+    onPopOut,
   }: {
     draftId: number;
     /** Render the native-window titlebar (min/max/close). Off when inline. */
     chrome?: boolean;
+    /** Fork (6.2): `reply` = inline under a message in the reading pane (no
+     *  From picker, a pop-out button, Esc closes). */
+    variant?: "default" | "reply";
     onSent?: () => void;
     onDiscarded?: () => void;
     onClose?: () => void;
     /** Fired after a debounced local autosave so a host can patch its list. */
     onLocalSave?: (draft: Draft) => void;
+    /** Fork (6.2): the inline reply moved to its own window; unmount this copy. */
+    onPopOut?: () => void;
   } = $props();
 
   let draft = $state<Draft | null>(null);
@@ -57,8 +83,93 @@
     accounts.length > 1 &&
       draft?.mode === "new" &&
       draft?.originMessageId === null &&
-      !committed,
+      !committed &&
+      variant !== "reply",
   );
+
+  // ---- Fork (6.3): rich text ----
+  // Decided once per draft when it loads (a mid-edit toggle would have to
+  // convert the text under the cursor). Off: the plain textarea, as upstream.
+  let richMode = $state(false);
+  // The user's own words as HTML (what fork_draft_html holds) and the plain
+  // text the editor last produced for them; `tail` is everything below the
+  // words in `draft.body` (signature block, quoted original), which the
+  // editor never touches. body_text = wordsText + tail, always.
+  let wordsHtml = $state("");
+  let wordsText = "";
+  let tail = $state("");
+  let tailEditing = $state(false);
+  let quoteOpen = $state(false);
+  let editorRef = $state<RichEditor | null>(null);
+  let bodyEl = $state<HTMLTextAreaElement | null>(null);
+  let rootEl = $state<HTMLDivElement | null>(null);
+
+  /** The signature block and the quote, split for the read-only rendering. */
+  const tailParts = $derived.by(() => {
+    const q = tail.indexOf("\n\nOn ");
+    const quoteAt = q >= 0 && tail.slice(q).includes(" wrote:\n") ? q : -1;
+    const sigText = quoteAt >= 0 ? tail.slice(0, quoteAt) : tail;
+    const quote = quoteAt >= 0 ? tail.slice(quoteAt).replace(/^\n+/, "") : "";
+    const sig = sigText.startsWith(SIG_MARK) ? sigText.slice(SIG_MARK.length) : sigText.trim();
+    const nl = quote.indexOf("\n");
+    return {
+      sig,
+      attribution: nl >= 0 ? quote.slice(0, nl) : quote,
+      quoted: nl >= 0 ? quote.slice(nl + 1) : "",
+    };
+  });
+
+  /** The editor changed the words: keep body_text in step. */
+  function onWordsChange(html: string, text: string) {
+    wordsHtml = html;
+    wordsText = text;
+    if (draft) draft.body = text + tail;
+    scheduleSave();
+  }
+
+  /** The user edits the signature / quote as plain text. */
+  function onTailInput() {
+    if (draft) draft.body = wordsText + tail;
+    scheduleSave();
+  }
+
+  // `draft.body` changed under the editor (AI draft, revert, From switch):
+  // re-split and show the new words. An edit from the editor itself already
+  // matches `wordsText`, so it never round-trips through setHTML.
+  $effect(() => {
+    const body = draft?.body;
+    if (!richMode || body == null) return;
+    untrack(() => {
+      const [w, tl] = splitTail(body);
+      if (w !== wordsText) {
+        wordsText = w;
+        wordsHtml = textToHtml(w);
+        editorRef?.setHTML(wordsHtml);
+      }
+      if (tl !== tail) tail = tl;
+    });
+  });
+
+  /** Persist the words as HTML (or drop the row in plain mode). */
+  async function flushHtml() {
+    if (!draft) return;
+    await forkComposeApi.draftHtmlSet(draft.id, richMode ? wordsHtml : null).catch(() => {});
+  }
+
+  // ---- Fork (6.1): discard with a second click ----
+  let discardArmed = $state(false);
+  let discardTimer: ReturnType<typeof setTimeout> | null = null;
+  function discardClick() {
+    if (discardArmed) {
+      discardArmed = false;
+      if (discardTimer) clearTimeout(discardTimer);
+      void discard();
+      return;
+    }
+    discardArmed = true;
+    if (discardTimer) clearTimeout(discardTimer);
+    discardTimer = setTimeout(() => (discardArmed = false), 3000);
+  }
 
   async function changeFrom(accountId: string) {
     if (!draft || accountId === draft.accountId) return;
@@ -172,6 +283,71 @@
 
   // ---- AI drafting ----
   let aiAvailable = $state(false);
+
+  // ---- Fork (6.5): AI-tell layer ----
+  let smell: SmellMount | null = null;
+  let smellSettings = $state<SmellSettings | null>(null);
+  let smellResult = $state<ScanResult | null>(null);
+  let smellPop = $state<{ span: Span; rect: DOMRect } | null>(null);
+  const smellIgnoredOnce = new Set<string>();
+  let smellSendPrompt = $state(false);
+  let smellPendingWhen: WhenPick | null = null;
+
+  // ---- Fork (7.6 / 8): insert at the caret in either editor ----
+  function insertAtCaret(text: string) {
+    if (!draft) return;
+    if (richMode && editorRef) {
+      editorRef.insertText(text);
+      return;
+    }
+    const el = bodyEl;
+    const at = el ? el.selectionStart : draft.body.length;
+    const end = el ? el.selectionEnd : at;
+    draft.body = draft.body.slice(0, at) + text + draft.body.slice(end);
+    scheduleSave();
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at + text.length, at + text.length);
+    });
+  }
+  function shareAvailability() {
+    openSlotsPopover((text) => insertAtCaret(text));
+  }
+  /** `/slots` typed at a line start in the plain editor opens the popover. */
+  function onBodyInputSlots() {
+    const el = bodyEl;
+    if (!el || !draft) return;
+    const before = draft.body.slice(0, el.selectionStart);
+    if (!isSlotsTrigger(before)) return;
+    const at = el.selectionStart - 6;
+    draft.body = draft.body.slice(0, at) + draft.body.slice(el.selectionStart);
+    requestAnimationFrame(() => el.setSelectionRange(at, at));
+    shareAvailability();
+  }
+  $effect(() => {
+    void loadSmellSettings().then((s) => (smellSettings = s)).catch(() => {});
+  });
+  $effect(() => {
+    const el: HTMLElement | null = richMode ? (editorRef?.hostEl() ?? null) : bodyEl;
+    const settings = smellSettings;
+    if (!el || !settings?.enabled) return;
+    const mount = attachSmell(el, {
+      scan: (text) => {
+        const r = scan(text, smellRules(), { ignoredRules: settings.ignored });
+        r.spans = r.spans.filter((s) => !smellIgnoredOnce.has(`${s.start}:${s.rule}`));
+        return r;
+      },
+      getText: richMode ? undefined : () => ownWords(untrack(() => draft?.body) ?? "").text,
+      onOpen: (span, rect) => (smellPop = { span, rect }),
+      onResult: (r) => (smellResult = r),
+    });
+    smell = mount;
+    mount.rescan();
+    return () => {
+      mount.destroy();
+      if (smell === mount) smell = null;
+    };
+  });
   let instruction = $state("");
   let instrEl = $state<HTMLTextAreaElement | null>(null);
 
@@ -385,10 +561,29 @@
     void (async () => {
       try {
         const d = await api.getDraft(draftId);
+        // Fork (6.3): the words as HTML, when the rich editor wrote them and
+        // they still say what body_text says (a plain-mode edit elsewhere
+        // wins; the row is rebuilt from the text).
+        richMode = prefs.richText;
+        if (richMode) {
+          const [w, tl] = splitTail(d.body);
+          wordsText = w;
+          tail = tl;
+          const stored = await forkComposeApi.draftHtmlGet(draftId).catch(() => null);
+          wordsHtml = typeof stored === "string" && htmlToText(stored) === w ? stored : textToHtml(w);
+        }
         draft = d;
         showCc = d.cc.length > 0 || d.bcc.length > 0;
         attachments = await api.listDraftAttachments(draftId);
         accounts = await api.listAccounts();
+        // Fork (6.2): an inline reply comes into view and takes the cursor.
+        if (variant === "reply") {
+          requestAnimationFrame(() => {
+            rootEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            if (editorRef) editorRef.focus();
+            else bodyEl?.focus();
+          });
+        }
       } catch (e) {
         error = errorMessage(e);
       }
@@ -402,6 +597,7 @@
       if (!draft) return;
       const snapshot = $state.snapshot(draft) as Draft;
       await api.updateDraft(snapshot);
+      await flushHtml();
       // Let an inline host reflect the edit in its list row (subject/preview).
       onLocalSave?.(snapshot);
     }, 800);
@@ -423,14 +619,28 @@
     }
   }
 
-  async function send() {
-    if (!draft || sending) return;
+  /** Send now (held for the undo window, 6.4) or at `when` (send later). */
+  async function send(when: WhenPick | null = null, smellOverride = false) {
+    if (!draft || sending || !draft.to.trim()) return;
+    // Fork (6.5): must-fix items (dashes, placeholders, invisible characters)
+    // stop the send once; "Send anyway" passes the override.
+    if (!smellOverride && smellSettings?.blockHard && smell && mustFix(smell.rescan()).length) {
+      smellPendingWhen = when;
+      smellSendPrompt = true;
+      return;
+    }
+    smellSendPrompt = false;
     sending = true;
     error = "";
     try {
       if (saveTimer) clearTimeout(saveTimer);
       await api.updateDraft($state.snapshot(draft) as Draft);
-      await api.sendDraft(draft.id);
+      await flushHtml();
+      // Fork (6.4): the hold. A scheduled send names its moment; a plain send
+      // is held for the undo window (0 = straight out, as upstream).
+      const undoSecs = prefs.undoSendSecs;
+      const notBefore = when ? when.at : undoSecs > 0 ? Math.floor(Date.now() / 1000) + undoSecs : null;
+      await api.sendDraft(draft.id, notBefore, when?.label ?? null);
       settled = true;
       // Remember the mailbox for the next fresh compose in the unified view.
       void api.setSetting("last_from_account", draft.accountId).catch(() => {});
@@ -478,12 +688,50 @@
     }
   }
 
+  /** Fork (6.1): Ctrl/Cmd+Enter in the subject or the body sends. */
+  function sendKey(e: KeyboardEvent): boolean {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      void send();
+      return true;
+    }
+    return false;
+  }
+
+  /** Fork (6.2): Esc on the inline reply. Untouched, the empty draft goes;
+   *  edited, it stays as a draft. Stops here so the pane's own Esc (deselect)
+   *  does not fire too. */
+  function onFormKeydown(e: KeyboardEvent) {
+    if (variant !== "reply" || e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (dirty) void close();
+    else void discard();
+  }
+
+  /** Fork (6.2): continue in a window; this inline copy unmounts. */
+  async function popOut() {
+    if (!draft) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    await api.updateDraft($state.snapshot(draft) as Draft);
+    await flushHtml();
+    settled = true;
+    await api.openComposeWindow(draft.id);
+    onPopOut?.();
+  }
+
   async function close() {
     settled = true;
     if (chrome) {
-      // The window's ✕ saves nothing. Drop a never-saved local draft so it
-      // doesn't linger as an orphaned row; a saved one stays in Drafts.
-      if (!committed && draft) await api.deleteDraft(draft.id).catch(() => {});
+      // Fork (6.1): the window's ✕ keeps what was typed. Edited: commit to
+      // Drafts (a failed save keeps the row so nothing is lost). Untouched:
+      // drop the never-saved local draft so it doesn't linger.
+      if (saveState === "dirty") {
+        await save();
+      } else if (!committed && draft) {
+        await api.deleteDraft(draft.id).catch(() => {});
+      }
     } else {
       // Inline: closing keeps the draft — flush edits back to the server.
       await flushServer();
@@ -499,6 +747,12 @@
     settled = true;
     if (chrome) {
       if (!committed && draft) void api.deleteDraft(draft.id).catch(() => {});
+    } else if (variant === "reply") {
+      // Fork (6.2): the thread changed under the inline reply. Untouched, the
+      // empty draft goes; edited, it is kept like a closed inline editor.
+      if (dirty) void flushServer();
+      else if (draft) void api.deleteDraft(draft.id).catch(() => {});
+      onClose?.();
     } else {
       void flushServer();
     }
@@ -509,10 +763,15 @@
 
 <svelte:window onkeydown={onWindowKeydown} />
 
+<!-- Fork (6.2): the keydown only relays Esc from the fields inside the region. -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="compose-form"
   class:inline={!chrome}
+  class:reply={variant === "reply"}
   role="region"
+  bind:this={rootEl}
+  onkeydown={onFormKeydown}
   ondragover={(e) => {
     e.preventDefault();
     dragActive = true;
@@ -647,18 +906,94 @@
             subjectAuto = false;
             scheduleSave();
           }}
+          onkeydown={sendKey}
           class="subject"
         />
       </label>
     </div>
 
-    <textarea
-      class="body"
-      bind:value={draft.body}
-      oninput={scheduleSave}
-      placeholder={t("compose.body_placeholder")}
-      spellcheck="true"
-    ></textarea>
+    {#if richMode}
+      <!-- Fork (6.3): the words in the rich editor; the signature and the
+           quoted original below it, read-only until "Edit quoted text". -->
+      <RichEditor
+        bind:this={editorRef}
+        html={wordsHtml}
+        onchange={onWordsChange}
+        onkeydown={sendKey}
+        placeholder={t("compose.body_placeholder")}
+      />
+      {#if tail}
+        <div class="tail">
+          {#if tailEditing}
+            <textarea class="tail-edit" bind:value={tail} oninput={onTailInput} spellcheck="true" onkeydown={sendKey}></textarea>
+          {:else}
+            {#if tailParts.sig}
+              <pre class="sig">-- {"\n"}{tailParts.sig}</pre>
+            {/if}
+            {#if tailParts.attribution}
+              <div class="quote-head">
+                <button
+                  type="button"
+                  class="quote-pill"
+                  onclick={() => (quoteOpen = !quoteOpen)}
+                  aria-expanded={quoteOpen}
+                  title={t(quoteOpen ? "fork.reading.hide_quoted" : "fork.reading.show_quoted")}
+                  aria-label={t(quoteOpen ? "fork.reading.hide_quoted" : "fork.reading.show_quoted")}
+                >•••</button>
+                {#if quoteOpen}
+                  <button type="button" class="quote-edit" onclick={() => (tailEditing = true)}>{t("fork.compose.edit_quoted")}</button>
+                {/if}
+              </div>
+              {#if quoteOpen}
+                <pre class="quote">{tailParts.attribution}{"\n"}{tailParts.quoted}</pre>
+              {/if}
+            {:else if tailParts.sig}
+              <button type="button" class="quote-edit" onclick={() => (tailEditing = true)}>{t("fork.compose.edit_signature")}</button>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+    {:else}
+      <textarea
+        class="body"
+        bind:this={bodyEl}
+        bind:value={draft.body}
+        oninput={() => {
+          onBodyInputSlots();
+          scheduleSave();
+        }}
+        onkeydown={sendKey}
+        placeholder={t("compose.body_placeholder")}
+        spellcheck="true"
+      ></textarea>
+    {/if}
+
+    {#if smellResult}<SmellHealth result={smellResult} onjump={(s) => smell?.jumpTo(s)} />{/if}
+    {#if smellSendPrompt && smellResult}
+      <SmellSendPrompt
+        result={smellResult}
+        onfix={() => {
+          smellSendPrompt = false;
+          const first = smellResult ? mustFix(smellResult)[0] : undefined;
+          if (first) smell?.jumpTo(first);
+        }}
+        onsend={() => send(smellPendingWhen, true)}
+      />
+    {/if}
+    {#if smellPop && smell && smellSettings}
+      <SmellPopover
+        span={smellPop.span}
+        rect={smellPop.rect}
+        mount={smell}
+        settings={smellSettings}
+        {aiAvailable}
+        onclose={() => (smellPop = null)}
+        onignore={(s) => {
+          smellIgnoredOnce.add(`${s.start}:${s.rule}`);
+          smell?.rescan();
+        }}
+      />
+    {/if}
 
     {#if attachments.length > 0}
       <div class="attach-row">
@@ -680,18 +1015,35 @@
     {/if}
 
     <footer class="bar">
-      <button class="send" onclick={send} disabled={sending || !draft.to.trim()}>
-        {sending ? t("compose.sending") : t("compose.send")}
-      </button>
+      <!-- Fork (6.4): a split button — Send, and a caret for later. -->
+      <div class="send-split">
+        <button class="send" onclick={() => send()} disabled={sending || !draft.to.trim()} title="Ctrl ↵">
+          {sending ? t("compose.sending") : t("compose.send")}
+        </button>
+        <SendLater disabled={sending || !draft.to.trim()} onpick={(pick) => send(pick)} />
+      </div>
       <button class="attach" onclick={() => fileInput?.click()} title={t("compose.attach")} aria-label={t("compose.attach")}>
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12.5 7.5l-5 5a3 3 0 0 1-4.243-4.243l5.657-5.657a2 2 0 0 1 2.829 2.829l-5.657 5.657a1 1 0 0 1-1.415-1.415l4.95-4.95" /></svg>
       </button>
       <input bind:this={fileInput} type="file" multiple class="file-input" onchange={pickFiles} />
+      <!-- Fork (7.6 / 8) -->
+      <button type="button" class="attach fork-tool" onclick={shareAvailability} title={t("fork.compose.share_availability")} aria-label={t("fork.compose.share_availability")}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3M6 9.5l1.5 1.5 3-3" /></svg>
+      </button>
+      <button type="button" class="attach fork-tool" onclick={() => addMeetLink((link) => insertAtCaret(link))} title={t("fork.compose.add_meet")} aria-label={t("fork.compose.add_meet")}>
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><rect x="1.5" y="4.5" width="9" height="7" rx="1.5" /><path d="M10.5 7l4-2.5v7l-4-2.5" /></svg>
+      </button>
       <div class="grow"></div>
+      {#if variant === "reply"}
+        <!-- Fork (6.2): continue in a window. -->
+        <button class="popout" onclick={popOut} title={t("fork.compose.pop_out")} aria-label={t("fork.compose.pop_out")}>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M9 2.5h4.5V7M13.5 2.5L8 8" /><path d="M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>
+        </button>
+      {/if}
       {#if chrome}
-        <!-- The window has no discard: closing already drops an unsaved draft.
-             Instead, editing reveals an explicit Save; a saved draft shows a
-             confirmation until the next edit. -->
+        <!-- Fork (6.1): closing the window keeps an edited draft, so editing
+             reveals an explicit Save; a saved draft shows a confirmation until
+             the next edit. -->
         {#if saveState === "dirty"}
           <button class="save" onclick={save} title={t("compose.save")}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 8.5l3.5 3.5L13 4.5" /></svg>
@@ -700,11 +1052,18 @@
         {:else if saveState === "saved"}
           <span class="saved-label">{t("compose.saved")}</span>
         {/if}
-      {:else}
-        <button class="discard" onclick={discard} title={t("compose.discard")}>
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.5 9.5h6l.5-9.5M6.7 6.5v5M9.3 6.5v5" /></svg>
-        </button>
       {/if}
+      <!-- Fork (6.1): Discard everywhere, on a second click. -->
+      <button
+        class="discard"
+        class:armed={discardArmed}
+        onclick={discardClick}
+        title={discardArmed ? t("fork.compose.discard_confirm") : t("compose.discard")}
+        aria-label={discardArmed ? t("fork.compose.discard_confirm") : t("compose.discard")}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.5 9.5h6l.5-9.5M6.7 6.5v5M9.3 6.5v5" /></svg>
+        {#if discardArmed}<span class="confirm">{t("fork.compose.discard_confirm")}</span>{/if}
+      </button>
     </footer>
   {/if}
 
@@ -986,6 +1345,115 @@
   .discard:hover {
     background: var(--hover);
     color: var(--danger);
+  }
+  /* Fork (6.1): the second-click state names what the click will do. */
+  .discard.armed {
+    width: auto;
+    padding: 0 10px;
+    gap: 6px;
+    display: flex;
+    align-items: center;
+    color: var(--danger);
+    background: var(--hover);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  /* Fork (6.2): the inline reply is a card inside the reading pane, not a
+     full-height pane; the pop-out sits with the footer icons. */
+  .compose-form.reply {
+    height: auto;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 320px;
+  }
+  .compose-form.reply .fields,
+  .compose-form.reply .bar,
+  .compose-form.reply .ai-bar,
+  .compose-form.reply .attach-row {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .compose-form.reply .body {
+    min-height: 140px;
+  }
+  .popout {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-s);
+    color: var(--text-dim);
+  }
+  .popout:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+  /* Fork (6.4): the split Send button. */
+  .send-split {
+    display: flex;
+  }
+  .send-split .send {
+    border-radius: var(--radius-m) 0 0 var(--radius-m);
+  }
+  /* Fork (6.3): signature and quote under the editor, read-only. */
+  .tail {
+    padding: 4px 20px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .tail pre {
+    margin: 0;
+    font-family: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .tail .sig {
+    color: var(--text-dim);
+    padding: 6px 0;
+  }
+  .quote-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+  }
+  .quote-pill {
+    padding: 1px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--hairline-strong);
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+  }
+  .quote-pill:hover,
+  .quote-pill[aria-expanded="true"] {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .quote-edit {
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .quote-edit:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+  .tail .quote {
+    color: var(--text-dim);
+    border-left: 2px solid var(--hairline-strong);
+    padding-left: 10px;
+    margin-top: 4px;
+  }
+  .tail-edit {
+    width: 100%;
+    min-height: 140px;
+    resize: vertical;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    user-select: text;
   }
   /* Explicit Save in the compose window: icon + shortcut hint, muted until hover. */
   .save {

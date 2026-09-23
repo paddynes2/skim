@@ -7,6 +7,12 @@
 import * as db from "./data";
 import { forkRenderedBody } from "./fork-bodies";
 import { forkSearchThreads } from "./fork-search";
+import { forkCrmLookup, forkCrmStatus } from "./fork-crm";
+import { forkPrep, forkPrepUpcoming, runPrepBrief } from "./fork-prep";
+import { forkSmellRewrite, SMELL_FIXTURE_DRAFT } from "./fork-smell";
+import { forkComposeInvoke } from "./fork-compose";
+import { forkCalendarInvoke } from "./fork-calendar";
+import { forkCourtCounts, forkCourtList } from "./fork-court";
 
 // The app checks `"__TAURI_INTERNALS__" in window` to decide whether to boot
 // (vs. show onboarding). Presence is enough — our aliased invoke does the work.
@@ -106,6 +112,7 @@ const AI_COMMANDS = new Set([
   "ai_chat",
   "ai_recap",
   "ai_analyze_style",
+  "fork_prep_brief",
 ]);
 
 function handleAi(cmd: string, args: any): void {
@@ -120,6 +127,9 @@ function handleAi(cmd: string, args: any): void {
     // asked (quick prompt, opener, or follow-up).
     case "ai_ask":
       streamText(channel, db.askAnswer(args?.turns), requestId);
+      return;
+    case "fork_prep_brief":
+      runPrepBrief(channel, requestId, (id) => cancelled.has(id), TYPING_MS(), THINK_MS());
       return;
     case "ai_recap":
       runRecap(channel, requestId);
@@ -156,6 +166,12 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     handleAi(cmd, args);
     return Promise.resolve(undefined as T);
   }
+  // Fork (6): compose + scheduler commands.
+  const fc = forkComposeInvoke(cmd, args);
+  if (fc) return Promise.resolve(fc.value as T);
+  // Fork (7/8): Google, calendar and free-slot commands.
+  const cal = forkCalendarInvoke(cmd, args);
+  if (cal) return "err" in cal ? Promise.reject(cal.err) : Promise.resolve(cal.ok as T);
 
   const ok = <R>(v: R) => Promise.resolve(v as unknown as T);
 
@@ -252,6 +268,57 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(undefined);
     case "fork_search_threads":
       return ok(forkSearchThreads(args.query ?? "", args.offset ?? 0));
+    // ---- Phase 9 CRM (demo/mock/fork-crm.ts) ----
+    case "fork_crm_status":
+      return ok(forkCrmStatus());
+    case "fork_crm_lookup":
+      return forkCrmLookup(String(args.email ?? "")) as Promise<T>;
+    case "fork_crm_connect":
+    case "fork_crm_pick_workspace":
+    case "fork_crm_disconnect":
+    case "fork_crm_set_config":
+      return ok(forkCrmStatus());
+    // ---- Phase 10 court ----
+    case "fork_court_list":
+      return ok(forkCourtList(args.courtState, args.offset ?? 0));
+    case "fork_court_counts":
+      return ok(forkCourtCounts());
+    case "fork_court_recompute":
+      return ok(undefined);
+    // ---- Phase 11 prep ----
+    case "fork_prep":
+      return ok(forkPrep(args.eventId));
+    case "fork_prep_upcoming":
+      return ok(forkPrepUpcoming());
+    // ---- Phase 12 MCP ----
+    case "fork_mcp_status": {
+      const on = (globalThis as any).localStorage?.getItem("skimdemo.fork_mcp") !== "off";
+      return ok({
+        enabled: on,
+        listening: on,
+        port: 8342,
+        endpoint: "http://127.0.0.1:8342/mcp",
+        token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        addCommand:
+          'claude mcp add --transport http skim http://127.0.0.1:8342/mcp --header "Authorization: Bearer 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" --scope user',
+      });
+    }
+    case "fork_mcp_set_enabled": {
+      const on = !!args.on;
+      (globalThis as any).localStorage?.setItem("skimdemo.fork_mcp", on ? "on" : "off");
+      return ok({
+        enabled: on,
+        listening: on,
+        port: 8342,
+        endpoint: "http://127.0.0.1:8342/mcp",
+        token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        addCommand:
+          'claude mcp add --transport http skim http://127.0.0.1:8342/mcp --header "Authorization: Bearer 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" --scope user',
+      });
+    }
+    // ---- Phase 6.5 smell ----
+    case "fork_smell_rewrite":
+      return forkSmellRewrite(args, args.channel) as Promise<T>;
     case "take_pending_open":
       return ok(null);
     case "search_messages":
@@ -266,8 +333,17 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(db.setDraftAccount(args.draftId, args.accountId, args.body));
     case "get_draft":
       return ok(db.getDraft(args.draftId));
-    case "get_reply_template":
-      return ok(db.replyTemplate(args.messageId, args.mode));
+    case "get_reply_template": {
+      const tpl = db.replyTemplate(args.messageId, args.mode);
+      // Fork (6.5): the AI-tell fixture draft for the screenshot harness.
+      if ((globalThis as any).localStorage?.getItem("skimdemo.fork_smell_fixture") === "on")
+      {
+        const withTells = { ...tpl, body: SMELL_FIXTURE_DRAFT };
+        db.updateDraft(withTells);
+        return ok(withTells);
+      }
+      return ok(tpl);
+    }
     case "update_draft":
       db.updateDraft(args.draft);
       return ok(undefined);

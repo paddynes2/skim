@@ -20,6 +20,20 @@
   import { applyZoom, zoomKey } from "./fork/zoom";
   import { forkKey } from "./fork/keys";
   import { windowFocused } from "./fork/freshness";
+  import CrmDrawer from "./fork/crm/CrmDrawer.svelte";
+  import { crmFocus, registerCrmNav } from "./fork/crm/store.svelte";
+  import PrepPanel from "./fork/prep/PrepPanel.svelte";
+  import { prepOpen } from "./fork/prep/open.svelte";
+  import { startPrepReminder } from "./fork/prep/reminder";
+  import { replyInlineOrWindow } from "./fork/compose/inline.svelte";
+  import SendHeld from "./fork/compose/SendHeld.svelte";
+  import ScheduledList from "./fork/scheduled/ScheduledList.svelte";
+  import { SCHEDULED_FOLDER_ID } from "./fork/compose/api";
+  import { courtStore } from "./fork/court/store.svelte";
+  import CalendarView from "./fork/calendar/CalendarView.svelte";
+  import TitlebarExtras from "./fork/calendar/TitlebarExtras.svelte";
+  import SlotsPopover from "./fork/slots/SlotsPopover.svelte";
+  import { calendar } from "./fork/calendar/store.svelte";
   import { undo } from "./fork/stores/undo.svelte";
   import Toast from "./fork/Toast.svelte";
   import GoHint from "./fork/GoHint.svelte";
@@ -38,6 +52,25 @@
   const BOOT_PATIENCE_MS = 2000;
 
   let ready = $state(false);
+  // Fork (9): `i` toggles the CRM drawer once the hook is registered.
+  registerCrmNav();
+  // Fork (11): the 10-minute-before "Prep" toast, polled while the app is open.
+  let stopPrepReminder: (() => void) | null = null;
+  // Mount-once: `untrack` so the effect never subscribes to what the stores
+  // read while starting (they write state, which would re-run the effect).
+  $effect(() => {
+    const [stopCourt, stopCalendar] = untrack(() => {
+      stopPrepReminder = startPrepReminder();
+      // Fork (10): court hooks, counts and the daily nudge.
+      // Fork (7): calendar hooks (g c, m), calendar:* listeners, next-event chip.
+      return [courtStore.start(), calendar.start()] as const;
+    });
+    return () => {
+      stopPrepReminder?.();
+      stopCourt();
+      stopCalendar?.();
+    };
+  });
 
   const inTauri = "__TAURI_INTERNALS__" in window;
   // Onboarding is only the right screen once we know there is nothing to show.
@@ -203,6 +236,8 @@
         });
         await Promise.race([booting, new Promise((done) => setTimeout(done, BOOT_PATIENCE_MS))]);
         void ai.refresh();
+        // Fork (7): the calendar status is per account, so read it once the accounts are in.
+        void booting.then(() => calendar.invalidate());
       }
       ready = true;
     })();
@@ -211,6 +246,7 @@
   function onboarded(account: Account) {
     void mail.accountAdded(account);
     void ai.refresh();
+    void calendar.invalidate(); // Fork (7)
   }
 
   function isTyping(): boolean {
@@ -278,12 +314,9 @@
   }
 
   async function replyToSelected(mode: "reply" | "reply_all" | "forward" = "reply") {
-    const thread = mail.selectedThread;
-    if (!thread) return;
-    const detail = await api.getThread(thread.id);
-    const latest = detail.messages[detail.messages.length - 1];
-    const draft = await api.getReplyTemplate(latest.id, mode);
-    await api.openComposeWindow(draft.id);
+    // Fork (6.2): inline under the open message when the setting is on and
+    // a thread is open; otherwise the window, exactly as before.
+    await replyInlineOrWindow(mode);
   }
 
   async function composeNew() {
@@ -471,10 +504,18 @@
 
 <div class="app">
   <Titlebar />
+  <TitlebarExtras />
   {#if ready}
     {#if !needsOnboarding}
       <main class="panes">
         <Sidebar />
+        {#if ui.view === "calendar"}
+          <!-- Fork (7.5): the calendar replaces list + pane. -->
+          <CalendarView />
+        {:else if mail.selectedFolderId === SCHEDULED_FOLDER_ID}
+          <!-- Fork (6.4): the scheduled-send list stands in for list + pane. -->
+          <ScheduledList />
+        {:else}
         <MessageList />
         {#if mail.selectedFolder?.role === "drafts" && draftEditorId !== null}
           {#key draftEditorId}
@@ -499,6 +540,8 @@
           {/if}
         {:else}
           <ReadingPane />
+          <CrmDrawer email={crmFocus.email} open={prefs.crmDrawer && mail.selectedThreadId !== null} />
+        {/if}
         {/if}
       </main>
       {#if expandedAsk}
@@ -520,6 +563,11 @@
       <CommandPalette />
       <FolderPicker />
       <Toast />
+      <SendHeld />
+      <SlotsPopover />
+      {#if prepOpen.eventId !== null}
+        <PrepPanel eventId={prepOpen.eventId} onclose={() => prepOpen.close()} />
+      {/if}
       <GoHint />
       <FolderEditor />
       {#if ui.shortcutsOpen}

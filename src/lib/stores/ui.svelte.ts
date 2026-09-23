@@ -39,6 +39,9 @@ const state = $state({
   movePicker: null as MoveRequest | null,
   /** Open rename/delete dialog, and the folder it acts on. */
   folderEditor: null as FolderEdit | null,
+  /** Fork (7.5): what the panes show. "calendar" swaps the list + reading pane
+   *  for src/fork/calendar/CalendarView.svelte; the sidebar stays. */
+  view: "mail" as "mail" | "calendar",
 });
 
 /** Parse a persisted theme string into the two axes, migrating legacy values.
@@ -168,6 +171,16 @@ export const ui = {
   },
   closeFolderEditor() {
     state.folderEditor = null;
+  },
+  /** Fork (7.5): "mail" or "calendar". */
+  get view() {
+    return state.view;
+  },
+  showCalendar() {
+    state.view = "calendar";
+  },
+  showMail() {
+    state.view = "mail";
   },
   get readingAi() {
     return readingAi;

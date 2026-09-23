@@ -245,9 +245,14 @@ pub async fn save_server_draft(
 pub async fn delete_draft(app: AppHandle, state: State<'_, AppState>, draft_id: i64) -> Result<()> {
     state
         .db
-        .call(move |conn| drafts::delete(conn, draft_id))
+        .call(move |conn| {
+            // Fork (audit): a held or scheduled send must die with its draft.
+            crate::fork::scheduler::drop_ops_for_draft(conn, draft_id)?;
+            drafts::delete(conn, draft_id)
+        })
         .await?;
     let _ = app.emit("drafts:updated", json!({}));
+    let _ = app.emit("fork:scheduled-updated", json!({}));
     Ok(())
 }
 

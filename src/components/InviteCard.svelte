@@ -2,6 +2,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getLocale, t } from "../lib/i18n/index.svelte";
   import type { InviteView } from "../lib/types";
+  import InviteCardExtras from "../fork/calendar/InviteCardExtras.svelte"; // fork (7.5)
 
   let {
     invite,
@@ -241,6 +242,7 @@
       {/if}
     </div>
   {/if}
+  <InviteCardExtras {invite} /><!-- fork (7.5): "In your calendar" + conflicts -->
 </div>
 
 <style>

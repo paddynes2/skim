@@ -74,3 +74,59 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/lib/types.ts` | `RenderedBody` | `+ hasFold?: boolean` | 5.3 |
 | `src/components/HtmlViewer.svelte` | props, `buildDoc` | `folded` prop adds the fold rule (`display:none !important`) to the document stylesheet | 5.3 |
 | `src/components/ReadingPane.svelte` | `unfolded`, `isFolded()`, `toggleFold()`, markup, style | the "..." pill under the body; default folded except a lone Fwd/FW/WG/TR | 5.3 |
+| `src-tauri/src/mail/oauth.rs` | `OauthProvider::scopes` | made `pub` | callers now pass scopes explicitly |
+| `src-tauri/src/mail/oauth.rs` | `OauthProvider::required_scope` | new `pub fn` (Google → `https://mail.google.com/`, Microsoft → `None`) | the mail flow's hard-coded check became a parameter |
+| `src-tauri/src/mail/oauth.rs` | `authorize` | + `scopes: &str, required_scope: Option<&str>` params | 7.2: the fork's calendar grant reuses the loopback flow with its own scopes |
+| `src-tauri/src/mail/oauth.rs` | `build_auth_url` | + `scopes: &str` param, used for the `scope` query pair | same |
+| `src-tauri/src/mail/oauth.rs` | `resolve_email` | + `required_scope: Option<&str>`; checks it (exact token match) instead of the mail scope; skips tokeninfo when `None` | same; behaviour for mail unchanged |
+| `src-tauri/src/mail/oauth.rs` | tests | `build_auth_url` calls pass `provider.scopes()`; + 2 tests | signature change |
+| `src-tauri/src/commands/accounts.rs` | `start_google_oauth`, `start_microsoft_oauth` | pass `provider.scopes()`, `provider.required_scope()` | signature change; behaviour unchanged |
+| `src/App.svelte` | script imports | `CrmDrawer`, `crmFocus`, `registerCrmNav()` | mount the drawer, wire `i` (9) |
+| `src/App.svelte` | `main.panes` `{:else}` branch | `<CrmDrawer email=... open=... />` after `<ReadingPane />` | the drawer beside the reading pane (9) |
+| `src/components/ReadingPane.svelte` | `focused` / `replyTarget` | one `$effect` calling `crmFocus.setEmail(...)` | the drawer follows the focused message's sender (9) |
+| `src/components/settings/Settings.svelte` | after `<SettingsFork />` | `<SettingsCrm />` + import | Settings → CRM (9) |
+| `src-tauri/src/fork/settings.rs` | `ALLOWED` | four `fork_crm_*` keys | config + workspace persistence (9) |
+| `src-tauri/src/commands/ai.rs` | `AiContext` | `struct` -> `pub(crate) struct`; fields `endpoint`, `key`, `model`, `now` -> `pub(crate)` (`provider`, `locale` stay private) | 10 AI pass: the plan says "uses `ai_context`"; the batch request in `fork::court::complete` resolves provider / key / model exactly as every AI command does instead of duplicating that 40-line resolution |
+| `src-tauri/src/commands/ai.rs` | `ai_context` | `async fn` -> `pub(crate) async fn` | same |
+| `src-tauri/src/fork/mod.rs` | `start` | `crate::fork::court::full_pass(app.clone(), db.clone());` once (needs the `Db`: `app.state::<AppState>().db.clone()`), and listen for `mail:updated`: `app.listen("mail:updated", move \|e\| { let touched = serde_json::from_str::<serde_json::Value>(e.payload()).ok().and_then(\|v\| v.get("folderId").and_then(\|f\| f.as_i64())).map(\|f\| vec![f]).unwrap_or_default(); crate::fork::court::on_mail_updated(app2.clone(), db2.clone(), touched); })` | plan: "on every `mail:updated` for touched threads and a full pass at startup". `sync.rs:1255` emits `{ folderId }`; every other emitter sends `{}`, which `on_mail_updated` treats as "re-examine everything" (one query + a hash-map walk, then only changed rows are written). If the listener turns out too chatty, debounce it in `start` (a 2 s `tokio::time::sleep` coalescer); the pass itself is idempotent |
+| `src-tauri/src/lib.rs` | `generate_handler!` | the three commands above | |
+| `src-tauri/src/notify.rs` (or `fork/mod.rs`) | daily nudge | at the setting's time (`fork_court_nudge`, default "09:00", "off" disables), `if fork::court::should_nudge_now(&setting, last_nudged_at, now) { if let Some(text) = fork::court::nudge_line(conn)? { toast(text, opens VF_ON_ME) ; store last_nudged_at } }`. `last_nudged_at` is the main session's to persist (suggest a `fork_court_nudged_at` settings row, internal). Both helpers are tested; `should_nudge_local` is the clock-free core | plan: "daily toast at 09:00 local (setting) ... click opens On me" |
+| `src-tauri/src/commands/mail.rs` | `queue_op` | database half factored into `pub(crate) fn queue_op_local(conn, ids, kind, extra, local) -> Vec<account_id>`; `queue_op` calls it, behaviour unchanged | MCP archive/star/mark_read take the same op path as a keypress (12) |
+| `src-tauri/src/fork/mod.rs` | | nothing (pre-declared) | |
+| `src/components/ComposeForm.svelte` | props | `variant?: "default" \| "reply"`, `onPopOut?` | 6.2 inline reply |
+| `src/components/ComposeForm.svelte` | script: rich block after `canPickFrom` | `richMode`, `wordsHtml`/`wordsText`/`tail`, `tailParts`, `onWordsChange`, `onTailInput`, body-change `$effect`, `flushHtml()`; `canPickFrom` also `variant !== "reply"` | 6.3 data model (D5) |
+| `src/components/ComposeForm.svelte` | `discardClick()` + `discardArmed` | two-click Discard | 6.1 |
+| `src/components/ComposeForm.svelte` | load `$effect` | reads `fork_draft_html`, splits the tail; reply variant scrolls into view + focuses | 6.2, 6.3 |
+| `src/components/ComposeForm.svelte` | `scheduleSave` | `await flushHtml()` after `updateDraft` | 6.3 |
+| `src/components/ComposeForm.svelte` | `send(when?)` | flushes HTML; `api.sendDraft(id, notBefore, label)` with the undo hold (`prefs.undoSendSecs`) or the picked time | 6.4 |
+| `src/components/ComposeForm.svelte` | `sendKey`, `onFormKeydown`, `popOut`, `close`, `onDestroy` | Ctrl/Cmd+Enter sends; Esc on the reply variant; pop-out; window ✕ saves when dirty; reply teardown deletes an untouched draft | 6.1, 6.2 |
+| `src/components/ComposeForm.svelte` | template | root gets `bind:this`, `class:reply`, `onkeydown`; subject `onkeydown={sendKey}`; body = `<RichEditor>` + `.tail` (sig, "•••" quote, "Edit quoted text") or the textarea; footer = split Send (`SendLater`), pop-out button, Discard for both variants | 6.1-6.4 |
+| `src/components/ComposeForm.svelte` | style | `.discard.armed`, `.compose-form.reply*`, `.popout`, `.send-split`, `.tail*`, `.quote-*` | |
+| `src/components/ReadingPane.svelte` | imports, `reply()`, target `$effect`, `inlineReplySlot` snippet rendered after the focused / shown `messageBlock`, `.inline-reply` style | inline reply under the open message | 6.2 |
+| `src-tauri/src/commands/compose.rs` | `send_draft` | `+ not_before: Option<i64>, label: Option<String>` → `Result<i64>` (op id); `fork::scheduler::hold` inside the enqueue transaction, `announce` instead of `run_ops` when held | 6.4 |
+| `src-tauri/src/mail/smtp.rs` | `build_message` → `build_message_with_html(.., html: Option<&str>)` | `build_message` delegates with `None`; `Some` = `multipart/alternative[text/plain, text/html]`, inside `multipart/mixed` with attachments | 6.3 |
+| `src-tauri/src/mail/sync.rs` | `drain_ops` SELECT | `AND id NOT IN (SELECT op_id FROM fork_op_schedule WHERE not_before > unixepoch())` (already in HEAD d44ef77) | 6.4 (D4) |
+| `src-tauri/src/fork/mod.rs` | module list | `pub mod compose;` (main-session file; one line, see above) | 6.3 |
+| `src/lib/api.ts` | `sendDraft` | `(draftId, notBefore = null, label = null) => invoke<number>` | 6.4 |
+| `src/lib/types.ts` | – | not touched (`Draft` unchanged; `ScheduledSend` lives in `src/fork/compose/api.ts`) | |
+| `package.json`, `package-lock.json` | dependencies | `squire-rte ^2.4.9` (MIT). npm (older than the lock's) also dropped the `libc` arrays from 18 optional-dep entries and moved the root version to 1.1.0 in the lock; restore the lock from HEAD and re-add only the squire entry if you want a minimal diff | 6.3 |
+| `src/lib/stores/mail.svelte.ts` | imports | `courtApi`, `COURT_UPDATED`, `VF_ON_ME`, `VF_WAITING`, `courtCounts`, `CourtState` | 10 views |
+| `src/lib/stores/mail.svelte.ts` | `attachListeners` | `listen(COURT_UPDATED)`: refreshThreads when a court view is open, `courtCounts.refresh()` always | plan: views live; `mail:updated` names folders, not views |
+| `src/lib/stores/mail.svelte.ts` | `refreshFolders` | early return when the selected id is -920/-921, beside the -900 guard | a sync must not bounce an open view to the inbox |
+| `src/lib/stores/mail.svelte.ts` | `fetchPage` | route -920/-921 to `courtApi.list(state, offset, limit)` before the `< 0` unified branch | paging, refresh, reading pane, keys, undo unchanged on court rows |
+| `src/lib/stores/mail.svelte.ts` | `courtStateOf`, `selectCourt` (new, fork section) | id <-> state; `selectCourt` clears search state then `selectFolder(id)` | same shape as `enterSearch` |
+| `src/lib/stores/mail.svelte.ts` | `mail` export | `get courtView`, `selectCourt` | MessageList header, Sidebar selection, courtStore |
+| `src/components/Sidebar.svelte` | script + calendar section | two `.item.court` buttons with `.count.total` badges, `class:selected` on -920/-921 | plan: "On me (N)" / "Waiting (N)" |
+| `src/components/MessageList.svelte` | header | `{:else if mail.courtView}` branch: title + "Oldest first · N" sub-line + J/K hint; All/Unread/Starred block untouched | the view is its own filter |
+| `src/components/MessageList.svelte` | rows | each `MessageRow` wrapped in `.court-wrap` (position: relative); in a court view a `.court-badge-slot` overlay renders `CourtRow` | MessageRow is upstream + fixed-height; an overlay adds no height, so the windowing arithmetic holds |
+| `src/components/MessageList.svelte` | script | `nowSecs` minute ticker, `courtOf(row)` | ages recolour across a day boundary without a reload |
+| `src/lib/stores/ui.svelte.ts` | `state.view`, `ui.view`, `ui.showCalendar()`, `ui.showMail()` | new field + 3 members | 7.5: the calendar view switch |
+| `src/components/Sidebar.svelte` | folders section | one "Calendar" item (with `G C` caption) above the folders; folder clicks call `ui.showMail()` first; `class:selected` on folders also requires `ui.view === "mail"` | 7.5: Calendar in the sidebar; a folder click leaves the calendar |
+| `src/components/InviteCard.svelte` | template, imports | one import line + one line `<InviteCardExtras {invite} />` before the closing `</div>` | 7.5: "In your calendar" + conflicts |
+| `package.json`, `package-lock.json` | dependencies | `@event-calendar/core` `5.14.1` (exact) | 7.5 calendar grid (MIT) |
+| `src/fork/SettingsFork.svelte` | template | Compose section (reply inline, rich text, undo send chips), AI-tell toggles + ignored-rule list with remove, `<SettingsCourt />`, `<SettingsCalendar />` | PLAN 6.2-6.4, 6.5.5, 10, 7.7 |
+| `src/fork/SettingsFork.svelte` | script | `loadSmellSettings` on open, `removeIgnored` -> `unignoreRule` then `prefs.hydrate` (no second write) | the popover's Ignore writes the setting without touching `prefs` |
+| `src/lib/i18n/locales/en.json` | `fork.settings.*` | 7 keys | labels |
+| `src/components/ComposeForm.svelte` | script, body textarea, footer | AI-tell layer (health line, popover, send check); insert-at-caret, `/slots` trigger, Share availability + Add Meet link buttons | 6.5 / 7.6 / 8 |
+| `src/fork/RichEditor.svelte` | exports | `hostEl()`, `insertText()` | 6.5 / 7.6 / 8 |
+| `src-tauri/src/commands/compose.rs` | `delete_draft` | also drops the draft's queued send / save ops (`fork::scheduler::drop_ops_for_draft`) | safety audit: a held send must die with its draft |

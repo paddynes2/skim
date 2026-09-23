@@ -750,7 +750,8 @@ async fn create_draft(server: &Server, a: &Args<'_>) -> ToolResult {
 }
 
 /// The calendar an event lands on: the selected primary of the first account
-/// with one, else the first selected calendar at all.
+/// with one, else the first selected calendar the user OWNS (never a shared
+/// or team calendar other people read).
 fn own_calendar(conn: &rusqlite::Connection) -> rusqlite::Result<Option<model::CalendarRow>> {
     let mut fallback = None;
     for acc in accounts::list(conn)? {
@@ -759,7 +760,9 @@ fn own_calendar(conn: &rusqlite::Connection) -> rusqlite::Result<Option<model::C
             return Ok(Some(c.clone()));
         }
         if fallback.is_none() {
-            fallback = cals.into_iter().find(|c| c.selected);
+            fallback = cals
+                .into_iter()
+                .find(|c| c.selected && c.access_role == "owner");
         }
     }
     Ok(fallback)

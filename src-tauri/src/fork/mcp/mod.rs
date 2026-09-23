@@ -210,7 +210,7 @@ pub fn start(app: AppHandle) {
         let enabled = db
             .read("fork_mcp_enabled", |conn| is_enabled(conn))
             .await
-            .unwrap_or(true);
+            .unwrap_or(false);
         if !enabled {
             tracing::info!("mcp: disabled by fork_mcp");
             return;

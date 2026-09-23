@@ -1,0 +1,179 @@
+/* EventCalendar (@event-calendar/core) mapped onto the Skim tokens (PLAN.md 7.5).
+   Global on purpose: the grid renders its own DOM, so a scoped Svelte style
+   cannot reach it. Everything is under `.fork-cal`, and every colour is a
+   token, so all four themes (cold/warm × light/dark) follow automatically.
+   Per-event colour arrives as `--cal-color` (the calendar's Google colour) via
+   the event's `styles`; the fill is that colour muted into the surface. */
+
+.fork-cal .ec {
+  --ec-bg-color: var(--surface);
+  --ec-text-color: var(--text);
+  --ec-border-color: var(--hairline);
+  --ec-color-400: var(--text-faint);
+  --ec-color-300: var(--hairline-strong);
+  --ec-color-200: var(--selected);
+  --ec-color-100: var(--surface-raised);
+  --ec-color-50: var(--bg);
+  --ec-button-bg-color: transparent;
+  --ec-button-border-color: var(--hairline-strong);
+  --ec-button-text-color: var(--text-dim);
+  --ec-button-active-bg-color: var(--text);
+  --ec-button-active-border-color: var(--text);
+  --ec-button-active-text-color: var(--bg);
+  --ec-today-bg-color: var(--row-unread-tint);
+  --ec-highlight-color: var(--selected);
+  --ec-event-bg-color: var(--acct-1);
+  --ec-event-text-color: var(--text);
+  --ec-bg-event-color: var(--hairline-strong);
+  --ec-bg-event-opacity: 0.4;
+  --ec-now-indicator-color: var(--danger);
+  --ec-popup-bg-color: var(--surface-raised);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text);
+  height: 100%;
+}
+:root[data-theme="cold-dark"] .fork-cal .ec,
+:root[data-theme="warm-dark"] .fork-cal .ec {
+  color-scheme: dark;
+}
+
+/* Column / day headers in the mono microlabel voice. */
+.fork-cal .ec-day-head,
+.fork-cal .ec-sidebar .ec-time,
+.fork-cal .ec-list .ec-day-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.fork-cal .ec-day-head {
+  padding: 6px 4px;
+}
+.fork-cal .ec-today .ec-day-head,
+.fork-cal .ec-day-grid .ec-today .ec-day-head {
+  color: var(--text);
+  font-weight: 700;
+}
+.fork-cal .ec-list .ec-day-head {
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Events: calendar colour muted into the surface, ink text, no shadow. */
+.fork-cal .ec-event {
+  --cal-fill: color-mix(in oklab, var(--cal-color, var(--acct-1)) 28%, var(--surface));
+  --cal-edge: color-mix(in oklab, var(--cal-color, var(--acct-1)) 60%, var(--surface));
+  background-color: var(--cal-fill);
+  color: var(--text);
+  border: 1px solid var(--cal-edge);
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.fork-cal .ec-time-grid .ec-event {
+  border-left-width: 3px;
+  padding: 2px 5px;
+}
+/* Time and title share a line when they fit (a 30-minute event still shows
+   its title); the row wraps for taller events. EC's column layout and the
+   sticky title stay for the day grid and all-day row. */
+.fork-cal .ec-time-grid .ec-event-body {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 5px;
+  line-height: 1.25;
+  overflow: hidden;
+}
+.fork-cal .ec-time-grid .ec-event-title {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.fork-cal .ec-event-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.fork-cal .ec-event-title {
+  font-weight: 600;
+}
+/* Agenda rows: a colour tag, no fill. */
+.fork-cal .ec-list .ec-event {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-s);
+}
+.fork-cal .ec-list .ec-event:hover {
+  background: var(--hover);
+}
+.fork-cal .ec-list .ec-event-tag {
+  background-color: var(--cal-color, var(--acct-1));
+}
+.fork-cal .ec-list .ec-event-time {
+  min-width: 96px;
+}
+
+/* Declined: struck through and faded. Tentative: dashed edge, no fill.
+   Local-only (a create not yet on Google): dotted edge. */
+.fork-cal .ec-event.cal-declined {
+  opacity: 0.55;
+}
+.fork-cal .ec-event.cal-declined .ec-event-title {
+  text-decoration: line-through;
+}
+.fork-cal .ec-event.cal-tentative {
+  background-color: transparent;
+  border: 1px dashed var(--cal-edge);
+}
+.fork-cal .ec-list .ec-event.cal-tentative .ec-event-tag {
+  background: transparent;
+  border: 1.5px dashed var(--cal-color, var(--acct-1));
+}
+.fork-cal .ec-event.cal-local {
+  border-style: dotted;
+}
+.fork-cal .ec-event.cal-selected {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Grid chrome. */
+.fork-cal .ec-header,
+.fork-cal .ec-body {
+  border-color: var(--hairline);
+}
+.fork-cal .ec-day {
+  border-color: var(--hairline);
+}
+.fork-cal .ec-day-grid .ec-day-head {
+  text-transform: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.fork-cal .ec-other-month .ec-day-head {
+  opacity: 0.45;
+}
+.fork-cal .ec-now-indicator {
+  border-width: 1.5px;
+}
+.fork-cal .ec-popup {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-pop);
+}
+.fork-cal .ec-no-events {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.fork-cal .ec-preview,
+.fork-cal .ec-ghost {
+  opacity: 0.6;
+}

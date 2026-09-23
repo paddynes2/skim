@@ -11,6 +11,11 @@
   import HtmlViewer from "./HtmlViewer.svelte";
   import InviteCard from "./InviteCard.svelte";
   import { archiveOffered, markRead, removeThread, setStarred } from "../fork/actions";
+  // Fork (6.2): the inline reply under the focused message.
+  import ComposeForm from "./ComposeForm.svelte";
+  import { inlineReply } from "../fork/compose/inline.svelte";
+  import { prefs } from "../fork/stores/prefs.svelte";
+  import { crmFocus } from "../fork/crm/store.svelte";
 
   let detail = $state<ThreadDetail | null>(null);
   // Fork (1.2): no Archive in Sent / Trash / Spam.
@@ -21,6 +26,19 @@
   // Why a body failed, for the tooltip on the error note — the visible wording
   // stays the same, but a bug report is diagnosable.
   let bodyErrors = $state<Record<number, string>>({});
+  // Fork (5.3): messages whose quoted tail the reader has opened ("•••").
+  // Keyed by message id; absent = the default, which is folded unless the
+  // thread is a single forwarded message, where the forward IS the content.
+  let unfolded = $state<Record<number, boolean>>({});
+  function isFolded(message: MessageMeta, body: RenderedBody): boolean {
+    if (!body.hasFold) return false;
+    if (message.id in unfolded) return !unfolded[message.id];
+    const lone = (detail?.messages.length ?? 0) <= 1;
+    return !(lone && /^\s*(fwd?|wg|tr)\s*:/i.test(message.subject));
+  }
+  function toggleFold(message: MessageMeta, body: RenderedBody) {
+    unfolded = { ...unfolded, [message.id]: isFolded(message, body) };
+  }
   // Newest body request per message, so a slow answer can't overwrite a newer
   // one. Plain (non-reactive) state: it only gates writes into `bodies`.
   let bodySeq = 0;
@@ -103,6 +121,10 @@
 
   // The message reply/AI actions target: focused in conversation, else shown.
   const replyTarget = $derived(conversation ? focused : shown);
+  // Fork (9): the CRM drawer follows the message the actions target.
+  $effect(() => {
+    crmFocus.setEmail(replyTarget?.from.addr ?? null);
+  });
 
   // The heading follows the open message: an untranslated subject sitting above
   // translated text is exactly the half-done look the feature exists to avoid.
@@ -451,9 +473,23 @@
   async function reply(mode: "reply" | "reply_all" | "forward") {
     const target = replyTarget;
     if (!target) return;
+    // Fork (6.2): inline under the message when the setting is on.
+    if (prefs.replyInline && detail) {
+      await inlineReply.open(mode, target.id, detail.id);
+      return;
+    }
     const draft = await api.getReplyTemplate(target.id, mode);
     await api.openComposeWindow(draft.id);
   }
+
+  // Fork (6.2): where R / A / F from the keyboard should land (the reply
+  // target of the open thread). Read by `replyInlineOrWindow` at key time.
+  $effect(() => {
+    inlineReply.setTarget(() =>
+      replyTarget && detail ? { messageId: replyTarget.id, threadId: detail.id } : null,
+    );
+    return () => inlineReply.setTarget(null);
+  });
 </script>
 
 <section class="pane">
@@ -496,30 +532,30 @@
     <header class="toolbar">
       <div class="spacer"></div>
       {#if canArchive}
-        <button class="tool" onclick={archive} title={t("reading.archive")}>
+        <button class="tool" onclick={archive} title={`${t("reading.archive")}  E`}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 3h12v3H2V3zm1 3v7h10V6M6.5 9h3" /></svg>
           <kbd>E</kbd>
         </button>
       {/if}
-      <button class="tool" onclick={remove} title={t("reading.delete")}>
+      <button class="tool" onclick={remove} title={`${t("reading.delete")}  Del`}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.5 9.5h6l.5-9.5M6.7 6.5v5M9.3 6.5v5" /></svg>
         <kbd>Del</kbd>
       </button>
-      <button class="tool" onclick={reportSpam} title={t("reading.spam")}>
+      <button class="tool" onclick={reportSpam} title={`${t("reading.spam")}  !`}>
         <!-- Warning octagon: junk / report spam. -->
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5.4 1.8h5.2l3.6 3.6v5.2l-3.6 3.6H5.4L1.8 10.6V5.4L5.4 1.8z" /><path d="M8 4.6v4M8 11.1v.1" /></svg>
         <kbd>!</kbd>
       </button>
-      <button class="tool" onclick={openMove} title={t("reading.move")}>
+      <button class="tool" onclick={openMove} title={`${t("reading.move")}  V`}>
         <!-- Folder with an arrow going in: file this somewhere. -->
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M1.5 3.5h4l1.5 2h7.5v7h-13v-9z" /><path d="M8 7.5v3.5M6.4 9.4L8 11l1.6-1.6" /></svg>
         <kbd>V</kbd>
       </button>
-      <button class="tool" class:starred={anyStarred} onclick={toggleStar} title={anyStarred ? t("reading.unstar") : t("reading.star")}>
+      <button class="tool" class:starred={anyStarred} onclick={toggleStar} title={`${anyStarred ? t("reading.unstar") : t("reading.star")}  S`}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill={anyStarred ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.2"><path d="M8 1.5l2 4.1 4.5.6-3.3 3.2.8 4.5L8 11.8l-4 2.1.8-4.5L1.5 6.2 6 5.6 8 1.5z" /></svg>
         <kbd>S</kbd>
       </button>
-      <button class="tool" onclick={toggleRead} title={isRead ? t("reading.mark_unread") : t("reading.mark_read")}>
+      <button class="tool" onclick={toggleRead} title={`${isRead ? t("reading.mark_unread") : t("reading.mark_read")}  U`}>
         {#if isRead}
           <!-- Sealed envelope: click to mark unread. -->
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1" /><path d="M2 5l6 4.5L14 5" /></svg>
@@ -558,6 +594,7 @@
         {#if focused}
           <div bind:this={focusedEl}>
             {@render messageBlock(focused, bodies[focused.id])}
+            {@render inlineReplySlot()}
           </div>
         {/if}
 
@@ -582,6 +619,7 @@
         {/if}
       {:else if shown}
         {@render messageBlock(shown, bodies[shown.id])}
+        {@render inlineReplySlot()}
       {/if}
     </div>
 
@@ -599,13 +637,13 @@
 
     <footer class="actions">
       {#if ai.keyPresent}
-        <button class="ai-btn" onclick={openAsk}>✦ {t("ai.ask")}<kbd>Q</kbd></button>
+        <button class="ai-btn" onclick={openAsk} title={`${t("ai.ask")}  Q`}>✦ {t("ai.ask")}<kbd>Q</kbd></button>
       {/if}
-      <button class="btn" onclick={() => reply("reply")}>{t("reading.reply")}<kbd>R</kbd></button>
+      <button class="btn" onclick={() => reply("reply")} title={`${t("reading.reply")}  R`}>{t("reading.reply")}<kbd>R</kbd></button>
       {#if canReplyAll}
-        <button class="btn" onclick={() => reply("reply_all")}>{t("reading.reply_all")}<kbd>A</kbd></button>
+        <button class="btn" onclick={() => reply("reply_all")} title={`${t("reading.reply_all")}  A`}>{t("reading.reply_all")}<kbd>A</kbd></button>
       {/if}
-      <button class="btn" onclick={() => reply("forward")}>{t("reading.forward")}<kbd>F</kbd></button>
+      <button class="btn" onclick={() => reply("forward")} title={`${t("reading.forward")}  F`}>{t("reading.forward")}<kbd>F</kbd></button>
     </footer>
 
     {#if hoverUrl}
@@ -614,6 +652,24 @@
     {/if}
   {/if}
 </section>
+
+{#snippet inlineReplySlot()}
+  <!-- Fork (6.2): the composer under the open message, for this thread only. -->
+  {#if inlineReply.draftId !== null && detail && inlineReply.threadId === detail.id}
+    <div class="inline-reply">
+      {#key inlineReply.draftId}
+        <ComposeForm
+          draftId={inlineReply.draftId}
+          variant="reply"
+          onSent={() => inlineReply.sent()}
+          onDiscarded={() => inlineReply.close()}
+          onClose={() => inlineReply.close()}
+          onPopOut={() => inlineReply.close()}
+        />
+      {/key}
+    </div>
+  {/if}
+{/snippet}
 
 {#snippet messageBlock(
   message: MessageMeta,
@@ -661,11 +717,11 @@
             <span class="sep">·</span>
             <span class="translate-note">{t("translate.truncated")}</span>
           {/if}
-          <button class="chip ai" onclick={() => toggleTranslation(message.id)}>
+          <button class="chip ai" onclick={() => toggleTranslation(message.id)} title={`${t("translate.show_original")}  T`}>
             {t("translate.show_original")}<kbd>T</kbd>
           </button>
         {:else if offerTranslate}
-          <button class="chip ai" onclick={() => toggleTranslation(message.id)}>
+          <button class="chip ai" onclick={() => toggleTranslation(message.id)} title={`${t("ai.translate")}  T`}>
             ✦ {loaded?.translate?.cached
               ? t("translate.show_translation")
               : t("ai.translate")}<kbd>T</kbd>
@@ -750,13 +806,25 @@
           </details>
         {/if}
       {:else if body.html}
+        {@const folded = isFolded(message, body)}
         <div class="body">
           <HtmlViewer
             html={body.html}
             security={body.security?.links}
+            {folded}
             onHoverUrl={(u) => (hoverUrl = u)}
           />
         </div>
+        {#if body.hasFold}
+          <!-- Fork (5.3): the quoted tail sits behind this pill. -->
+          <button
+            class="fold-pill"
+            aria-expanded={!folded}
+            aria-label={t(folded ? "fork.reading.show_quoted" : "fork.reading.hide_quoted")}
+            title={t(folded ? "fork.reading.show_quoted" : "fork.reading.hide_quoted")}
+            onclick={() => toggleFold(message, body)}>•••</button
+          >
+        {/if}
       {:else}
         <!-- Headers over a blank rectangle read as a bug. Say it plainly:
              the message came through, there was just nothing to render. -->
@@ -790,6 +858,15 @@
 {/snippet}
 
 <style>
+  /* Fork (6.2): the inline reply, framed under the message it answers. */
+  .inline-reply {
+    margin: 14px 0 6px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    display: flex;
+    min-height: 320px;
+  }
   .pane {
     flex: 1;
     display: flex;
@@ -1219,6 +1296,25 @@
 
   .body {
     margin-top: 14px;
+  }
+  /* Fork (5.3): Gmail-style "•••" under the message, quiet until hovered. */
+  .fold-pill {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 0 8px;
+    height: 18px;
+    line-height: 16px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    background: var(--hover);
+    border: 1px solid var(--hairline);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  .fold-pill:hover {
+    color: var(--text);
+    background: var(--selected);
   }
   .orig-body {
     margin-top: 12px;

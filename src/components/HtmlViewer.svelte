@@ -9,14 +9,28 @@
   let {
     html,
     security = null,
+    folded = false,
     onHoverUrl,
   }: {
     html: string;
     /** Per-link phishing verdicts from the backend, keyed by raw href. */
     security?: LinkFlag[] | null;
+    /** Fork (5.3): hide the quoted tail and signature markers the sanitizer kept. */
+    folded?: boolean;
     /** Reports the real destination under the cursor (null = left links). */
     onHoverUrl?: (url: string | null) => void;
   } = $props();
+
+  // Fork (5.3): the folded stylesheet. Only markers the sanitizer itself
+  // writes can match (`fold_marker` in sanitize.rs), so mail cannot hide its
+  // own content through it. A `cite` blockquote is hidden only at the top
+  // level: nested ones belong to whatever quoted them. `!important` because
+  // Outlook's `<hr style="display:inline-block">` sits after `#appendonsend`
+  // and an inline style outranks a plain rule; mail's own `!important` never
+  // reaches here (filter_style strips the flag), so this one always wins.
+  const FOLD_CSS =
+    "  .skim-quote, .skim-sig, #divRplyFwdMsg, #divRplyFwdMsg ~ *, #appendonsend ~ *, " +
+    "body > blockquote[type=cite], body > div > blockquote[type=cite] { display: none !important; }\n";
 
   let iframe: HTMLIFrameElement | undefined = $state();
   let height = $state(120);
@@ -112,7 +126,7 @@
     );
   });
   const srcdoc = $derived(
-    buildDoc(html, ui.effective === "dark" && !ownColors, ownColors, surface),
+    buildDoc(html, ui.effective === "dark" && !ownColors, ownColors, surface, folded),
   );
 
   function hasOwnColors(body: string): boolean {
@@ -123,7 +137,13 @@
     );
   }
 
-  function buildDoc(body: string, dark: boolean, ownColors: boolean, surface: string): string {
+  function buildDoc(
+    body: string,
+    dark: boolean,
+    ownColors: boolean,
+    surface: string,
+    folded = false,
+  ): string {
     // The default canvas follows the app theme: it's painted with the live
     // --surface, so the message blends into the pane in every palette. It used
     // to be hardcoded (#ffffff / #141418) — those happened to equal cold-light
@@ -175,7 +195,7 @@
   table { max-width: 100%; }
   blockquote { margin: 8px 0 8px 2px; padding-left: 12px; border-left: 2px solid ${colors.quoteBorder}; color: ${colors.quoteText}; }
   pre.skim-plain { white-space: pre-wrap; font: inherit; margin: 0; }
-</style></head><body>${body}</body></html>`;
+${folded ? FOLD_CSS : ""}</style></head><body>${body}</body></html>`;
   }
 
   function setupDoc(doc: Document) {

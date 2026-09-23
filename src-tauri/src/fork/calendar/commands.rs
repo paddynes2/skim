@@ -364,6 +364,9 @@ pub async fn fork_cal_patch(
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok());
             let body = gapi::event_body(&input, existing.as_ref());
+            if let Err(e) = require_connected(&cal.account_id) {
+                return Ok(Some(Err(e)));
+            }
             if let Err(e) = apply_input(&mut row, &input) {
                 return Ok(Some(Err(e)));
             }

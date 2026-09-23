@@ -51,3 +51,76 @@ Anything decided during the build is appended below with a date.
 - **2026-09-23 D-5f (5.3):** toggling rebuilds `srcdoc`; the existing poll + ResizeObserver re-measure height.
 - **2026-09-23 D25 (gates):** `cargo test` binaries exit with STATUS_ENTRYPOINT_NOT_FOUND when run from Git Bash with `/mingw64/bin` on PATH (a MinGW DLL shadows the system one once the MCP/HTTP crates joined). `scripts/fork/gates.sh` strips the MSYS dirs for the test step; run from PowerShell otherwise.
 - **2026-09-23 D26 (3.3 fix):** `keys.ts` held the `g` flag in `$state` inside a plain `.ts` file, which Vite never compiles as Svelte; the demo threw `rune_outside_svelte` on boot and every screenshot after 3.3 was blocked. The flag moved to `src/fork/stores/go.svelte.ts`.
+- **2026-09-23 D22 (7.2):** `resolve_email` matches the required scope as a whole
+- **2026-09-23 D23 (7.3):** all three tables use `CREATE TABLE IF NOT EXISTS`
+- **2026-09-23 D24 (7.4):** engine registry is a process-wide
+- **2026-09-23 D25 (7.4):** window replace = upsert the fresh rows, then delete
+- **2026-09-23 D26 (7.4):** ops reference the local **row id** (`event_id`) and
+- **2026-09-23 D27 (7.4):** `fork_cal_rsvp` also takes `send_updates`
+- **2026-09-23 D28 (7.2):** the account-mismatch error (`gcal_account_mismatch`)
+- **2026-09-23 D29 (8):** `fork_free_slots` takes the walking zone `tz` (IANA)
+- **2026-09-23 D-9a (workspaces):** `GET /api/v1/workspaces` in Rebound is
+- **2026-09-23 D-9b (stage names):** the lookup route returns deals as
+- **2026-09-23 D-9c (reminders):** the route returns no reminders today. The
+- **2026-09-23 D-9d (`fork_crm_set_config`):** one command more than the plan
+- **2026-09-23 D-9e (status and the network):** `fork_crm_status` is local
+- **2026-09-23 D-9f (dead refresh token):** a `crm_auth` answer to a refresh
+- **2026-09-23 D-9g (wire shape):** structs deserialise Rebound's snake_case
+- **2026-09-23 D-9h (address source):** the reading pane owns the focused
+- **2026-09-23 D-10a ("filed" = not in the inbox):** the plan's "thread only in folders he filed as FYI/marketing" is read as: a thread with no copy in a folder of role `inbox` is filed (`reason: "filed"`, state `none`). Role NULL (user labels), `archive`/all-mail, `sent`, `important`, `starred` do not count as "in play" on their own: an archived thread is one he dealt with, and Gmail keeps Important/Starred copies after archiving. A label copy PLUS an inbox copy (Gmail) is in play. Junk-only / trash-only threads are `none` whichever side wrote last.
+- **2026-09-23 D-10b (waiting has no bulk / inbox test):** a thread whose last message is from one of his addresses is `waiting` wherever it lives (Sent has no inbox copy by construction). Only junk/trash-only threads are excluded. This means every outbound mail ever is "waiting" until answered; the views sort oldest first, so the tail is old. If that is noise in practice, a `since` floor (e.g. 90 days) belongs in the view / a setting, not in the classification.
+- **2026-09-23 D-10c (own addresses):** "one of the account's own addresses" = every `accounts.email` and every `imap_user` containing `@`, across ALL accounts, lowercased. Mail from one of his mailboxes to another is still from him.
+- **2026-09-23 D-10d (draft rule wins):** an unsent local draft (`drafts` row whose `reply_to_message_id` or `origin_message_id` is a message of the thread) makes the thread `on_me`, reason `draft started`, `needs_reply = 1`, even over bulk / filed / waiting. Rows in `drafts` are unsent by definition (sending deletes them). Server-draft copies in a folder of role `drafts` are skipped when picking the last message (a draft in flight is not the last word).
+- **2026-09-23 D-10e (never re-classify, precisely):** the row is left alone when its `last_message_id` is unchanged AND the deterministic verdict (state, since, reason) is unchanged. Same `last_message_id` but a moved verdict (draft opened / closed, thread archived) updates state / since / reason and keeps the AI columns (`needs_reply` only overwritten when the rule itself asserts one, i.e. the draft rule). A new `last_message_id` rewrites the row and resets `model` / `needs_reply` to NULL, which is what makes the thread an AI candidate again. `fork_court_recompute` (forced) rewrites everything and resets every AI verdict.
+- **2026-09-23 D-10f (AI candidates = `state = 'on_me' AND model IS NULL`):** no extra column: `model` doubles as "judged at this last_message_id". The view predicate is `state = 'on_me' AND coalesce(needs_reply, 1) = 1`, so an AI "no reply needed" hides the row and the deterministic result shows until the AI has spoken. A batch whose reply does not parse keeps the deterministic verdict but is still stamped with the model (it spent the cap; not retried until the thread changes). A provider / network error leaves the batch unstamped for the next pass. The AI pass runs only after a deterministic pass that wrote something, so an idle mailbox costs nothing.
+- **2026-09-23 D-10g (`fork_court_ai` default OFF):** BYOK and optional in the plan; nothing calls a model until Patrick turns it on in settings. The day cap counts threads sent, in local days, in the internal `fork_court_ai_used` row.
+- **2026-09-23 D-10h (sender pattern by hand):** the crate has no `regex`; `no-?reply|notifications?|mailer-daemon|bounce` is four case-insensitive substring tests on the whole address (`is_automated_sender`). "bounce" matches `bounces.thomas@` too; accepted, same as the plan's regex would.
+- **2026-09-23 D-10i (command parameter name):** `fork_court_list` takes `court_state` (wire: `courtState`), not `state`, because `state: State<'_, AppState>` is the Tauri parameter every command already has. `courtApi.list(state, offset, limit)` hides this.
+- **2026-09-23 D-10j (`mail:updated` payload):** the hook takes `touched_folder_ids: Vec<i64>`; the sync emits at most one `folderId`, the rest emit `{}`. An empty list = full scope. Threads whose messages all vanished are swept by the full scope (`thread not in threads`) and by `Scope::Threads`; a folder scope cannot name them, which the next `{}` event covers.
+- **2026-09-23 D-11a:** a guest's threads are `from:` OR `to:` the address. `Filters`
+- **2026-09-23 D-11b:** "external guest" = every attendee minus own addresses
+- **2026-09-23 D-11c:** the reminder window is `[now, now+10 min]`, timed events only,
+- **2026-09-23 D-11d:** the CRM card comes from the panel's own `fork_crm_lookup` call
+- **2026-09-23 D-11e:** `fork_prep_brief` reproduces `spawn_stream`'s Channel protocol
+- **2026-09-23 D-12a (transport):** the MCP server is hand-rolled (JSON-RPC 2.0
+- **2026-09-23 D-12b (auth):** token = 32 random bytes as 64 hex chars (not
+- **2026-09-23 D-12c (tools shape):** every tool result is a JSON object,
+- **2026-09-23 D-12d (create_draft):** a new draft needs `to` and `subject`; a
+- **2026-09-23 D-12e (create_event):** lands on the selected primary calendar
+- **2026-09-23 D-12g (test binary vs the wry runtime; READ BEFORE ADDING
+- **2026-09-23 D-12f (fork_mcp toggle):** `fork_mcp_set_enabled` binds/stops at
+- **2026-09-23 D-6.5a (rules as data, not a port):** the TS scanner compiles the vendored
+- **2026-09-23 D-6.5b (offset-preserving mask):** OS strips fences / inline code / `>`
+- **2026-09-23 D-6.5c (the dash rule):** em / en dash is `hard` on every occurrence
+- **2026-09-23 D-6.5d (document layer):** a contrast frame repeated >= 3 (no-smell's
+- **2026-09-23 D-6.5e (`--smell-warn` token):** the theme has no amber; the injected
+- **2026-09-23 D-6.5f (fact guard, two locks, no regex):** `fork::smell::guard` and
+- **2026-09-23 D-6.5g (rewrite returns, does not stream text):** `fork_smell_rewrite`
+- **2026-09-23 D-6.5h (Node resolves `./scan`):** the app imports siblings without
+- **2026-09-23 D-6.5i (settings key):** `fork_smell_ignored` (as pre-listed), not
+- **2026-09-23 D-6a (6.3, editor block model):** one `<div>` per line, `<div><br></div>` for a blank line (Squire's default), not `<p>` per paragraph. `textToHtml`/`htmlToText` are exact inverses over that model, so `body_text` and the editor never drift by a line: the AI stream (`draft.body = streamed + tail`) re-renders through the same path, and `splitTail` keeps finding the signature and the quote.
+- **2026-09-23 D-6b (6.1, where Discard lives):** in the footer bar next to Save, not in `WindowControls` (upstream, not named by the phase). Second click within 3 s discards; the first turns the icon into "Discard?".
+- **2026-09-23 D-6c (6.3, "Edit quoted text"):** turns the tail (signature block + quote) into a plain textarea under the rich editor; the words stay rich. `body_text = wordsText + tail` in both modes.
+- **2026-09-23 D-6d (6.3, the signature in HTML):** emitted only while its `\n\n-- \nsig` block is still in `body_text`, so a sign-off the user deleted never comes back in the HTML part. Inline `cid:` images of the quoted original are dropped (they would point at the app's own protocol).
+- **2026-09-23 D-6e (6.3, HTML at send time is a main-session touch):** `fork::compose::outgoing_html(db, draft_id)` exists for `execute_send`/`execute_save_draft`; the two call-site edits are listed under App.svelte §4 because sync.rs was another agent's beyond the drain query.
+- **2026-09-23 D-6f (6.4, one task):** a single scheduler task over every account (`plan()` returns the accounts with a due hold); the plan's "that account's engine" is honoured per account inside it. Sleep is capped at 1 h and re-planned, so a clock jump costs at most an hour.
+- **2026-09-23 D-6g (6.4, undo toast):** shown from the Rust event `fork:send-held` in the main window (a compose window has no toast host and closes on send). The toast lasts `hold - 1 s`; a hold longer than 60 s (send later) gets a 5 s "Scheduled for …" toast with Undo instead. `Z` is not wired to it (the undo stack's `pushFlag` would leave a stale entry past the margin).
+- **2026-09-23 D-6h (6.2, teardown):** an inline reply unmounted by a thread switch deletes its draft when untouched and keeps it (flushServer) when edited, mirroring Esc.
+- **2026-09-23 D-6i (6.4, refusal semantics):** `cancel` refuses when `not_before - now < 1` OR the op is no longer `pending`; the list hides holds whose draft is gone.
+- **2026-09-23 D-10k (the nudge is the shell's, not notify.rs):** the toast runs in TS (`CourtNudge.ts`, minute poll, `shouldNudgeNow` mirrors `fork::court::should_nudge_local`, text from `fork_court_counts` + the first on-me row). Do NOT also wire the Rust `should_nudge_now` / `nudge_line` into `notify.rs`, or he gets two toasts. Trade-off: no nudge while the window is closed (the tray-only case); if that matters later, move it to Rust and delete `startCourtNudge`.
+- **2026-09-23 D-10l (badge is an overlay, not a row edit):** `MessageRow.svelte` is not in this phase's touch list and its height is what the list's windowing measures. The age + reason badge is absolutely positioned inside a wrapper around the row (bottom-right in comfortable, left of the date in compact), so a court row is pixel-identical to an inbox row apart from the badge.
+- **2026-09-23 D-10m (no amber token):** `tokens.css` has `--danger` but no warning colour; the badge's amber is `--acct-2` (the amber account swatch every theme defines) rather than a new token, so no contrast run and no shared-file edit.
+- **2026-09-23 D-10n (court prefs in their own store):** `fork_court_*` are read through `src/fork/court/prefs.svelte.ts`, not `stores/prefs.svelte.ts` (same reasoning as `calPrefs`: that file is shared). The main session may fold `courtPrefs.hydrate` into `prefs.hydrate` later.
+- **2026-09-23 D-10o (a day with nothing on him still counts as nudged):** `startCourtNudge` stamps `nudged_at` before asking for the line, so an empty on-me list does not re-check every minute until midnight. An undo toast on screen defers the nudge to the next minute (one toast at a time, PLAN 3.2).
+- **2026-09-23 D-10p (selecting a court view leaves search silently):** `selectCourt` clears `searchQuery` / `searchPrevFolderId` and selects the id, like a sidebar folder click does; it does not go through `exitSearch` (which would first select the previous folder and load a page for nothing).
+- **2026-09-23 D30 (7.5):** the grid uses the package's Svelte 5 `Calendar`
+- **2026-09-23 D31 (7.5):** the four calendar keys are handled by
+- **2026-09-23 D32 (7.5):** the titlebar chip + Meet button ship as
+- **2026-09-23 D33 (7.4/7.5):** the guests prompt returns `"all" | "none" |
+- **2026-09-23 D34 (7.5):** InviteCard matching: the invite UID is compared
+- **2026-09-23 D35 (7.7):** calendar prefs live in
+- **2026-09-23 D36 (7.6):** Meet now hands the clipboard a
+- **2026-09-23 D37 (8):** the recipient-zone abbreviation tries `en-GB`,
+- **2026-09-23 D38 (audit):** a gate audit found that deleting a draft left its held or scheduled `send` op queued; `drafts.id` is not AUTOINCREMENT, so the next draft could reuse the id and the orphaned op would ship its body. `delete_draft` now drops every queued `send` / `save_draft` op for that id (the hold cascades). Tested in `fork::scheduler`.
+- **2026-09-23 D39 (audit):** four smaller holes closed: the MCP enable read fails closed; a calendar op with no `send_updates` is refused, never defaulted; `fork_cal_patch` checks the Google connection before writing or queuing; MCP `create_event` falls back only to a calendar the user owns.
+- **2026-09-23 D40 (6.5 fixture):** the demo fixture's signature used `--` without the trailing space, so the scanner read the signature as the user's words. Real drafts carry the RFC 3676 `-- ` marker (compose.rs tests), so the fixture was corrected, not the scanner.

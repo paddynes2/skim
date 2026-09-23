@@ -158,6 +158,8 @@ export interface RenderedBody {
   /** Phishing heuristics; absent/null when nothing fired. */
   security?: SecuritySignals | null;
   translate?: TranslateState | null;
+  /** Fork (5.3): a quote/signature marker with visible content above it. */
+  hasFold?: boolean;
 }
 
 export interface SearchHit {

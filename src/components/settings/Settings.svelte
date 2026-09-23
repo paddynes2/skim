@@ -13,6 +13,8 @@
   import type { Account, Lightness, Temperature } from "../../lib/types";
   import ConnectForm from "../onboarding/ConnectForm.svelte";
   import SettingsFork from "../../fork/SettingsFork.svelte";
+  import SettingsCrm from "../../fork/crm/SettingsCrm.svelte";
+  import SettingsMcp from "../../fork/mcp/SettingsMcp.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -726,6 +728,8 @@
 
       <!-- Fork: list density, avatars, zoom, after-archive (src/fork). -->
       <SettingsFork />
+      <SettingsCrm />
+      <SettingsMcp />
 
       <section>
         <div class="microlabel">{t("settings.images")}</div>

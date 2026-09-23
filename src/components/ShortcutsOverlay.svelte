@@ -31,6 +31,10 @@
         // Fork (4.3)
         { label: t("fork.shortcuts.search_list"), keys: ["Shift Enter"] },
         { label: t("fork.shortcuts.search_close"), keys: ["Esc"] },
+        // Fork (9)
+        { label: t("fork.nav.crm"), keys: ["I"] },
+        // Fork (7.6)
+        { label: t("fork.nav.meet_now"), keys: ["M"] },
       ],
     },
     {
@@ -47,6 +51,23 @@
         { label: t("reading.forward"), keys: ["F"] },
         // Fork (3.2)
         { label: t("fork.shortcuts.undo"), keys: ["Z", "Ctrl Z"] },
+        // Fork (5, 6): composer keys.
+        { label: t("fork.shortcuts.send"), keys: ["Ctrl Enter"] },
+        { label: t("fork.shortcuts.smell_open"), keys: ["Alt Enter"] },
+      ],
+    },
+    {
+      // Fork (7.5): only while the calendar view is open.
+      title: t("fork.nav.calendar"),
+      rows: [
+        { label: t("fork.shortcuts.cal_day"), keys: ["D"] },
+        { label: t("fork.shortcuts.cal_week"), keys: ["W"] },
+        { label: t("fork.shortcuts.cal_month"), keys: ["M"] },
+        { label: t("fork.shortcuts.cal_agenda"), keys: ["A"] },
+        { label: t("fork.shortcuts.cal_today"), keys: ["T"] },
+        { label: t("fork.shortcuts.cal_next"), keys: ["J"] },
+        { label: t("fork.shortcuts.cal_prev"), keys: ["K"] },
+        { label: t("fork.shortcuts.cal_new"), keys: ["N"] },
       ],
     },
     {

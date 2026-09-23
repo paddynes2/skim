@@ -313,7 +313,11 @@ impl Engine {
     }
 
     async fn execute_op(&mut self, kind: &str, p: &Value) -> Result<()> {
-        let send = gapi::SendUpdates::parse(p["send_updates"].as_str().unwrap_or("none"))?;
+        // Never implicit: an op without an explicit choice is refused.
+        let send =
+            gapi::SendUpdates::parse(p["send_updates"].as_str().ok_or_else(|| {
+                SkimError::other("gcal_input", "calendar op without send_updates")
+            })?)?;
         match kind {
             "create" => {
                 let event_id = p["event_id"]
