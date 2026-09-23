@@ -14,6 +14,8 @@ pub struct AppState {
     /// cold-launched by a `skim://open` toast click.
     /// `(folder_id, thread_id, message_id)`.
     pub pending_open: std::sync::Mutex<Option<(i64, i64, i64)>>,
+    /// Everything the fork adds at runtime (see `fork/mod.rs`).
+    pub fork: crate::fork::ForkState,
 }
 
 impl AppState {
@@ -24,6 +26,7 @@ impl AppState {
             engines: Mutex::new(HashMap::new()),
             ai_tasks: std::sync::Mutex::new(HashMap::new()),
             pending_open: std::sync::Mutex::new(None),
+            fork: crate::fork::ForkState::new(),
         }
     }
 }

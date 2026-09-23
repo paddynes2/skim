@@ -3,6 +3,7 @@ pub mod badge;
 pub mod commands;
 pub mod db;
 pub mod error;
+pub mod fork;
 pub mod mail;
 pub mod net;
 pub mod notify;
@@ -322,6 +323,8 @@ pub fn run() {
                     }
                 }
             });
+
+            fork::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -400,6 +403,7 @@ pub fn run() {
             commands::settings::log_frontend_error,
             commands::settings::open_credential_manager,
             commands::settings::prepare_update,
+            // Fork commands (see fork/mod.rs).
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

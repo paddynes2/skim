@@ -503,10 +503,12 @@ pub fn sender_signals(conn: &Connection, message_id: i64) -> rusqlite::Result<Ve
                 .reply_to_addr
                 .as_deref()
                 .is_some_and(|rt| rt.eq_ignore_ascii_case(&embedded));
-            if registrable_domain(&embedded_domain) != registrable_domain(&from_domain)
+            // Written as the prose above reads; newer clippy wants it rearranged.
+            #[allow(clippy::nonminimal_bool)]
+            let mismatch = registrable_domain(&embedded_domain) != registrable_domain(&from_domain)
                 && !confirmed_by_reply_to
-                && !(established && !auth_failed)
-            {
+                && !(established && !auth_failed);
+            if mismatch {
                 out.push(reason("name_addr_mismatch", Some(embedded)));
             }
         }

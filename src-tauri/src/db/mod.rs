@@ -79,6 +79,7 @@ impl Db {
 
         assert_fts5(&conn)?;
         migrate(&mut conn, MIGRATIONS)?;
+        crate::fork::db::migrate(&mut conn)?;
 
         let conn = Arc::new(Mutex::new(conn));
         Ok(Self {
