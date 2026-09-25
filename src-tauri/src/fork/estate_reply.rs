@@ -25,6 +25,16 @@ fn valid_message_id(value: &str) -> bool {
         && !value[1..value.len() - 1].contains(['<', '>'])
 }
 
+fn wire_message_id(stored: &str) -> Option<String> {
+    // Skim's query writer stores normalized IDs without RFC angle brackets.
+    let wire = if stored.starts_with('<') {
+        stored.to_string()
+    } else {
+        format!("<{stored}>")
+    };
+    valid_message_id(&wire).then_some(wire)
+}
+
 fn ssh(request: Value) -> Result<Value> {
     let mut command = Command::new("ssh");
     command.args([
@@ -154,7 +164,7 @@ pub async fn fork_estate_reply(
     }
     let rfc = target
         .2
-        .filter(|s| valid_message_id(s))
+        .and_then(|s| wire_message_id(&s))
         .ok_or_else(|| error("This email has no usable Message-ID."))?;
     if action == "start" && target.4 {
         return Err(error(
@@ -169,6 +179,8 @@ pub async fn fork_estate_reply(
             .as_str()
             .filter(|s| valid_message_id(s))
             .ok_or_else(|| error("The saved draft has no verified Message-ID."))?
+            .trim_start_matches('<')
+            .trim_end_matches('>')
             .to_string();
         let account = target.1.clone();
         let local = state
@@ -227,5 +239,18 @@ mod tests {
         ] {
             assert!(!valid_message_id(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn maps_skims_normalized_identity_to_gateway_and_back() {
+        let stored = crate::mail::threading::normalize_msgid("<reply.123@example.com>").unwrap();
+        assert_eq!(stored, "reply.123@example.com");
+        let wire = wire_message_id(&stored).unwrap();
+        assert_eq!(wire, "<reply.123@example.com>");
+        assert_eq!(
+            crate::mail::threading::normalize_msgid(&wire).unwrap(),
+            stored
+        );
+        assert!(wire_message_id("bad\r\nheader@example.com").is_none());
     }
 }

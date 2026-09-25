@@ -44,7 +44,7 @@ def validate(request):
     if request.get("account", "").lower() != ACCOUNT:
         raise Refused("Estate replies are connected to patrick@autospark.ai only.")
     mid = request.get("messageId", "")
-    if not isinstance(mid, str) or not re.fullmatch(r"<[^<>\s\x00-\x1f]{1,990}@[^<>\s\x00-\x1f]+>", mid):
+    if not isinstance(mid, str) or len(mid) > 1000 or not re.fullmatch(r"<[^<>\s\x00-\x1f]{1,990}@[^<>\s\x00-\x1f]+>", mid):
         raise Refused("This email has no usable Message-ID.")
     instruction = request.get("instruction", "")
     if not isinstance(instruction, str) or len(instruction) > 2000 or "\x00" in instruction:
@@ -232,12 +232,16 @@ def generate(directory, request, message, thread):
     if proc.returncode or not output.exists():
         raise Refused("The estate agent could not finish. No draft was saved; try again.")
     candidate = json.loads(output.read_text())
-    body = candidate.get("body")
-    if not isinstance(body, str) or not body.strip() or len(body) > 40000:
-        raise Refused("The agent needs more direction before it can draft this reply.")
     for field in ("sources", "gaps"):
-        if not isinstance(candidate.get(field), list) or not all(isinstance(v, str) for v in candidate[field]):
+        if (not isinstance(candidate.get(field), list) or len(candidate[field]) > 20
+                or not all(isinstance(v, str) and len(v) <= 1000 for v in candidate[field])):
             raise Refused("The agent returned an invalid draft. Nothing was saved.")
+    body = candidate.get("body")
+    if not isinstance(body, str) or len(body) > 40000:
+        raise Refused("The agent returned an invalid draft. Nothing was saved.")
+    if not body.strip():
+        raise Refused("No draft saved. " + (" ".join(candidate["gaps"])[:2000]
+                      or "The agent needs more direction before it can draft this reply."))
     if not candidate["sources"]:
         raise Refused("The agent did not supply its context sources. Nothing was saved.")
     return candidate
@@ -318,7 +322,10 @@ def main():
         asyncio.run(worker(sys.argv[2]))
         return
     try:
-        request = json.loads(sys.stdin.buffer.read(8193))
+        payload = sys.stdin.buffer.read(16385)
+        if len(payload) > 16384:
+            raise Refused("Reply request is too large")
+        request = json.loads(payload)
         if not isinstance(request, dict):
             raise Refused("Invalid reply request")
         if request.get("action") == "check":
