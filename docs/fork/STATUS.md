@@ -20,8 +20,17 @@ messages already in Trash are not restored by this code change.
 
 Verified: 504 Rust tests passed (one existing ignored), warning-free clippy,
 Rust formatting, Svelte check (zero errors, one existing ComposeForm warning),
-frontend build and 38 Node tests. Installation receipt is recorded below after
-the signed local installer completes.
+frontend build, 38 Node tests and 96 contrast checks. Installed at 14:55 SAST
+September 25 from `d73f561`; the app relaunched successfully. The installer Minisign
+signature verifies against the configured updater public key. Installed executable
+bytes match the compiled repair exactly except for Tauri's expected
+`BUNDLE_TYPE_VAR_UNK` to `BUNDLE_TYPE_VAR_NSS` marker. Receipt:
+`.campaign-draft-install.json`; data backup:
+`C:/Users/Patrick/.skim-fork/backups/20260925-145409/`.
+
+The PowerShell build wrapper reported a native stderr information line as an
+error after the signed artifacts had been emitted; the signature and installed
+binary checks above establish the delivered build independently of that wrapper.
 
 ## Visible scope of this update
 
