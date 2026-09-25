@@ -130,3 +130,12 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/components/ComposeForm.svelte` | `loadedShape` / `shapeOf` / `edited()` | Esc, teardown and `flushServer` save only when the draft differs from what was loaded | an untouched reply was saved to Gmail Drafts (D41) |
 | `src/components/ComposeForm.svelte` | `onWordsChange` | a `/slots` line token in the rich editor opens Share availability | the rich editor is the default body (D45) |
 | `src-tauri/src/mail/sync.rs` | IDLE watcher, `idle_cycle`, incremental header refresh | bounded notification commands, 60 s heartbeat, reset/capped retry, notify before DONE, refresh after header commit; scripted IMAP recovery tests | September 25 latency candidate: silent sockets and delayed refresh can hide incoming mail; installation and live latency proof pending |
+
+## Estate reply (25 September 2026)
+
+| File | Hook | Why |
+|---|---|---|
+| `src-tauri/src/lib.rs` | Register `fork_estate_reply` | Fixed SSH start/status and exact draft lookup |
+| `src/components/ReadingPane.svelte` | Fork-owned action beside Reply; footer wraps | Estate workflow available at the email without a new screen |
+| `src/lib/i18n/locales/en.json` | `estate.*` labels | Localized action, progress and source disclosure |
+| `demo/mock/tauri-core.ts` | Opt-in estate fixtures | Exercise working/ready/error states without real mailbox calls |

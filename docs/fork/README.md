@@ -18,6 +18,10 @@ Where to read next:
 
 ## What the fork adds
 
+September 25 addition: **Draft reply** invokes Patrick's estate agent on
+Hetzner and brings its Gmail draft back into the normal composer. See
+`ESTATE-REPLY-PLAN.md` for the contract and `STATUS.md` for verified deployment.
+
 One line per phase. The phase numbers match `PLAN.md` section 2 and the
 `fork(<phase>):` commit prefixes.
 

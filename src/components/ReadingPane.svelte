@@ -16,6 +16,7 @@
   import { inlineReply } from "../fork/compose/inline.svelte";
   import { prefs } from "../fork/stores/prefs.svelte";
   import { crmFocus } from "../fork/crm/store.svelte";
+  import EstateReplyAction from "../fork/estate/ReplyAction.svelte";
 
   let detail = $state<ThreadDetail | null>(null);
   // Fork (1.2): no Archive in Sent / Trash / Spam.
@@ -636,6 +637,9 @@
     {/if}
 
     <footer class="actions">
+      {#if replyTarget && mail.accounts.some(a => a.id === mail.selectedThread?.accountId && a.email.toLowerCase() === "patrick@autospark.ai") && !["sent", "drafts", "trash", "junk"].includes(mail.selectedFolder?.role ?? "")}
+        {#key replyTarget.id}<EstateReplyAction messageId={replyTarget.id} />{/key}
+      {/if}
       {#if ai.keyPresent}
         <button class="ai-btn" onclick={openAsk} title={`${t("ai.ask")}  Q`}>✦ {t("ai.ask")}<kbd>Q</kbd></button>
       {/if}
@@ -1337,7 +1341,7 @@
 
   .actions {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     padding: 10px 36px 12px;

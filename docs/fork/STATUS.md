@@ -6,6 +6,37 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-09-25.**
 
+## Estate reply (built; desktop installation pending)
+
+`feat/estate-reply` adds Draft reply beside Reply for patrick@autospark.ai.
+An optional direction goes through the configured SSH route to a private adapter
+on hel-work, running the existing cc-nesbitt Codex profile in read-only mode.
+The agent reads the estate and returns draft text and source references. The
+adapter alone creates a Gmail draft through the same profile's os-google
+credential, verifies its body/recipient/reply target, and returns its RFC ID.
+Skim syncs Drafts and offers Open draft in the normal composer.
+
+Repeated requests reuse a private receipt; a per-thread lock prevents two adapter
+workers drafting the same conversation at once. Existing drafts and changed
+threads stop the save. A save with an unknown outcome is never automatically
+repeated. There is a small unavoidable race with edits in other mail clients
+between the last check and Gmail draft creation; Gmail exposes no conditional
+create here. No AI draft-update operation is claimed: ordinary edits use Skim.
+
+Verified: all 502 Rust tests; warning-free clippy; Svelte check (only the existing
+ComposeForm warning); frontend build; 34 Node tests; 96 contrast checks; nine
+Python adapter tests on Linux. Live own-profile Google read and a read-only
+Codex estate/voice probe passed. Demo UI working/ready/context/error states
+were exercised, with no added horizontal overflow at 768px. Desktop UI minimum
+size still follows the existing app. No screen-reader audit is claimed.
+
+The helper is installed at
+`/home/cc-nesbitt/.local/share/skim/estate_reply.py`; private receipts are under
+`~/.local/state/skim-replies`. No credentials, gateway policy, units or database
+schema were changed. No real email draft has been created during verification;
+the nominated-email end-to-end test is pending Patrick's choice.
+Build contract and operations: `ESTATE-REPLY-PLAN.md`.
+
 ## Inbox latency fix (installed September 25)
 
 The `fix/inbox-latency` worktree changes notification recovery in

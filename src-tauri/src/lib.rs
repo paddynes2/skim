@@ -412,6 +412,7 @@ pub fn run() {
             fork::commands::fork_removal_snapshot,
             fork::commands::fork_restore,
             fork::freshness::fork_sync_folder,
+            fork::estate_reply::fork_estate_reply,
             fork::search_query::fork_search_threads,
             fork::google::fork_google_client_get,
             fork::google::fork_google_client_set,

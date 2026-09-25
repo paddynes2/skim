@@ -180,6 +180,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
   switch (cmd) {
     // accounts
     case "list_accounts":
+      if (localStorage.getItem("skimdemo.estate")) return ok([{ ...db.ACCOUNT, email: "patrick@autospark.ai" }]);
       return ok(MULTI() ? [db.ACCOUNT, db.ACCOUNT2] : [db.ACCOUNT]);
     case "inbox_unread_counts":
       return ok(MULTI() ? { "acc-1": 3, "acc-2": 2 } : { "acc-1": 3 });
@@ -227,6 +228,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     case "list_threads":
     case "list_messages": {
       const list = db.THREADS_BY_FOLDER[args.folderId] ?? [];
+      if (localStorage.getItem("skimdemo.estate")) return ok(args.offset > 0 ? [] : listOpts(list, args).map((row: any) => ({ ...row, accountId: "acc-1" })));
       return ok(args.offset > 0 ? [] : listOpts(list, args));
     }
     case "get_thread":
@@ -268,6 +270,14 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(undefined);
     case "fork_sync_folder":
       return ok(undefined);
+    case "fork_estate_reply": {
+      const status = localStorage.getItem("skimdemo.estate") ?? "drafting";
+      if (status === "error") return Promise.reject({ message: "The estate is unavailable. Check your SSH connection." });
+      return ok({ status, localMessageId: status === "ready" ? 901 : null,
+        detail: status === "uncertain" ? "Check Gmail Drafts. This request will not save again automatically." : "",
+        sources: status === "ready" ? ["clients/example/project.md:12 (demo)"] : [],
+        gaps: status === "ready" ? ["Delivery date needs your confirmation (demo)."] : [] });
+    }
     case "fork_search_threads":
       return ok(forkSearchThreads(args.query ?? "", args.offset ?? 0));
     // ---- Phase 9 CRM (demo/mock/fork-crm.ts) ----

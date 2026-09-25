@@ -729,5 +729,17 @@
   "invite.reply_accepted": "{who} accepted this invitation",
   "invite.reply_declined": "{who} declined this invitation",
   "invite.reply_tentative": "{who} might attend",
-  "invite.reply_other": "{who} responded to this invitation"
+  "invite.reply_other": "{who} responded to this invitation",
+  "estate.draft": "Draft reply",
+  "estate.open": "Open draft",
+  "estate.working": "Preparing reply…",
+  "estate.check": "Check progress",
+  "estate.direction": "Add direction",
+  "estate.direction_label": "Optional direction for the reply",
+  "estate.direction_hint": "For example: suggest next week",
+  "estate.checking": "Checking the conversation…",
+  "estate.drafting": "Reading estate context and drafting…",
+  "estate.saving": "Saving your Gmail draft…",
+  "estate.syncing": "Draft saved. Waiting for mail sync…",
+  "estate.context": "Context used"
 }

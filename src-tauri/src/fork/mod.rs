@@ -9,6 +9,7 @@ pub mod compose;
 pub mod court;
 pub mod crm;
 pub mod db;
+pub mod estate_reply;
 pub mod fold;
 pub mod freshness;
 pub mod gmail;
