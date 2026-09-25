@@ -6,6 +6,22 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-09-25.**
 
+## Visible scope of this update
+
+The installed update adds an action inside an open conversation, not a new home
+screen or sidebar. Open an incoming email for `patrick@autospark.ai` and find
+**Draft reply** beside **Reply** at the bottom of the reading pane. It is hidden
+in Sent, Drafts, Trash and Junk and for unsupported accounts. Optional direction,
+progress, **Open draft** and **Context used** live with that action. See the
+[usage guide](ESTATE-REPLY-PLAN.md#using-it).
+
+On me and Waiting are unchanged. Patrick's September 25 feedback is that these
+screens are not useful; the research proposes retiring them as broad primary
+destinations. That simplification, specific follow-up reminders and a bounded
+Finish session remain unimplemented. The estate reply feature is the delivered
+slice of the broader proposal. The inbox recovery fix is also installed; instant
+end-to-end mail delivery has not been established.
+
 ## Estate reply (installed September 25)
 
 `feat/estate-reply` adds Draft reply beside Reply for patrick@autospark.ai.

@@ -4,6 +4,13 @@ Written 2026-09-23 against upstream `nikserg/skim` @ `cd60077` (v1.0.30). Every
 file:line below was read in the source for this plan, not taken from a summary.
 Line numbers drift once work starts; the symbol names are what to search for.
 
+This is the original phase plan, retained as implementation history. Current
+installed scope and open work live in [STATUS.md](STATUS.md). The September 25
+estate-reply addition has its own [build contract](ESTATE-REPLY-PLAN.md).
+The later [product research](COMPETITOR-RESEARCH-2026-09-25.md) records Patrick's
+request to replace the broad On me / Waiting destinations; that redesign has
+not been implemented, and Phase 10 below describes the existing behavior.
+
 Owner: Patrick Nesbitt. Daily account: `patrick@autospark.ai` (Google Workspace,
 IMAP app password, `accounts.provider = 'custom'`, theme `warm-dark`).
 Live data: `%APPDATA%\com.skim.app\skim.db` (28,827 messages, 24 folders).

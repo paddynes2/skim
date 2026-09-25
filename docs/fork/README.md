@@ -9,7 +9,9 @@ upstream file is one row in `docs/fork/TOUCHLIST.md`.
 Where to read next:
 
 - `STATUS.md`: where the fork stands today and every open item. The only status file.
-- `PLAN.md`: the full build plan, phase by phase, with the file and line facts it rests on.
+- `PLAN.md`: the original build plan, phase by phase, with the file and line facts it rests on.
+- [Estate reply](ESTATE-REPLY-PLAN.md): how to use Draft reply, its implementation contract and operations.
+- [Competitor research](COMPETITOR-RESEARCH-2026-09-25.md): proposed product direction; implementation status lives in STATUS.md.
 - `DECISIONS.md`: every decision and every deviation from the plan, dated.
 - `TOUCHLIST.md`: every upstream file the fork touches, one line each.
 - `AGENT-RULES.md` and `pending/`: how the parallel build agents worked and what each handed back. The handbacks are kept as the record that code comments point to.
@@ -20,7 +22,11 @@ Where to read next:
 
 September 25 addition: **Draft reply** invokes Patrick's estate agent on
 Hetzner and brings its Gmail draft back into the normal composer. See
-`ESTATE-REPLY-PLAN.md` for the contract and `STATUS.md` for verified deployment.
+[ESTATE-REPLY-PLAN.md](ESTATE-REPLY-PLAN.md) for usage and the contract, and
+[STATUS.md](STATUS.md) for verified deployment. Open an incoming email in
+`patrick@autospark.ai`; **Draft reply** is beside **Reply** at the bottom of the
+reading pane. The inbox and sidebar still look the same. On me and Waiting
+remain present; their replacement and the broader redesign are not implemented.
 
 One line per phase. The phase numbers match `PLAN.md` section 2 and the
 `fork(<phase>):` commit prefixes.

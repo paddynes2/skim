@@ -129,7 +129,7 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/styles/tokens.css` | two light theme blocks | `--unread` #1f6fd1 -> #1a62c0 | variant C uses it as text, so it must clear 4.5:1 (D46) |
 | `src/components/ComposeForm.svelte` | `loadedShape` / `shapeOf` / `edited()` | Esc, teardown and `flushServer` save only when the draft differs from what was loaded | an untouched reply was saved to Gmail Drafts (D41) |
 | `src/components/ComposeForm.svelte` | `onWordsChange` | a `/slots` line token in the rich editor opens Share availability | the rich editor is the default body (D45) |
-| `src-tauri/src/mail/sync.rs` | IDLE watcher, `idle_cycle`, incremental header refresh | bounded notification commands, 60 s heartbeat, reset/capped retry, notify before DONE, refresh after header commit; scripted IMAP recovery tests | September 25 latency candidate: silent sockets and delayed refresh can hide incoming mail; installation and live latency proof pending |
+| `src-tauri/src/mail/sync.rs` | IDLE watcher, `idle_cycle`, incremental header refresh | bounded notification commands, 60 s heartbeat, reset/capped retry, notify before DONE, refresh after header commit; scripted IMAP recovery tests | September 25 inbox recovery fix installed; startup and connection checks passed, real-world end-to-end arrival latency remains unverified (STATUS.md) |
 
 ## Estate reply (25 September 2026)
 

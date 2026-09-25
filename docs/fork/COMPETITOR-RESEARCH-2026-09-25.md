@@ -10,7 +10,13 @@ The strongest three investments are prepared replies with evidence, specific fol
 
 **Patrick's direct feedback during this research:** the existing “On me” and “Waiting” screens are useless. This overrides the initial assumption that those screens were useful foundations. Retire them as broad primary destinations in the proposed design; do not spend the next cycle polishing their labels or adding more inferred threads. Validate explicit per-conversation requests first. Only introduce an aggregate view if repeated use demonstrates a need. No screens were removed during this research task.
 
-This is a product proposal, not a claim that these features have been implemented. The separate inbox-latency change is tracked in STATUS.md.
+This remains a product proposal. A subsequent bounded implementation delivered
+on-demand **Draft reply** using the existing Hetzner estate agent, with source
+references and a normal Gmail draft. It did not implement the broader prepared
+reply experience, follow-up reminders, Finish sessions, or removal of On me and
+Waiting. The installed reply feature and inbox recovery change are tracked in
+[STATUS.md](STATUS.md); usage and boundaries are in
+[ESTATE-REPLY-PLAN.md](ESTATE-REPLY-PLAN.md).
 
 ## Method and limits
 

@@ -6,6 +6,32 @@ One action beside Reply asks Patrick's existing Hetzner estate agent to investig
 the selected email and save a normal Gmail reply draft in Patrick's voice. Skim
 syncs and opens that exact draft. No sends and no second context index.
 
+## Using it
+
+1. Open an incoming conversation in `patrick@autospark.ai`.
+2. At the bottom of the reading pane, beside **Reply**, choose **Draft reply**.
+   To guide it, expand **Add direction** and enter your intent before starting.
+3. Leave the investigation running while it reads the thread and relevant estate
+   sources. Leaving the conversation does not cancel the remote work.
+4. When saved and synced, choose **Open draft** to review and edit in Skim's
+   normal composer. **Context used** shows source references and missing facts.
+
+The action creates a draft only. It does not automatically send, continuously
+prepare every incoming email, or regenerate an edited draft. A conversation
+with an existing draft is protected; continue in Drafts. After a connection
+error, **Check progress** reconnects to the same request. An uncertain save
+requires checking Drafts before retrying, as described under Operations below.
+
+If Skim looks unchanged, open a message: the action is in the reading pane,
+not the sidebar. It is hidden for other accounts and in Sent, Drafts, Trash and
+Junk. Estate access uses the existing SSH connection and requires connectivity.
+No separate AI-provider key in Skim is needed for this action.
+
+This feature preserves the existing layout. On me and Waiting are still present;
+replacing those screens and the wider competitor-inspired redesign are outside
+this implementation. The current deployment and remaining work are recorded in
+[STATUS.md](STATUS.md).
+
 ## Plan, 25 September 2026
 
 1. Add a fork-owned Python SSH adapter, executed as the enrolled `cc-nesbitt`
@@ -34,7 +60,7 @@ syncs and opens that exact draft. No sends and no second context index.
 New: `scripts/fork/estate_reply.py`, its Python tests,
 `src-tauri/src/fork/estate_reply.rs`, `src/fork/estate/ReplyAction.svelte`, and
 this plan. Hooks: `src-tauri/src/fork/mod.rs`, `src-tauri/src/lib.rs`,
-`src/components/ReadingPane.svelte`, `src/locales/en.json` (or actual locale path).
+`src/components/ReadingPane.svelte`, `src/lib/i18n/locales/en.json`.
 Update fork STATUS/TOUCHLIST/README with final evidence. No schema migrations,
 credentials, gateway permissions or daemon/unit changes. Existing installed SSH
 access is reused. Remote helper installation is a versioned user-owned code copy.
