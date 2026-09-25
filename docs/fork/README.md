@@ -20,6 +20,21 @@ Where to read next:
 
 ## What the fork adds
 
+### Campaign drafts
+
+Surface campaign drafts are temporary storage for the campaign scheduler, not a
+manual approval queue. Leave dispatch to the approved campaign. If you send one
+manually, the campaign reconciles verified Sent evidence into Rebound. Deleting
+one does not request a replacement; the affected lead requires review.
+
+Skim opens only actual draft messages from a Drafts conversation. Drafts row,
+bulk and Move actions affect its drafts, leaving sent copies alone. This also
+applies in the unified mailbox. The fix does not restore messages previously
+moved to Trash. See [STATUS.md](STATUS.md#campaign-drafts-repair-september-25)
+for the verified installation and backup.
+
+### Estate reply
+
 September 25 addition: **Draft reply** invokes Patrick's estate agent on
 Hetzner and brings its Gmail draft back into the normal composer. See
 [ESTATE-REPLY-PLAN.md](ESTATE-REPLY-PLAN.md) for usage and the contract, and
