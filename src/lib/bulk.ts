@@ -5,6 +5,7 @@ import { mail, rowKey } from "./stores/mail.svelte";
 import { ui } from "./stores/ui.svelte";
 import type { ThreadRow } from "./types";
 import { markRowsRead, removeRows } from "../fork/actions";
+import { draftFolderIds, scopedDraftIds } from "../fork/compose/draft-scope";
 
 export type BulkAction = "archive" | "delete" | "spam" | "read";
 
@@ -19,6 +20,12 @@ const CHUNK = 500;
  *  row stands for a whole conversation, whose messages have to be looked up —
  *  batched, because doing it per row would be one IPC round trip per tick. */
 async function messageIdsFor(rows: ThreadRow[]): Promise<number[]> {
+  const folder = mail.selectedFolder;
+  if (folder?.role === "drafts") {
+    const folders = await draftFolderIds(folder.id, mail.accounts.map((a) => a.id));
+    const ids = (await Promise.all(rows.map((r) => scopedDraftIds(r.id, r.messageId ?? null, folders)))).flat();
+    return mail.selectedFolder?.id === folder.id ? ids : [];
+  }
   const ids = rows.filter((r) => r.messageId != null).map((r) => r.messageId as number);
   const threadIds = rows.filter((r) => r.messageId == null).map((r) => r.id);
   for (let i = 0; i < threadIds.length; i += CHUNK) {

@@ -6,6 +6,23 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-09-25.**
 
+## Campaign drafts repair (September 25)
+
+Drafts rows now open a message from the real Drafts folder, including in the
+unified mailbox. A newer Sent copy in the same conversation cannot become a
+draft. The backend verifies folder membership before returning a cached local
+draft and again after fetching its body. Moving away invalidates an outstanding
+editor lookup.
+
+Drafts row actions, bulk actions and Move resolve only draft message IDs; deleting
+a grouped draft no longer moves the conversation's sent copies to Trash. Existing
+messages already in Trash are not restored by this code change.
+
+Verified: 504 Rust tests passed (one existing ignored), warning-free clippy,
+Rust formatting, Svelte check (zero errors, one existing ComposeForm warning),
+frontend build and 38 Node tests. Installation receipt is recorded below after
+the signed local installer completes.
+
 ## Visible scope of this update
 
 The installed update adds an action inside an open conversation, not a new home

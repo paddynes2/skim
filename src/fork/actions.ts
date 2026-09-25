@@ -9,6 +9,7 @@ import { mail, rowKey } from "../lib/stores/mail.svelte";
 import type { ThreadRow } from "../lib/types";
 import { prefs } from "./stores/prefs.svelte";
 import { undo } from "./stores/undo.svelte";
+import { draftFolderIds, scopedDraftIds } from "./compose/draft-scope";
 
 /** Roles in which "archive" makes no sense: the mail is already filed away
  *  (Sent), or leaving (Trash, Spam). Gmail would create an "Archive" label. */
@@ -153,8 +154,17 @@ export type Action =
 
 /** Resolve the thread's message ids and run one action. The single entry the
  *  keyboard handler, hover buttons and palette use. */
+export async function messageIdsForThread(thread: ThreadRow): Promise<number[]> {
+  const folder = mail.selectedFolder;
+  const ids = folder?.role === "drafts"
+    ? await scopedDraftIds(thread.id, thread.messageId ?? null,
+      await draftFolderIds(folder.id, mail.accounts.map((a) => a.id)))
+    : await api.threadMessageIds(thread.id);
+  return mail.selectedFolder?.id === folder?.id ? ids : [];
+}
+
 export async function act(thread: ThreadRow, action: Action): Promise<void> {
-  const ids = await api.threadMessageIds(thread.id);
+  const ids = await messageIdsForThread(thread);
   if (ids.length === 0) return;
   // Re-read the row: it may have changed while the ids were resolved.
   const live = mail.threads.find((t) => t.id === thread.id) ?? thread;

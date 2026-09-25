@@ -13,6 +13,7 @@
   import type { SearchHit } from "../lib/types";
   import AiChat from "./AiChat.svelte";
   import { forkCommands, gotoHint } from "../fork/palette"; // Fork (3.3)
+  import { messageIdsForThread } from "../fork/actions";
 
   let input = $state("");
   let hits = $state<SearchHit[]>([]);
@@ -97,7 +98,7 @@
         label: t("palette.move"),
         hint: "V",
         run: async () => {
-          const ids = await api.threadMessageIds(thread.id);
+          const ids = await messageIdsForThread(thread);
           if (ids.length > 0)
             ui.openMove({ rowKeys: mail.rowKeysForThread(thread.id), messageIds: ids });
         },

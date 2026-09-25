@@ -473,6 +473,7 @@ pub async fn edit_draft(state: State<'_, AppState>, message_id: i64) -> Result<D
         .db
         .call(move |conn| {
             use rusqlite::OptionalExtension;
+            crate::fork::compose::require_draft_message(conn, message_id)?;
             if let Some(d) = drafts::find_by_origin(conn, message_id)? {
                 return Ok(Some(d));
             }
@@ -539,6 +540,7 @@ pub async fn edit_draft(state: State<'_, AppState>, message_id: i64) -> Result<D
         .db
         .call(move |conn| {
             use rusqlite::OptionalExtension;
+            crate::fork::compose::require_draft_message(conn, message_id)?;
             let row: Option<SourceRow> = conn
                 .query_row(
                     "SELECT account_id, subject, to_addrs, cc_addrs, message_id, in_reply_to

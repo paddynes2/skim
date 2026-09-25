@@ -133,6 +133,14 @@ a hook call, a parameter, a prop; this table is what makes
 
 ## Estate reply (25 September 2026)
 
+Campaign draft repair, 25 September 2026: `src/App.svelte` resolves only Drafts
+messages and invalidates stale editor lookups; `src-tauri/src/commands/compose.rs`
+checks draft membership before cache reuse and after fetching the body through
+`fork::compose::require_draft_message`. `src/lib/bulk.ts` and
+`src/components/CommandPalette.svelte` route Drafts actions through the fork-owned
+folder-scoped message resolver. This prevents reopening sent mail as a draft and
+moving sent copies to Trash while deleting grouped drafts.
+
 | File | Hook | Why |
 |---|---|---|
 | `src-tauri/src/lib.rs` | Register `fork_estate_reply` | Fixed SSH start/status and exact draft lookup |

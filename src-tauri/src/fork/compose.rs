@@ -15,6 +15,17 @@ use crate::state::AppState;
 use rusqlite::{Connection, OptionalExtension};
 use tauri::State;
 
+/// Recheck under the database lock: a thread can contain Sent and Drafts copies,
+/// and a sync may remove the draft while its body is being fetched.
+pub fn require_draft_message(conn: &Connection, message_id: i64) -> rusqlite::Result<()> {
+    conn.query_row(
+        "SELECT 1 FROM messages m JOIN folders f ON m.folder_id = f.id
+         WHERE m.id = ?1 AND f.role = 'drafts' AND m.account_id = f.account_id",
+        [message_id],
+        |_| Ok(()),
+    )
+}
+
 /// The stored HTML of the user's words, if the rich editor wrote one.
 pub fn get_words_html(conn: &Connection, draft_id: i64) -> rusqlite::Result<Option<String>> {
     conn.query_row(
@@ -211,6 +222,32 @@ pub async fn outgoing_html(db: &Db, draft_id: i64) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_live_drafts_can_be_opened_for_editing() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            conn.execute_batch(
+                "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
+                   VALUES ('a1','me@x','gmail','imap.gmail.com','smtp.gmail.com',0);
+                 INSERT INTO folders (id, account_id, imap_name, role, display_name, sort_order)
+                   VALUES (1,'a1','Drafts','drafts','Drafts',0), (2,'a1','Sent','sent','Sent',0);
+                 INSERT INTO messages (id, account_id, folder_id, uid, date, is_read, is_starred)
+                   VALUES (7,'a1',1,1,10,1,0), (8,'a1',2,1,11,1,0);",
+            )?;
+            require_draft_message(conn, 7)?;
+            assert!(require_draft_message(conn, 8).is_err());
+            assert!(require_draft_message(conn, 99).is_err());
+            // A draft sent during the asynchronous body fetch fails the second check.
+            conn.execute(
+                "UPDATE messages SET folder_id = 2, uid = 2 WHERE id = 7",
+                [],
+            )?;
+            assert!(require_draft_message(conn, 7).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
     use crate::db::models::Account;
     use crate::mail::smtp::{build_message_with_html, OutgoingRefs};
     use mail_parser::{MessageParser, MimeHeaders};

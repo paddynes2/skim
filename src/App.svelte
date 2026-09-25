@@ -15,7 +15,7 @@
   import type { ChatSession } from "./lib/ai-chat";
   import { api, reportError, type Citation } from "./lib/api";
   import { bulkAct, bulkMove } from "./lib/bulk";
-  import { act, archiveOffered } from "./fork/actions";
+  import { act, archiveOffered, messageIdsForThread } from "./fork/actions";
   import { prefs } from "./fork/stores/prefs.svelte";
   import { applyZoom, zoomKey } from "./fork/zoom";
   import { forkKey } from "./fork/keys";
@@ -26,6 +26,8 @@
   import { prepOpen } from "./fork/prep/open.svelte";
   import { startPrepReminder } from "./fork/prep/reminder";
   import { replyInlineOrWindow } from "./fork/compose/inline.svelte";
+  import { draftMessageId } from "./fork/compose/draft-selection";
+  import { draftFolderIds } from "./fork/compose/draft-scope";
   import SendHeld from "./fork/compose/SendHeld.svelte";
   import ScheduledList from "./fork/scheduled/ScheduledList.svelte";
   import { SCHEDULED_FOLDER_ID } from "./fork/compose/api";
@@ -147,22 +149,20 @@
     const folder = mail.selectedFolder;
     const threadId = mail.selectedThreadId;
     const messageId = mail.selectedMessageId;
+    const token = ++draftResolveToken;
+    draftEditorId = null;
+    draftOrigin = null;
     if (folder?.role !== "drafts" || threadId === null) {
-      draftEditorId = null;
-      draftOrigin = null;
       return;
     }
-    const token = ++draftResolveToken;
+    const accountIds = mail.accounts.map((a) => a.id);
     void (async () => {
       try {
-        // Grouped rows carry no messageId — resolve the draft message from the
-        // thread (its latest message).
-        let msgId = messageId;
-        if (msgId == null) {
-          const detail = await api.getThread(threadId);
-          msgId = detail.messages[detail.messages.length - 1]?.id ?? null;
-        }
-        if (msgId == null) return;
+        const detail = await api.getThread(threadId);
+        // Unified Drafts has a virtual id; resolve the real folders first.
+        const draftFolders = await draftFolderIds(folder.id, accountIds);
+        const msgId = draftMessageId(detail.messages, draftFolders, messageId);
+        if (msgId == null || token !== draftResolveToken) return;
         const draft = await api.editDraft(msgId);
         if (token !== draftResolveToken) return; // selection moved on
         draftOrigin = msgId;
@@ -308,7 +308,7 @@
     }
     const thread = mail.selectedThread;
     if (!thread) return;
-    const ids = await api.threadMessageIds(thread.id);
+    const ids = await messageIdsForThread(thread);
     if (ids.length === 0) return;
     ui.openMove({ rowKeys: mail.rowKeysForThread(thread.id), messageIds: ids });
   }
