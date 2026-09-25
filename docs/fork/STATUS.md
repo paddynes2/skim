@@ -6,7 +6,7 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-09-25.**
 
-## Estate reply (built; desktop installation pending)
+## Estate reply (installed September 25)
 
 `feat/estate-reply` adds Draft reply beside Reply for patrick@autospark.ai.
 An optional direction goes through the configured SSH route to a private adapter
@@ -23,7 +23,7 @@ repeated. There is a small unavoidable race with edits in other mail clients
 between the last check and Gmail draft creation; Gmail exposes no conditional
 create here. No AI draft-update operation is claimed: ordinary edits use Skim.
 
-Verified: all 502 Rust tests; warning-free clippy; Svelte check (only the existing
+Verified: all 503 Rust tests; warning-free clippy; Svelte check (only the existing
 ComposeForm warning); frontend build; 34 Node tests; 96 contrast checks; nine
 Python adapter tests on Linux. Live own-profile Google read and a read-only
 Codex estate/voice probe passed. Demo UI working/ready/context/error states
@@ -33,8 +33,23 @@ size still follows the existing app. No screen-reader audit is claimed.
 The helper is installed at
 `/home/cc-nesbitt/.local/share/skim/estate_reply.py`; private receipts are under
 `~/.local/state/skim-replies`. No credentials, gateway policy, units or database
-schema were changed. No real email draft has been created during verification;
-the nominated-email end-to-end test is pending Patrick's choice.
+schema were changed. A real reply draft was generated for Jon Perper after
+reading the ZLed client files, complete thread and writing/voice guidance. The
+adapter verified the Gmail draft's body, recipient and reply target. Two other
+conversations were correctly declined because Patrick had already replied.
+Nothing was sent. This short acknowledgement validates the plumbing and source
+retrieval; it does not establish quality on complex commercial replies.
+
+The signed 1.1.0 installer built from code commit `e2124a4` exited 0. Skim
+relaunched responsive with three established IMAP connections and its MCP
+listener; the panic log remained 385 bytes. The installed executable matches
+the release build except Tauri's expected UNK-to-NSS bundle marker.
+Installed SHA256: `8bb4cf6d713783f9cfe2f59e744a9baf3788dd249129fbb4b9dc145d4a75c2e6`.
+Previous executable and database backup:
+`C:\Users\Patrick\.skim-fork\backups\estate-reply-20260925-135936`.
+Native desktop click-through of the new action has not been automated; its UI
+states were exercised using fictional demo data, and real SSH/model/Gmail
+integration was exercised separately.
 Build contract and operations: `ESTATE-REPLY-PLAN.md`.
 
 ## Inbox latency fix (installed September 25)
@@ -77,11 +92,11 @@ this external worktree is outside its enrolled source views.
 
 ## Where it is
 
-- Branch `paddy` on `paddynes2/skim`. The last code commit is `288df1d`;
+- Branch `paddy` on `paddynes2/skim`. The last code commit is `e2124a4`;
   commits after it change only docs and comments.
-- Installed on Patrick's machine: version 1.1.0, built from `288df1d` on September 25.
+- Installed on Patrick's machine: version 1.1.0, built from `e2124a4` on September 25.
   Backup and startup verification are recorded above.
-- Release `v1.1.0` on GitHub is tagged at `9884f0d`, two commits behind the
+- Release `v1.1.0` on GitHub is tagged at `9884f0d`, behind the
   installed build. It lacks the `/slots` rich-editor fix and list variant C.
   The installed copy will not update itself backwards, because both builds say
   1.1.0. The next release should be 1.1.1.

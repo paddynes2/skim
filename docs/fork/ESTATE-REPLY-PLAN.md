@@ -77,6 +77,19 @@ access is reused. Remote helper installation is a versioned user-owned code copy
   writing-style README and constitutional writing instruction. It was synthetic,
   not evidence of quality on a real client email.
 
+- Final verification: 503 Rust tests passed, one live-only test ignored in the
+  normal suite and passed separately over SSH; Clippy with warnings denied;
+  nine Python boundary tests passed against the installed helper; 34 Node
+  tests and 96 contrast checks passed. Svelte check retains one pre-existing
+  ComposeForm warning. Frontend and signed NSIS builds succeeded.
+- Live draft: Jon Perper's latest acknowledgement was selected after reading
+  the complete thread. The agent cited client files, project memory and voice
+  guidance. The adapter saved once and verified the draft body and headers.
+  Two already-answered conversations produced no draft. Nothing was sent.
+- Installed code `e2124a4` on September 25. Backup, binary identity and startup
+  checks are in STATUS.md. This was separate live transport/Gmail verification
+  and demo UI verification, not an automated native desktop click-through.
+
 ## Operations and limits
 
 The fixed SSH route is `clouddev-admin`; its configured host-key checking stays
