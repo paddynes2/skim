@@ -6,7 +6,7 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-09-25.**
 
-## Inbox latency candidate (not installed)
+## Inbox latency fix (installed September 25)
 
 The `fix/inbox-latency` worktree changes notification recovery in
 `src-tauri/src/mail/sync.rs`: 60-second IDLE heartbeats, 10-second bounds on
@@ -15,9 +15,11 @@ subscription, worker wake-up before DONE, and list refresh immediately after
 new headers are committed. Disconnect error codes go to the bounded
 `skim-sync.log`, without account identifiers or message content.
 
-The installed 1.1.0 executable was inspected on September 25 and remains
-unchanged. Its ordinary sync tracing is not persisted, so the cause of Patrick's
-reported delay and end-to-end arrival latency are not established. Full-folder
+The updated 1.1.0 executable from code commit `288df1d` was installed and
+relaunched on September 25. The prior executable and database/WAL were backed
+up to `C:\Users\Patrick\.skim-fork\backups\inbox-latency-20260925-130703`.
+The cause of Patrick's original reported delay and real-world end-to-end
+arrival latency are not established. Full-folder
 sweeps and queued operations still share the sync worker; this change is not an
 end-to-end latency guarantee. Normal notifications do not wait for the heartbeat.
 
@@ -28,16 +30,26 @@ reset. `npm run check` passed (one pre-existing ComposeForm reactivity warning),
 `npm run build` passed, all 34 Node tests passed, all 96 contrast checks passed,
 and `cargo fmt --check` passed. `cargo clippy --all-targets --locked -- -D warnings`
 passed with no warnings.
-Release/install and live arrival validation remain pending. The OS graph accepted
+The NSIS build and updater signature succeeded; silent installation exited 0.
+Installed binary SHA256 is
+`8cd80244f50d15313b771b597957dd5413fe13c2935fbc3ee86a685068e5a482`.
+Byte comparison with the release executable found only Tauri's expected
+three-byte bundle marker difference (`UNK` to `NSS`). The relaunched process was
+responsive, with three established IMAP/993 connections and its local MCP/8342
+listener. The existing panic log remained 385 bytes; no sync error log was
+created during this startup check. No test email was sent. Live arrival latency
+validation remains pending; these checks establish installation and connection,
+not an instant-delivery guarantee. No new GitHub release was published.
+The OS graph accepted
 verification receipt `verif:359907031586102e57bf`, but reports `no_view` because
 this external worktree is outside its enrolled source views.
 
 ## Where it is
 
-- Branch `paddy` on `paddynes2/skim`. The last code commit is `75c57e0`;
+- Branch `paddy` on `paddynes2/skim`. The last code commit is `288df1d`;
   commits after it change only docs and comments.
-- Installed on Patrick's machine: version 1.1.0, built from `75c57e0` at 14:00.
-  The database was backed up first to `%USERPROFILE%\.skim-fork\backups\20260923-140032\`.
+- Installed on Patrick's machine: version 1.1.0, built from `288df1d` on September 25.
+  Backup and startup verification are recorded above.
 - Release `v1.1.0` on GitHub is tagged at `9884f0d`, two commits behind the
   installed build. It lacks the `/slots` rich-editor fix and list variant C.
   The installed copy will not update itself backwards, because both builds say
