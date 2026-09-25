@@ -4,7 +4,33 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-09-23.**
+**As of 2026-09-25.**
+
+## Inbox latency candidate (not installed)
+
+The `fix/inbox-latency` worktree changes notification recovery in
+`src-tauri/src/mail/sync.rs`: 60-second IDLE heartbeats, 10-second bounds on
+SELECT/IDLE/DONE, a 30-second maximum reconnect delay reset after a successful
+subscription, worker wake-up before DONE, and list refresh immediately after
+new headers are committed. Disconnect error codes go to the bounded
+`skim-sync.log`, without account identifiers or message content.
+
+The installed 1.1.0 executable was inspected on September 25 and remains
+unchanged. Its ordinary sync tracing is not persisted, so the cause of Patrick's
+reported delay and end-to-end arrival latency are not established. Full-folder
+sweeps and queued operations still share the sync worker; this change is not an
+end-to-end latency guarantee. Normal notifications do not wait for the heartbeat.
+
+Validation on September 25: full `cargo test --locked` passed all 501 tests,
+including four scripted IMAP tests for a silent IDLE start, arrival followed by
+a stalled DONE, catch-up without a push, and successful notification/backoff
+reset. `npm run check` passed (one pre-existing ComposeForm reactivity warning),
+`npm run build` passed, all 34 Node tests passed, all 96 contrast checks passed,
+and `cargo fmt --check` passed. `cargo clippy --all-targets --locked -- -D warnings`
+passed with no warnings.
+Release/install and live arrival validation remain pending. The OS graph accepted
+verification receipt `verif:359907031586102e57bf`, but reports `no_view` because
+this external worktree is outside its enrolled source views.
 
 ## Where it is
 

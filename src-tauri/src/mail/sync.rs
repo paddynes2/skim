@@ -30,7 +30,10 @@ const BACKFILL_CHUNKS_PER_PASS: u32 = 10;
 // IDLE keeps the inbox instant, so this poll only backfills the slow-changing
 // rest (other folders, read state from other devices) — it can run infrequently.
 const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
-const IDLE_REISSUE: std::time::Duration = std::time::Duration::from_secs(25 * 60);
+// A short heartbeat detects sockets blackholed by sleep or a network change.
+const IDLE_REISSUE: std::time::Duration = std::time::Duration::from_secs(60);
+const IDLE_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const IDLE_RETRY_MAX_SECS: u64 = 30;
 // Ceiling on one whole trip to the server for a body — login, SELECT and the
 // FETCH — so a stalled socket can't wedge the worker (and thus every later
 // command) indefinitely.
@@ -1197,6 +1200,13 @@ impl Engine {
                 )
                 .await?;
             changed |= !inserted.is_empty();
+            // Headers are already committed. Repaint before flag reconciliation
+            // or history backfill can delay (or fail) the rest of this pass.
+            if !inserted.is_empty() {
+                let _ = self
+                    .app
+                    .emit("mail:updated", json!({ "folderId": folder_id }));
+            }
             if !inserted.is_empty() && is_inbox {
                 // Only mail the server still holds unread is news. A message
                 // read on another device before this one ever saw it (a
@@ -2616,14 +2626,18 @@ fn spawn_idle_watcher(
             if tx.is_closed() {
                 break;
             }
-            match idle_session(&account, &tx, &oauth_token).await {
+            match idle_session(&account, &tx, &oauth_token, &mut backoff).await {
                 Ok(()) => backoff = 5,
                 Err(e) => {
                     tracing::debug!(error = %e, "IDLE connection ended");
+                    crate::append_log(
+                        "skim-sync.log",
+                        &format!("IDLE disconnected ({}); retry in {backoff}s", e.code()),
+                    );
                 }
             }
             tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
-            backoff = (backoff * 2).min(300);
+            backoff = (backoff * 2).min(IDLE_RETRY_MAX_SECS);
         }
     });
 }
@@ -2632,6 +2646,7 @@ async fn idle_session(
     account: &Account,
     tx: &mpsc::UnboundedSender<SyncCommand>,
     oauth_token: &Arc<Mutex<Option<(String, i64)>>>,
+    backoff: &mut u64,
 ) -> Result<()> {
     // Same lock discipline as `Engine::session`: Microsoft rotates the refresh
     // token on every use and `resolve_credentials` persists the new one, so two
@@ -2648,9 +2663,9 @@ async fn idle_session(
         &creds,
     )
     .await?;
-    session
-        .select("INBOX")
+    tokio::time::timeout(IDLE_COMMAND_TIMEOUT, session.select("INBOX"))
         .await
+        .map_err(|_| SkimError::other("network", "IDLE SELECT timed out"))?
         .map_err(|e| SkimError::other("imap", e.to_string()))?;
 
     // Sync once on every (re)connect: mail that arrived while the IDLE
@@ -2664,19 +2679,160 @@ async fn idle_session(
             let _ = session.logout().await;
             return Ok(());
         }
-        let mut idle = session.idle();
-        idle.init().await.map_err(imap_err)?;
-        let (wait, _interrupt) = idle.wait_with_timeout(IDLE_REISSUE);
-        let outcome = wait.await;
-        session = idle.done().await.map_err(imap_err)?;
-        match outcome {
-            Ok(async_imap::extensions::idle::IdleResponse::NewData(_)) => {
-                tracing::info!(account = %account.email, "IDLE new data; syncing inbox");
-                let _ = tx.send(SyncCommand::SyncInbox);
+        session = idle_cycle(session, tx, IDLE_REISSUE, IDLE_COMMAND_TIMEOUT, backoff).await?;
+    }
+}
+
+/// Own the session so a timed-out command drops the desynchronised socket.
+async fn idle_cycle<T>(
+    session: async_imap::Session<T>,
+    tx: &mpsc::UnboundedSender<SyncCommand>,
+    heartbeat: std::time::Duration,
+    command_timeout: std::time::Duration,
+    backoff: &mut u64,
+) -> Result<async_imap::Session<T>>
+where
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + std::fmt::Debug + Send,
+{
+    let mut idle = session.idle();
+    tokio::time::timeout(command_timeout, idle.init())
+        .await
+        .map_err(|_| SkimError::other("network", "IDLE start timed out"))?
+        .map_err(imap_err)?;
+    // A successful subscription breaks the failure streak. Previously even a
+    // connection that worked for hours inherited the old five-minute backoff.
+    *backoff = 5;
+    let (wait, _interrupt) = idle.wait_with_timeout(heartbeat);
+    // The library resets its timer on server keepalives. Bound the whole wait
+    // as well so a chatty server cannot postpone our catch-up heartbeat.
+    if let Ok(outcome) = tokio::time::timeout(heartbeat, wait).await {
+        outcome.map_err(imap_err)?;
+    }
+    // Notify before DONE: a server can announce mail and then stop answering.
+    // Heartbeats also catch up when a provider misses an arrival notification.
+    let _ = tx.send(SyncCommand::SyncInbox);
+    tokio::time::timeout(command_timeout, idle.done())
+        .await
+        .map_err(|_| SkimError::other("network", "IDLE completion timed out"))?
+        .map_err(imap_err)
+}
+
+#[cfg(test)]
+mod idle_recovery_tests {
+    use super::*;
+    use std::time::Duration;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    enum Server {
+        SilentStart,
+        ArrivalSilentDone,
+        Heartbeat,
+        Arrival,
+    }
+
+    async fn exercise(mode: Server) {
+        let (client, server) = tokio::io::duplex(4096);
+        let silent_start = matches!(mode, Server::SilentStart);
+        let silent_done = matches!(mode, Server::ArrivalSilentDone);
+        let task = tokio::spawn(async move {
+            let mut server = BufReader::new(server);
+            server.get_mut().write_all(b"* OK ready\r\n").await.unwrap();
+            let mut line = String::new();
+            server.read_line(&mut line).await.unwrap();
+            let tag = line.split_whitespace().next().unwrap().to_string();
+            server
+                .get_mut()
+                .write_all(format!("{tag} OK logged in\r\n").as_bytes())
+                .await
+                .unwrap();
+            line.clear();
+            server.read_line(&mut line).await.unwrap();
+            assert!(line.contains("IDLE"));
+            let tag = line.split_whitespace().next().unwrap().to_string();
+            if silent_start {
+                std::future::pending::<()>().await;
             }
-            Ok(_) => {} // timeout → re-issue IDLE
-            Err(e) => return Err(imap_err(e)),
+            server.get_mut().write_all(b"+ idling\r\n").await.unwrap();
+            if !matches!(mode, Server::Heartbeat) {
+                server.get_mut().write_all(b"* 1 EXISTS\r\n").await.unwrap();
+            }
+            line.clear();
+            server.read_line(&mut line).await.unwrap();
+            assert_eq!(line.trim(), "DONE");
+            if silent_done {
+                std::future::pending::<()>().await;
+            }
+            server
+                .get_mut()
+                .write_all(format!("{tag} OK idle complete\r\n").as_bytes())
+                .await
+                .unwrap();
+        });
+        let mut client = async_imap::Client::new(client);
+        client.read_response().await.unwrap().unwrap();
+        let session = client
+            .login("test", "test")
+            .await
+            .map_err(|(e, _)| e)
+            .unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut backoff = 30;
+        let cycle = idle_cycle(
+            session,
+            &tx,
+            Duration::from_millis(20),
+            Duration::from_millis(200),
+            &mut backoff,
+        );
+        let result = tokio::time::timeout(Duration::from_secs(3), async {
+            if silent_start {
+                cycle.await
+            } else {
+                tokio::pin!(cycle);
+                // An arrival must wake the worker while DONE is still pending.
+                tokio::select! {
+                    biased;
+                    cmd = rx.recv() => {
+                        assert!(matches!(cmd, Some(SyncCommand::SyncInbox)));
+                        cycle.await
+                    }
+                    result = &mut cycle => {
+                        assert!(!silent_done, "arrival waited for a stalled DONE");
+                        assert!(matches!(rx.try_recv(), Ok(SyncCommand::SyncInbox)));
+                        result
+                    }
+                }
+            }
+        })
+        .await
+        .expect("IDLE cycle hung");
+        assert_eq!(result.is_err(), silent_start || silent_done);
+        assert_eq!(backoff, if silent_start { 30 } else { 5 });
+        if silent_start {
+            assert!(rx.try_recv().is_err());
         }
+        if silent_start || silent_done {
+            task.abort();
+        } else {
+            task.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn idle_start_cannot_hang_reconnection() {
+        exercise(Server::SilentStart).await;
+    }
+    #[tokio::test]
+    async fn arrival_wakes_sync_before_stalled_done() {
+        exercise(Server::ArrivalSilentDone).await;
+    }
+    #[tokio::test]
+    async fn heartbeat_catches_up_without_push() {
+        exercise(Server::Heartbeat).await;
+    }
+    #[tokio::test]
+    async fn arrival_resets_backoff_and_preserves_session() {
+        exercise(Server::Arrival).await;
     }
 }
 
