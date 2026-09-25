@@ -37,6 +37,9 @@ schema were changed. A real reply draft was generated for Jon Perper after
 reading the ZLed client files, complete thread and writing/voice guidance. The
 adapter verified the Gmail draft's body, recipient and reply target. Two other
 conversations were correctly declined because Patrick had already replied.
+The exact saved RFC identity subsequently appeared in Skim's Drafts folder
+(local message 29187, thread 583) through normal IMAP sync. Repeating Start
+returned the same receipt; a gateway check still found exactly one draft.
 Nothing was sent. This short acknowledgement validates the plumbing and source
 retrieval; it does not establish quality on complex commercial replies.
 
