@@ -27,10 +27,10 @@ not the sidebar. It is hidden for other accounts and in Sent, Drafts, Trash and
 Junk. Estate access uses the existing SSH connection and requires connectivity.
 No separate AI-provider key in Skim is needed for this action.
 
-This feature preserves the existing layout. On me and Waiting are still present;
-replacing those screens and the wider competitor-inspired redesign are outside
-this implementation. The current deployment and remaining work are recorded in
-[STATUS.md](STATUS.md).
+This feature preserves the existing layout. On me and Waiting were later
+replaced by Snooze and Follow-ups in 1.1.1 (D54); the wider competitor-inspired
+redesign is outside this implementation. The current deployment and remaining
+work are recorded in [STATUS.md](STATUS.md).
 
 ## Plan, 25 September 2026
 

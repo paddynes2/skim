@@ -18,6 +18,13 @@ Waiting. The installed reply feature and inbox recovery change are tracked in
 [STATUS.md](STATUS.md); usage and boundaries are in
 [ESTATE-REPLY-PLAN.md](ESTATE-REPLY-PLAN.md).
 
+**Update, 29 September:** version 1.1.1 removed On me and Waiting and added
+explicit per-thread Snooze and "follow up if no reply by" reminders (DECISIONS
+D54). That is a simpler cut of improvement 2 below: one date per thread,
+cleared by any reply from someone else, not a ledger of partial deliverables.
+Patrick declined further AI features in the same release. Prepared replies with
+evidence and the Finish session remain proposals.
+
 ## Method and limits
 
 Reviewed official product documentation across twelve current competitors and a retired adjacent product, then compared their mechanisms with Skim's source. Vendor descriptions establish advertised behavior, not measured speed, accuracy, adoption or ROI. No paid accounts or trials were created. BrowserOS was unavailable locally, so this is documentation and source research, not a hands-on usability benchmark. Availability and packaging can change after this date.

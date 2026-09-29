@@ -40,8 +40,36 @@ Hetzner and brings its Gmail draft back into the normal composer. See
 [ESTATE-REPLY-PLAN.md](ESTATE-REPLY-PLAN.md) for usage and the contract, and
 [STATUS.md](STATUS.md) for verified deployment. Open an incoming email in
 `patrick@autospark.ai`; **Draft reply** is beside **Reply** at the bottom of the
-reading pane. The inbox and sidebar still look the same. On me and Waiting
-remain present; their replacement and the broader redesign are not implemented.
+reading pane.
+
+### Version 1.1.1 (September 29)
+
+What changed on screen, and how to use it. Decisions are D50 to D54.
+
+- **Threads:** a conversation opens on its newest message, wherever it is filed
+  (his own reply in Sent included). The earlier messages list below it, newest
+  first; click one to open it in place.
+- **Labels:** the Labels (or Folders) heading folds the section; it starts
+  folded. Hover a label and click the eye to hide it; "N hidden" shows hidden
+  ones dimmed so one can be brought back.
+- **Theme:** Settings, Theme, the Base column (light or dark). It matches the
+  Paddy x Wes Base app. New installs start on Base light.
+- **Calendar:** type a time ("2pm", "1430", "14:30") or pick from the list; the
+  end list shows durations, and moving the start moves the end. Accept, Maybe
+  and Decline sit at the top of an event you are invited to. **Propose new time**
+  (there and on an invite card in the inbox) picks up to three free slots of the
+  same length, or a typed time, and opens a draft to the organiser. Nothing is
+  sent until you press Send.
+- **Snooze (H):** pick a time; the thread leaves every list and comes back at
+  the top when due, or earlier if someone else replies. Snoozed lists them
+  (`g z`). Local to Skim: Gmail elsewhere still shows the thread.
+- **Follow up (B):** "remind me if no reply by". Also the picker beside Send in
+  the composer. A reply from anyone else clears it; otherwise the thread comes
+  back to the top on the date. Follow-ups lists them, most overdue first
+  (`g f`), and the sidebar count turns into an unread-style count when one is
+  overdue.
+- **Gone:** the On me and Waiting views, their daily nudge, `g o` and `g w`.
+  The court classifier still runs because the MCP `list_court` tool reads it.
 
 One line per phase. The phase numbers match `PLAN.md` section 2 and the
 `fork(<phase>):` commit prefixes.
@@ -60,7 +88,7 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 | 7 | Google connection, Calendar and Meet: OAuth Desktop flow with the client ID and secret held in Credential Manager, calendar tables under `fork_*`, a windowed pull (-60 d / +180 d) every 5 minutes, an offline op queue for create / patch / delete / RSVP, a Meet space from the toolbar. |
 | 8 | Share availability: `fork_free_slots` walks working hours in a chosen zone over the selected calendars and returns slots on a 30-minute grid, for pasting into a reply. |
 | 9 | CRM sidebar: a right drawer that looks the focused sender up in Rebound (person, company, open deals, activities), read-only, with Supabase login held in Credential Manager and a 10-minute lookup cache. |
-| 10 | Ball in my court: a deterministic pass classifies every thread as on me / waiting / none, two sidebar views (`g o`, `g w`) with age badges, a 30-day look-back (Settings, Look back; `all` shows everything), an optional AI pass (off by default, day cap), a daily nudge toast. |
+| 10 | Ball in my court: a deterministic pass classifies every thread as on me / waiting / none, two sidebar views (`g o`, `g w`) with age badges, a 30-day look-back (Settings, Look back; `all` shows everything), an optional AI pass (off by default, day cap), a daily nudge toast. Views, keys and nudge removed in 1.1.1 (D54); the classifier and MCP `list_court` remain. |
 | 11 | Meeting prep: for an event with external guests, a panel with each guest's CRM card and last threads, a streamed brief, and a reminder 10 minutes before. |
 | 12 | MCP server: loopback HTTP on port 8342 with a bearer token, twelve tools (`search_mail`, `get_thread`, `list_unread`, `list_court`, `get_calendar`, `find_free_slots`, `create_draft`, `archive`, `star`, `mark_read`, `create_event`, `crm_lookup`). There is no send tool and no invite tool. |
 | 13 | Release: `build-install.ps1`, the live smoke test on the installed app, and the fixes it forced (D41-D47). Phase 13 has no shots folder; it re-ran the earlier phases' scenarios. |
@@ -154,6 +182,11 @@ themes at 1440x900 and writes PNGs to `docs/fork/shots/<phase>/<scenario>-<theme
 
     node demo/fork-shots.mjs list                     # print scenarios
     node demo/fork-shots.mjs <phase> [scenario ...]   # default: every scenario tagged for the phase
+    SHOTS_THEMES=base-dark,base-light node demo/fork-shots.mjs 1.1.1   # other themes for one run
+
+The 1.1.1 scenarios (`v111-*`) also exercise the reminder mocks and the
+`skimdemo.fork_thread_multi` flag, which gives the hero thread an older message
+and a newer reply filed in Sent.
 
 It starts its own Vite server on port 1421; if another run holds the port, wait
 and retry. Look at the PNGs and fix what is visibly wrong: one defect (the rich
@@ -212,6 +245,14 @@ Read-only except where marked. Check that:
 - the inline reply opens, shows Ctrl+Enter, and Esc discards it when untouched
 - the zoom keys work
 - the Calendar screen shows its events or its connect state
+- (1.1.1) a thread with a reply in Sent opens on that reply, with no
+  "Later in thread" button
+- (1.1.1) the sidebar shows Snoozed and Follow-ups, not On me / Waiting, and
+  the Labels section folds
+- (1.1.1) H on a thread snoozes it out of the list, it appears under Snoozed,
+  and Remove there brings it back (local only; marked)
+- (1.1.1) the new-event time field opens its list without scrolling the panel
+  sideways; close the panel without saving
 - Meet opens meet.new when Google is not connected; when it is, it creates a
   Meet, copies the link and opens it
 - `search_mail` answers from Claude Code
