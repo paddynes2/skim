@@ -64,9 +64,10 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 | 11 | Meeting prep: for an event with external guests, a panel with each guest's CRM card and last threads, a streamed brief, and a reminder 10 minutes before. |
 | 12 | MCP server: loopback HTTP on port 8342 with a bearer token, twelve tools (`search_mail`, `get_thread`, `list_unread`, `list_court`, `get_calendar`, `find_free_slots`, `create_draft`, `archive`, `star`, `mark_read`, `create_event`, `crm_lookup`). There is no send tool and no invite tool. |
 | 13 | Release: `build-install.ps1`, the live smoke test on the installed app, and the fixes it forced (D41-D47). Phase 13 has no shots folder; it re-ran the earlier phases' scenarios. |
+| 1.1.1 | Thread opens on its newest message (Outlook order); labels fold and hide; Base theme; calendar typed time field, answer bar on top, propose a new time; Snooze and Follow-ups replace On me / Waiting. See DECISIONS D50 to D54. |
 
-Not in this fork by decision (D12): snooze, split inbox, screener, bundles,
-templates.
+Not in this fork by decision (D12): split inbox, screener, bundles,
+templates. Snooze was reopened in 1.1.1 (D54).
 
 Two rules bind every phase and are worth repeating here: nothing sends mail on
 its own (no feature, timer or MCP tool submits an email or an external invite
@@ -89,6 +90,7 @@ Manager under `fork:` keys, never in the database, settings, logs or repo.
 | Share availability | `availability.rs` | `slots/` |
 | CRM drawer | `crm.rs` | `crm/` |
 | Ball in my court | `court.rs` | `court/` |
+| Snooze and Follow-ups | `reminders.rs` | `reminders/` |
 | Meeting prep | `prep.rs` | `prep/` |
 | MCP server | `mcp/` | `mcp/` |
 

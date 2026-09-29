@@ -212,7 +212,7 @@
           </button>
         {/each}
         {#if organizerEmail}
-          <button class="btn small ghost" class:active={proposing} onclick={() => (proposing = !proposing)}>
+          <button class="btn small" class:active={proposing} onclick={() => (proposing = !proposing)}>
             {t("fork.cal.propose")}
           </button>
         {/if}

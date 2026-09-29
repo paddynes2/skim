@@ -1449,7 +1449,7 @@
     color: var(--text-dim);
     font: inherit;
     font-size: 12.5px;
-    max-width: 210px;
+    max-width: 240px;
   }
   .followup-pick.on {
     color: var(--unread);

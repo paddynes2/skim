@@ -246,6 +246,8 @@
     flex-wrap: wrap;
   }
   .own input[type="date"] {
+    flex: 1 1 130px;
+    min-width: 0;
     padding: 5px 8px;
     border: 1px solid var(--hairline-strong);
     border-radius: var(--radius-s);

@@ -22,7 +22,10 @@ const OUT = resolve(ROOT, "docs", "fork", "shots");
 const PORT = 1421;
 const BASE = `http://127.0.0.1:${PORT}`;
 const SIZE = { width: 1440, height: 900 };
-const THEMES = ["cold-light", "cold-dark", "warm-light", "warm-dark"];
+// SHOTS_THEMES=base-dark,base-light narrows or widens the set for one run.
+const THEMES = process.env.SHOTS_THEMES
+  ? process.env.SHOTS_THEMES.split(",")
+  : ["cold-light", "cold-dark", "warm-light", "warm-dark"];
 
 async function openInbox(page) {
   await page.locator(".row", { hasText: "Q3 launch" }).first().waitFor({ timeout: 20000 });
@@ -65,6 +68,69 @@ async function openHero(page) {
 
 /** Scenario registry. Add one entry per UI state the plan asks to shoot. */
 export const SCENARIOS = {
+  // v1.1.1: newest message first, labels folded, Snooze / Follow-ups, calendar.
+  "v111-thread": { phase: "1.1.1", flags: { "skimdemo.fork_thread_multi": "1" }, setup: async (page) => { await openHero(page); } },
+  "v111-labels-open": {
+    phase: "1.1.1",
+    setup: async (page) => {
+      await openInbox(page);
+      const fold = page.locator(".sidebar .heading.fold");
+      if (await fold.count()) await fold.click();
+      await sleep(200);
+      const row = page.locator(".sidebar .label-row").first();
+      if (await row.count()) await row.hover();
+      await sleep(200);
+    },
+  },
+  "v111-snooze-menu": {
+    phase: "1.1.1",
+    setup: async (page) => {
+      await openHero(page);
+      await page.locator("header.toolbar .tool", { hasText: "H" }).first().click();
+      await page.locator(".menu .opt").first().waitFor();
+      await sleep(200);
+    },
+  },
+  "v111-followups": {
+    phase: "1.1.1",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.locator(".sidebar .item", { hasText: "Follow-ups" }).click();
+      await page.locator(".rem-badge").first().waitFor();
+      await page.locator(".row").first().click();
+      await page.locator(".status .chip").first().waitFor();
+      await sleep(300);
+    },
+  },
+  "v111-cal-invite": {
+    phase: "1.1.1",
+    setup: async (page) => {
+      await openCalendar(page);
+      await page.locator(".ec-event", { hasText: "Pricing review" }).first().click();
+      await page.locator(".panel .rsvp").waitFor();
+      await page.locator(".panel .rsvp button", { hasText: "Propose" }).click();
+      await page.locator(".propose").waitFor();
+      await sleep(600);
+    },
+  },
+  "v111-cal-time": {
+    phase: "1.1.1",
+    setup: async (page) => {
+      await openCalendar(page);
+      await page.keyboard.press("n");
+      await page.locator(".panel .time-input input").nth(1).click();
+      await page.locator(".time-input .list").waitFor();
+      await sleep(300);
+    },
+  },
+  "v111-compose-followup": {
+    phase: "1.1.1",
+    setup: async (page) => {
+      await openInlineReply(page);
+      await page.locator(".followup-pick").first().selectOption("2d");
+      await sleep(200);
+    },
+  },
   // Phase 0: today's inbox, reading pane open.
   inbox: { phase: "0", setup: async (page) => { await openHero(page); } },
   // Phase 2.0: the static A/B/C mock (one full-page shot, all themes inside).

@@ -160,7 +160,9 @@
     position: absolute;
     z-index: 30;
     top: calc(100% + 4px);
-    left: 0;
+    /* Opens leftwards: the field sits at the right edge of the event panel,
+       and a list hanging past it would scroll the whole panel sideways. */
+    right: 0;
     min-width: 150px;
     max-height: 232px;
     overflow-y: auto;

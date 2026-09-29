@@ -342,6 +342,29 @@ export function threadDetail(threadId: number) {
     return { id: threadId, subject: "(demo)", messages: [] };
   }
   const folderId = inInbox ? 1 : 3;
+  // v1.1.1 shots: `skimdemo.fork_thread_multi` gives the hero thread an older
+  // message and a newer reply of Alex's filed in Sent, the case that used to
+  // hide behind "Later in thread".
+  const multi = (globalThis as any).localStorage?.getItem("skimdemo.fork_thread_multi") === "1";
+  if (multi && threadId === 101) {
+    const base = {
+      threadId: t.id,
+      subject: t.subject,
+      cc: [],
+      isStarred: false,
+      hasAttachments: false,
+      bodyState: 2,
+    };
+    return {
+      id: t.id,
+      subject: t.subject,
+      messages: [
+        { ...base, id: 1009, folderId: 1, from: { name: "Anna Weber", addr: t.fromAddr }, to: [{ name: "Alex Morgan", addr: "alex@brightwave.io" }], date: t.date - 86_400, snippet: "Kicking off the launch checklist thread. Owners by Friday please.", isRead: true },
+        { ...base, id: t.id * 10 + 1, folderId: 1, from: { name: t.fromName, addr: t.fromAddr }, to: [{ name: "Alex Morgan", addr: "alex@brightwave.io" }], date: t.date, snippet: t.snippet, isRead: true, hasAttachments: t.hasAttachments },
+        { ...base, id: 1019, folderId: 3, from: { name: "Alex Morgan", addr: "alex@brightwave.io" }, to: [{ name: "Anna Weber", addr: t.fromAddr }], date: t.date + 3600, snippet: "Thanks Anna. I'll take the landing page copy; Marcus has the contract.", isRead: true },
+      ],
+    };
+  }
   return {
     id: t.id,
     subject: t.subject,

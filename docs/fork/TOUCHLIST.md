@@ -147,3 +147,16 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/components/ReadingPane.svelte` | Fork-owned action beside Reply; footer wraps | Estate workflow available at the email without a new screen |
 | `src/lib/i18n/locales/en.json` | `estate.*` labels | Localized action, progress and source disclosure |
 | `demo/mock/tauri-core.ts` | Opt-in estate fixtures | Exercise working/ready/error states without real mailbox calls |
+| `src/components/ReadingPane.svelte` | v1.1.1: newest message of the thread focused; one newest-first list; Snooze / Follow-up tools and status line | Outlook order (D50); reminders (D54) |
+| `src/components/Sidebar.svelte` | v1.1.1: Labels section folds, labels hide; Snoozed / Follow-ups replace On me / Waiting | D51, D54 |
+| `src/components/MessageList.svelte` | v1.1.1: reminder view header and due badge overlay | D54 |
+| `src/components/ComposeForm.svelte` | v1.1.1: follow-up picker beside Send; primary colour token | D54, D52 |
+| `src/components/settings/Settings.svelte` | v1.1.1: Base column in the theme matrix | D52 |
+| `src/components/ShortcutsOverlay.svelte` | v1.1.1: H, B, `g z`, `g f` | D54 |
+| `src/lib/types.ts`, `src/lib/stores/ui.svelte.ts` | v1.1.1: `base` temperature; unknown theme defaults to Base light | D52 |
+| `src/lib/stores/mail.svelte.ts` | v1.1.1: Snoozed / Follow-ups virtual folders -922 / -923, `reminders:updated` refresh | D54 |
+| `src/styles/tokens.css`, `src/styles/base.css`, `src/main.ts` | v1.1.1: Base theme blocks, `--primary`, Inter, body tracking and weight tokens | D52 |
+| `src/App.svelte` | v1.1.1: starts the reminders store instead of the court store | D54 |
+| upstream components with a filled primary button (18 files) | v1.1.1: `var(--text)` fill to `var(--primary)` | D52 |
+| `src-tauri/src/lib.rs` | v1.1.1: register seven `fork_reminder_*` commands | D54 |
+
