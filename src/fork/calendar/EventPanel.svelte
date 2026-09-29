@@ -21,11 +21,16 @@
     localTime,
     localZone,
     otherGuests,
+    parseAttendees,
     selfIsGuest,
     shiftDate,
     splitAddresses,
   } from "./guests";
   import type { EventInput, EventRow, RsvpResponse } from "./types";
+  // Fork (v1.1.1): typed time field, answer bar on top, propose a new time.
+  import ProposeTime from "./ProposeTime.svelte";
+  import TimeInput from "./TimeInput.svelte";
+  import { shiftEnd } from "./time";
 
   interface Props {
     row: EventRow | null;
@@ -67,6 +72,18 @@
   let error = $state<string | null>(null);
   let deleteStep = $state<0 | 1>(0);
   let rsvpBusy = $state(false);
+  let proposing = $state(false);
+  const organizer = row ? parseAttendees(row).find((a) => a.organizer) : undefined;
+  const organizerEmail = row?.organizer_email ?? organizer?.email ?? null;
+
+  // Moving the start carries the end with it, keeping the length.
+  let prevStart = untrack(() => ({ date: startDate, time: startTime }));
+  function startMoved() {
+    const next = shiftEnd(prevStart, { date: endDate, time: endTime }, { date: startDate, time: startTime });
+    endDate = next.date;
+    endTime = next.time;
+    prevStart = { date: startDate, time: startTime };
+  }
 
   const calRow = $derived(row ? calendar.calendarOf(row) : calendar.calendars.find((c) => c.id === calendarId));
   const timeInvalid = $derived.by(() => {
@@ -186,6 +203,33 @@
       <div class="when-line">{fmtWhen(row)}</div>
     {/if}
 
+    {#if row && iAmGuest}
+      <div class="rsvp">
+        <span class="label">{t("fork.cal.going")}</span>
+        {#each ["accepted", "tentative", "declined"] as const as r (r)}
+          <button class="btn small" class:active={row.self_response === r} disabled={rsvpBusy} onclick={() => rsvp(r)}>
+            {t(`fork.cal.rsvp_btn_${r}`)}
+          </button>
+        {/each}
+        {#if organizerEmail}
+          <button class="btn small ghost" class:active={proposing} onclick={() => (proposing = !proposing)}>
+            {t("fork.cal.propose")}
+          </button>
+        {/if}
+      </div>
+      {#if proposing && organizerEmail}
+        <ProposeTime
+          summary={row.summary}
+          {organizerEmail}
+          organizerName={organizer?.displayName ?? null}
+          startTs={row.start_ts}
+          endTs={row.end_ts}
+          onproposed={() => (proposing = false)}
+          oncancel={() => (proposing = false)}
+        />
+      {/if}
+    {/if}
+
     <label class="row check">
       <input type="checkbox" bind:checked={allDay} disabled={!editable} />
       <span>{t("fork.cal.all_day")}</span>
@@ -193,13 +237,13 @@
 
     <div class="row times" class:invalid={timeInvalid}>
       <span class="label">{t("fork.cal.starts")}</span>
-      <input type="date" bind:value={startDate} readonly={!editable} />
-      {#if !allDay}<input type="time" step="300" bind:value={startTime} readonly={!editable} />{/if}
+      <input type="date" bind:value={startDate} readonly={!editable} onchange={startMoved} />
+      {#if !allDay}<TimeInput bind:value={startTime} readonly={!editable} label={t("fork.cal.starts")} onchange={startMoved} />{/if}
     </div>
     <div class="row times" class:invalid={timeInvalid}>
       <span class="label">{t("fork.cal.ends")}</span>
       <input type="date" bind:value={endDate} readonly={!editable} />
-      {#if !allDay}<input type="time" step="300" bind:value={endTime} readonly={!editable} />{/if}
+      {#if !allDay}<TimeInput bind:value={endTime} anchor={endDate === startDate ? startTime : null} readonly={!editable} label={t("fork.cal.ends")} />{/if}
     </div>
     {#if timeInvalid}<div class="hint danger">{t("fork.cal.ends_before_starts")}</div>{/if}
 
@@ -262,17 +306,6 @@
     </div>
 
     <textarea class="desc" bind:value={description} readonly={!editable} placeholder={editable ? t("fork.cal.description_placeholder") : ""} rows="4"></textarea>
-
-    {#if row && iAmGuest}
-      <div class="rsvp">
-        <span class="label">{t("fork.cal.going")}</span>
-        {#each ["accepted", "declined", "tentative"] as const as r (r)}
-          <button class="btn small" class:active={row.self_response === r} disabled={rsvpBusy} onclick={() => rsvp(r)}>
-            {t(`fork.cal.rsvp_btn_${r}`)}
-          </button>
-        {/each}
-      </div>
-    {/if}
 
     {#if error}<div class="hint danger" role="alert">{error}</div>{/if}
   </div>
@@ -380,11 +413,9 @@
     font-size: 13px;
     user-select: text;
   }
-  .row input[type="date"],
-  .row input[type="time"] {
+  .row input[type="date"] {
     flex: 0 1 auto;
-    font-family: var(--font-mono);
-    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
   .times.invalid input {
     border-color: var(--danger);
@@ -515,9 +546,13 @@
   }
   .rsvp {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
-    padding-top: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-m);
+    background: var(--hover);
   }
   .rsvp .label {
     font-family: var(--font-mono);

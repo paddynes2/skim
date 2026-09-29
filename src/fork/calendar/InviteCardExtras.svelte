@@ -13,11 +13,21 @@
   import { fmtTime, fromDateTime } from "./guests";
   import { calendar } from "./store.svelte";
   import type { EventRow } from "./types";
+  import ProposeTime from "./ProposeTime.svelte";
 
   let { invite }: { invite: InviteView } = $props();
 
   let matched = $state<EventRow | null>(null);
   let conflicts = $state<EventRow[]>([]);
+  // Fork (v1.1.1): propose a new time straight from the invite.
+  let proposing = $state(false);
+  const canPropose = $derived(
+    invite.method === "request" &&
+      !!invite.organizerEmail &&
+      invite.startsAt != null &&
+      invite.endsAt != null &&
+      !calendar.ownEmails.map((e) => e.toLowerCase()).includes(invite.organizerEmail.toLowerCase()),
+  );
 
   function window(inv: InviteView): { from: number; to: number } | null {
     if (inv.isAllDay && inv.startDate) {
@@ -74,7 +84,7 @@
   }
 </script>
 
-{#if matched || conflicts.length > 0}
+{#if matched || conflicts.length > 0 || canPropose}
   <div class="extras">
     {#if matched}
       <div class="line in-cal">
@@ -90,6 +100,21 @@
         <span class="warn" aria-hidden="true">⚠</span>
         <span>{t("fork.cal.conflicts_with")} {conflicts.map(label).join(", ")}</span>
       </div>
+    {/if}
+    {#if canPropose}
+      {#if proposing}
+        <ProposeTime
+          summary={invite.summary ?? ""}
+          organizerEmail={invite.organizerEmail!}
+          organizerName={invite.organizerName}
+          startTs={invite.startsAt!}
+          endTs={invite.endsAt!}
+          onproposed={() => (proposing = false)}
+          oncancel={() => (proposing = false)}
+        />
+      {:else}
+        <button class="propose-btn" onclick={() => (proposing = true)}>{t("fork.cal.propose")}</button>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -119,5 +144,17 @@
   }
   .warn {
     font-size: 11px;
+  }
+  .propose-btn {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-s);
+    color: var(--text);
+    font-size: 12.5px;
+  }
+  .propose-btn:hover {
+    background: var(--hover);
   }
 </style>
