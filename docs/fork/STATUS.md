@@ -4,7 +4,44 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-09-25.**
+**As of 2026-09-29.**
+
+## Version 1.1.1 (installed September 29)
+
+Patrick's six asks of September 29, five built (he declined the new AI features):
+
+- A conversation opens on its newest message, wherever it is filed, with the
+  rest listed below it newest first (D50). His Investec reply in Sent had been
+  hidden behind "Later in thread (1)".
+- Labels fold (folded by default) and single labels hide (D51).
+- Base theme, both lightnesses, from the Paddy x Wes Base tokens (D52). His
+  theme is now Base dark.
+- Calendar: typed time field with durations, Accept / Maybe / Decline at the
+  top of the event panel, Propose new time from the panel and from inbox invite
+  cards, which opens a draft to the organiser (D53).
+- Snooze (H) and Follow-ups (B, or the picker beside Send) replace On me and
+  Waiting (D54).
+
+Verified: all gates green (508 Rust tests, 44 node tests, 144 contrast ratios,
+svelte-check 0 errors with the one existing ComposeForm warning, clippy clean).
+Demo shots in both Base themes under `docs/fork/shots/1.1.1/`. Signed installer
+built from `ea28b10` and installed at 08:55 SAST; installed SHA256
+`1b2af67a39508822e4e669e564d4a37826bee5b4f089582977d1df61e591def5`. Backup:
+`C:/Users/Patrick/.skim-fork/backups/20260929-085450/`. Live smoke test over
+CDP on the installed app: theme Base dark, sidebar shows Snoozed and
+Follow-ups and no court views, labels folded, the Investec thread focuses its
+newest message with 12 earlier rows below and no "Later in thread", a snooze
+on a real thread hid it, listed it under Snoozed, and Remove brought it back,
+the Follow-ups view opens, the new-event time list opens and the panel closes
+unsaved, and no page errors. Nothing was sent; no event was saved.
+
+Not exercised live: Propose new time's draft (the demo covers it), a snooze or
+follow-up actually falling due (Rust tests cover it), the compose follow-up on a
+real send, Accept / Maybe / Decline against Google (still never run live, see
+item 3). Reminders are local to Skim: Gmail on the phone still shows a snoozed
+thread. The due toast needs the window open; a due reminder pins its thread to
+the top either way.
+
 
 ## Campaign drafts repair (September 25)
 
@@ -41,10 +78,8 @@ in Sent, Drafts, Trash and Junk and for unsupported accounts. Optional direction
 progress, **Open draft** and **Context used** live with that action. See the
 [usage guide](ESTATE-REPLY-PLAN.md#using-it).
 
-On me and Waiting are unchanged. Patrick's September 25 feedback is that these
-screens are not useful; the research proposes retiring them as broad primary
-destinations. That simplification, specific follow-up reminders and a bounded
-Finish session remain unimplemented. The estate reply feature is the delivered
+On me and Waiting were replaced by Snooze and Follow-ups in 1.1.1. A bounded
+Finish session remains unimplemented. The estate reply feature is the delivered
 slice of the broader proposal. The inbox recovery fix is also installed; instant
 end-to-end mail delivery has not been established.
 
@@ -137,9 +172,8 @@ this external worktree is outside its enrolled source views.
 
 ## Where it is
 
-- Branch `paddy` on `paddynes2/skim`. The last code commit is `e2124a4`;
-  commits after it change only docs and comments.
-- Installed on Patrick's machine: version 1.1.0, built from `e2124a4` on September 25.
+- Branch `paddy` on `paddynes2/skim`. The last code commit is `ea28b10` (1.1.1).
+- Installed on Patrick's machine: version 1.1.1, built from `ea28b10` on September 29.
   Backup and startup verification are recorded above.
 - Release `v1.1.0` on GitHub is tagged at `9884f0d`, behind the
   installed build. It lacks the `/slots` rich-editor fix and list variant C.
@@ -205,8 +239,9 @@ Not built:
     button (D-6g).
 11. The CRM `lookup_for` seam proposed in `pending/11.md`, and making
     `spawn_stream` `pub(crate)`.
-12. The court nudge runs in the window's TypeScript. With the window closed to
-    the tray there is no nudge, because it is not wired to `notify.rs`.
+12. The reminder toast runs in the window. With the window closed to the tray
+    there is no toast (the thread still pins to the top). The court nudge it
+    replaced had the same limit and is no longer started.
 13. Nested `type="cite"` blockquotes above other markers are counted by
     `has_fold` but not hidden (D-5e).
 14. `htmlToText` in the rich editor has no node test; it is exercised only in the browser.
@@ -220,7 +255,8 @@ Upstream:
 
 Housekeeping:
 
-16. Release 1.1.1 so GitHub matches the installed build (see "Where it is").
+16. Publish a GitHub release for 1.1.1 so the fork's releases match the
+    installed build. The install is already 1.1.1, so nothing updates backwards.
 17. The port 8342 row is in `C:\Users\Patrick\OS\meta\PORTS.md` but not
     committed there. That file also holds another session's uncommitted edit to
     the 8350 row, and a path commit would sweep it in.
