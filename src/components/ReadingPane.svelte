@@ -17,6 +17,8 @@
   import { prefs } from "../fork/stores/prefs.svelte";
   import { crmFocus } from "../fork/crm/store.svelte";
   import EstateReplyAction from "../fork/estate/ReplyAction.svelte";
+  // Fork (v1.1.1): Snooze / Follow-up tools and the status line.
+  import ThreadReminders from "../fork/reminders/ThreadReminders.svelte";
 
   let detail = $state<ThreadDetail | null>(null);
   // Fork (1.2): no Archive in Sent / Trash / Spam.
@@ -556,10 +558,20 @@
         {/if}
         <kbd>U</kbd>
       </button>
+      {#if mail.selectedThreadId !== null}
+        {#key mail.selectedThreadId}
+          <ThreadReminders threadId={mail.selectedThreadId} mode="tools" />
+        {/key}
+      {/if}
     </header>
 
     <div class="scroll">
       <h1 class="subject">{shownSubject}</h1>
+      {#if mail.selectedThreadId !== null}
+        {#key mail.selectedThreadId}
+          <ThreadReminders threadId={mail.selectedThreadId} mode="status" />
+        {/key}
+      {/if}
 
       {#if conversation}
         <!-- Fork (v1.1.1): the whole conversation newest first, like Outlook.

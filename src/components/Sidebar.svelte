@@ -10,10 +10,10 @@
   import { updater } from "../lib/stores/update.svelte";
   import Settings from "./settings/Settings.svelte";
   import { starredCount } from "../fork/stores/starred.svelte";
-  // Fork (10): "On me" / "Waiting" with their counts, above the folders.
-  import { VF_ON_ME, VF_WAITING } from "../fork/court/api";
-  import { courtCounts } from "../fork/court/counts.svelte";
-  import { courtStore } from "../fork/court/store.svelte";
+  // Fork (v1.1.1): Snoozed / Follow-ups with their counts, above the folders.
+  import { VF_FOLLOWUPS, VF_SNOOZED } from "../fork/reminders/api";
+  import { reminderCounts } from "../fork/reminders/counts.svelte";
+  import { remindersStore } from "../fork/reminders/store.svelte";
   import { labelPrefs } from "../fork/labels.svelte";
 
   async function compose() {
@@ -87,33 +87,38 @@
         <span class="name">{t("fork.nav.calendar")}</span>
         <kbd>G C</kbd>
       </button>
-      <!-- Fork (10): the two court views. Counts are totals (rows in the
-           view), never unread, so they take the Starred rule's `total` look. -->
+      <!-- Fork (v1.1.1): Snoozed and Follow-ups replace On me / Waiting.
+           Snoozed counts threads away until later; Follow-ups counts the
+           overdue ones, as an unread-style count, else the total waiting. -->
       <button
         class="item court"
-        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_ON_ME}
-        onclick={() => courtStore.open("on_me")}
-        title={collapsed ? t("fork.nav.on_me") : undefined}
+        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_SNOOZED}
+        onclick={() => remindersStore.open("snooze")}
+        title={collapsed ? t("fork.nav.snoozed") : undefined}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
-          <path d="M2 8.5l3.5 3.5L14 3.5" />
-          <path d="M2 12.5h5" />
+          <circle cx="8" cy="8.5" r="5.5" />
+          <path d="M8 5.5v3l2 1.2M3 2.5l-1.5 1.5M13 2.5l1.5 1.5" />
         </svg>
-        <span class="name">{t("fork.nav.on_me")}</span>
-        {#if courtCounts.onMe > 0}<span class="count total">{courtCounts.onMe}</span>{/if}
+        <span class="name">{t("fork.nav.snoozed")}</span>
+        {#if reminderCounts.snoozed > 0}<span class="count total">{reminderCounts.snoozed}</span>{/if}
       </button>
       <button
         class="item court"
-        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_WAITING}
-        onclick={() => courtStore.open("waiting")}
-        title={collapsed ? t("fork.nav.waiting") : undefined}
+        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_FOLLOWUPS}
+        onclick={() => remindersStore.open("followup")}
+        title={collapsed ? t("fork.nav.followups") : undefined}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
-          <circle cx="8" cy="8" r="6" />
-          <path d="M8 4.5V8l2.5 1.5" />
+          <path d="M6 4L2.5 7.5 6 11" />
+          <path d="M2.5 7.5h7a4 4 0 0 1 4 4v1" />
         </svg>
-        <span class="name">{t("fork.nav.waiting")}</span>
-        {#if courtCounts.waiting > 0}<span class="count total">{courtCounts.waiting}</span>{/if}
+        <span class="name">{t("fork.nav.followups")}</span>
+        {#if reminderCounts.followupsDue > 0}
+          <span class="count">{reminderCounts.followupsDue}</span>
+        {:else if reminderCounts.followups > 0}
+          <span class="count total">{reminderCounts.followups}</span>
+        {/if}
       </button>
     </div>
 

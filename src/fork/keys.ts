@@ -15,8 +15,8 @@ export const GO_TARGETS: { key: string; code: string; label: string; role?: stri
   { key: "d", code: "KeyD", label: "nav.drafts", role: "drafts" },
   { key: "a", code: "KeyA", label: "nav.archive", role: "archive" },
   { key: "c", code: "KeyC", label: "fork.nav.calendar" },
-  { key: "o", code: "KeyO", label: "fork.nav.on_me" },
-  { key: "w", code: "KeyW", label: "fork.nav.waiting" },
+  { key: "z", code: "KeyZ", label: "fork.nav.snoozed" },
+  { key: "f", code: "KeyF", label: "fork.nav.followups" },
 ];
 
 const GO_WINDOW_MS = 1000;
@@ -50,11 +50,11 @@ export function goTo(key: string): void {
     case "c":
       navHooks.calendar?.();
       return;
-    case "o":
-      navHooks.court?.("on_me");
+    case "z":
+      navHooks.reminders?.("snooze");
       return;
-    case "w":
-      navHooks.court?.("waiting");
+    case "f":
+      navHooks.reminders?.("followup");
       return;
     default: {
       const target = GO_TARGETS.find((t) => t.key === key);
@@ -105,6 +105,18 @@ export function forkKey(e: KeyboardEvent): boolean {
   if (e.shiftKey && e.code === "KeyS") {
     e.preventDefault();
     void mail.setListFilter(mail.listFilter === "starred" ? "all" : "starred");
+    return true;
+  }
+  // v1.1.1: h snoozes the open thread, b sets a follow-up on it (Superhuman's
+  // H; B for "bring back"). The menu lives in the reading pane.
+  if (!e.shiftKey && e.code === "KeyH" && mail.selectedThreadId !== null && navHooks.reminderMenu) {
+    e.preventDefault();
+    navHooks.reminderMenu("snooze");
+    return true;
+  }
+  if (!e.shiftKey && e.code === "KeyB" && mail.selectedThreadId !== null && navHooks.reminderMenu) {
+    e.preventDefault();
+    navHooks.reminderMenu("followup");
     return true;
   }
   // i: CRM sidebar (Phase 9); m: Meet now (Phase 7). No-ops until registered.

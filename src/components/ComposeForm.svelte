@@ -14,6 +14,9 @@
   import { untrack } from "svelte";
   import RichEditor from "../fork/RichEditor.svelte";
   import SendLater from "../fork/compose/SendLater.svelte";
+  // Fork (v1.1.1): "remind me if no reply", set with the send.
+  import { remindersApi } from "../fork/reminders/api";
+  import { followupPresets } from "../fork/reminders/when";
   import { forkComposeApi } from "../fork/compose/api";
   import { htmlToText, textToHtml } from "../fork/compose/html";
   import type { WhenPick } from "../fork/compose/when";
@@ -633,6 +636,21 @@
   }
 
   /** Send now (held for the undo window, 6.4) or at `when` (send later). */
+  // Fork (v1.1.1): "" = no follow-up, else a followupPresets id.
+  let followupPick = $state("");
+  const followupOptions = followupPresets(new Date());
+
+  /** After a successful send: the follow-up, counted from the send moment.
+   *  Never blocks or fails the send itself. */
+  function setFollowup(d: Draft, sentAt: number) {
+    if (!followupPick) return;
+    const preset = followupPresets(new Date(sentAt * 1000)).find((p) => p.id === followupPick);
+    if (!preset) return;
+    void remindersApi
+      .followupOnSend(d.replyToMessageId, d.subject, Math.floor(preset.at.getTime() / 1000))
+      .catch(() => {});
+  }
+
   async function send(when: WhenPick | null = null, smellOverride = false) {
     if (!draft || sending || !draft.to.trim()) return;
     // Fork (6.5): must-fix items (dashes, placeholders, invisible characters)
@@ -654,6 +672,7 @@
       const undoSecs = prefs.undoSendSecs;
       const notBefore = when ? when.at : undoSecs > 0 ? Math.floor(Date.now() / 1000) + undoSecs : null;
       await api.sendDraft(draft.id, notBefore, when?.label ?? null);
+      setFollowup(draft, notBefore ?? Math.floor(Date.now() / 1000));
       settled = true;
       // Remember the mailbox for the next fresh compose in the unified view.
       void api.setSetting("last_from_account", draft.accountId).catch(() => {});
@@ -1035,6 +1054,18 @@
         </button>
         <SendLater disabled={sending || !draft.to.trim()} onpick={(pick) => send(pick)} />
       </div>
+      <select
+        class="followup-pick"
+        class:on={followupPick !== ""}
+        bind:value={followupPick}
+        title={t("fork.rem.compose_title")}
+        aria-label={t("fork.rem.compose_title")}
+      >
+        <option value="">{t("fork.rem.compose_none")}</option>
+        {#each followupOptions as p (p.id)}
+          <option value={p.id}>{t("fork.rem.compose_opt", { when: t(p.label) })}</option>
+        {/each}
+      </select>
       <button class="attach" onclick={() => fileInput?.click()} title={t("compose.attach")} aria-label={t("compose.attach")}>
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12.5 7.5l-5 5a3 3 0 0 1-4.243-4.243l5.657-5.657a2 2 0 0 1 2.829 2.829l-5.657 5.657a1 1 0 0 1-1.415-1.415l4.95-4.95" /></svg>
       </button>
@@ -1407,6 +1438,22 @@
   }
   .send-split .send {
     border-radius: var(--radius-m) 0 0 var(--radius-m);
+  }
+  /* Fork (v1.1.1): the follow-up picker beside Send. */
+  .followup-pick {
+    margin-left: 8px;
+    padding: 5px 8px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-s);
+    background: var(--surface);
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 12.5px;
+    max-width: 210px;
+  }
+  .followup-pick.on {
+    color: var(--unread);
+    border-color: var(--unread);
   }
   /* Fork (6.3): signature and quote under the editor, read-only. */
   .tail {

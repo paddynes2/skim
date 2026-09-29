@@ -12,6 +12,9 @@
   // Fork (10): the court views' header and per-row age + reason badge.
   import CourtRow from "../fork/court/CourtRow.svelte";
   import type { CourtRow as CourtRowShape } from "../fork/court/types";
+  // Fork (v1.1.1): Snoozed / Follow-ups header and per-row due badge.
+  import ReminderBadge from "../fork/reminders/ReminderBadge.svelte";
+  import type { ReminderRow as ReminderRowShape } from "../fork/reminders/api";
 
   // "now" for the row ages, refreshed each minute so a row that crosses a
   // day boundary recolours without a reload.
@@ -23,6 +26,10 @@
   const courtOf = (row: unknown): CourtRowShape | null => {
     const r = row as Partial<CourtRowShape>;
     return typeof r.since === "number" ? (row as CourtRowShape) : null;
+  };
+  const reminderOf = (row: unknown): ReminderRowShape | null => {
+    const r = row as Partial<ReminderRowShape>;
+    return typeof r.dueTs === "number" ? (row as ReminderRowShape) : null;
   };
 
   const title = $derived.by(() => {
@@ -133,6 +140,14 @@
         onremove={(chip) => void mail.removeSearchToken(chip.token)}
         onclose={() => void mail.exitSearch()}
       />
+    {:else if mail.reminderView}
+      <!-- Fork (v1.1.1): Snoozed / Follow-ups. Soonest due first. -->
+      <div class="court-head">
+        <h1>{t(mail.reminderView === "snooze" ? "fork.nav.snoozed" : "fork.nav.followups")}</h1>
+        <span class="court-sub">
+          {t(mail.reminderView === "snooze" ? "fork.rem.sub_snoozed" : "fork.rem.sub_followups", { n: mail.threads.length })}
+        </span>
+      </div>
     {:else if mail.courtView}
       <!-- Fork (10): a court view. The title names it; the sub-line says the
            order (oldest first) and how many, since the filter chips do not
@@ -222,10 +237,11 @@
       <div class="spacer" style="height: {start * rowH}px"></div>
       {#each visible as thread (thread.messageId ?? thread.id)}
         {@const court = mail.courtView ? courtOf(thread) : null}
+        {@const rem = mail.reminderView ? reminderOf(thread) : null}
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" class:court={court !== null} class:compact={prefs.density === "compact"}>
+        <div class="court-wrap" class:court={court !== null || rem !== null} class:compact={prefs.density === "compact"}>
           <MessageRow
             {thread}
             selected={mail.groupThreads
@@ -241,6 +257,10 @@
           {#if court}
             <div class="court-badge-slot">
               <CourtRow since={court.since} reason={court.reason} now={nowSecs} />
+            </div>
+          {:else if rem}
+            <div class="court-badge-slot">
+              <ReminderBadge kind={rem.kind} dueTs={rem.dueTs} now={nowSecs} />
             </div>
           {/if}
         </div>

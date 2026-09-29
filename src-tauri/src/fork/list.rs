@@ -70,14 +70,20 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
             let unread = format!(
                 "EXISTS (SELECT 1 FROM messages m3 WHERE m3.thread_id = t.id AND {folder_pred} AND m3.is_read = 0)"
             );
+            // v1.1.1: a snoozed thread is hidden until due; a due reminder
+            // pins its thread to the top until it is opened.
+            let hidden = crate::fork::reminders::hidden_pred("t.id");
+            let pinned = crate::fork::reminders::pinned_expr("t.id");
             let filter = match opts.filter {
-                Filter::All => String::new(),
-                Filter::Unread => format!(" AND {unread}"),
-                Filter::Starred => " AND t.starred = 1".to_string(),
+                Filter::All => format!(" AND {hidden}"),
+                Filter::Unread => format!(" AND {hidden} AND {unread}"),
+                Filter::Starred => format!(" AND {hidden} AND t.starred = 1"),
             };
             let order = match opts.order {
-                Order::Date => " ORDER BY t.last_date DESC".to_string(),
-                Order::UnreadFirst => format!(" ORDER BY ({unread}) DESC, t.last_date DESC"),
+                Order::Date => format!(" ORDER BY ({pinned}) DESC, t.last_date DESC"),
+                Order::UnreadFirst => {
+                    format!(" ORDER BY ({pinned}) DESC, ({unread}) DESC, t.last_date DESC")
+                }
             };
             let marker = " GROUP BY t.id";
             assert!(
@@ -93,18 +99,20 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
             with_filter.replacen(om, &order, 1)
         }
         Shape::Flat => {
+            let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
+            let pinned = crate::fork::reminders::pinned_expr("m.thread_id");
             let filter = match opts.filter {
-                Filter::All => "",
-                Filter::Unread => " AND m.is_read = 0",
-                Filter::Starred => " AND m.is_starred = 1",
+                Filter::All => format!(" AND {hidden}"),
+                Filter::Unread => format!(" AND {hidden} AND m.is_read = 0"),
+                Filter::Starred => format!(" AND {hidden} AND m.is_starred = 1"),
             };
             let om = " ORDER BY m.date DESC, m.id DESC";
             assert!(base.contains(om), "flat list SQL lost its ORDER BY marker");
             let order = match opts.order {
-                Order::Date => om.to_string(),
-                Order::UnreadFirst => {
-                    " ORDER BY (m.is_read = 0) DESC, m.date DESC, m.id DESC".to_string()
-                }
+                Order::Date => format!(" ORDER BY ({pinned}) DESC, m.date DESC, m.id DESC"),
+                Order::UnreadFirst => format!(
+                    " ORDER BY ({pinned}) DESC, (m.is_read = 0) DESC, m.date DESC, m.id DESC"
+                ),
             };
             base.replacen(om, &format!("{filter}{order}"), 1)
         }
@@ -132,12 +140,30 @@ mod tests {
         "SELECT m.id FROM messages m WHERE m.folder_id = ?1 ORDER BY m.date DESC, m.id DESC LIMIT ?2 OFFSET ?3";
 
     #[test]
-    fn default_opts_leave_the_sql_unchanged() {
+    fn default_opts_add_only_the_reminder_clauses() {
         let g = Shape::Grouped {
             folder_pred: "m3.folder_id = ?1",
         };
-        assert_eq!(apply(GROUPED, ListOpts::default(), g), GROUPED);
-        assert_eq!(apply(FLAT, ListOpts::default(), Shape::Flat), FLAT);
+        let hidden = crate::fork::reminders::hidden_pred("t.id");
+        let pinned = crate::fork::reminders::pinned_expr("t.id");
+        assert_eq!(
+            apply(GROUPED, ListOpts::default(), g),
+            GROUPED
+                .replace(" GROUP BY", &format!(" AND {hidden} GROUP BY"))
+                .replace(
+                    " ORDER BY t.last_date",
+                    &format!(" ORDER BY ({pinned}) DESC, t.last_date")
+                )
+        );
+        let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
+        let pinned = crate::fork::reminders::pinned_expr("m.thread_id");
+        assert_eq!(
+            apply(FLAT, ListOpts::default(), Shape::Flat),
+            FLAT.replace(
+                " ORDER BY m.date",
+                &format!(" AND {hidden} ORDER BY ({pinned}) DESC, m.date")
+            )
+        );
     }
 
     #[test]
@@ -149,7 +175,7 @@ mod tests {
         assert!(sql.contains(
             "AND EXISTS (SELECT 1 FROM messages m3 WHERE m3.thread_id = t.id AND m3.folder_id IN (SELECT id FROM sel) AND m3.is_read = 0) GROUP BY t.id"
         ));
-        assert!(sql.ends_with("ORDER BY t.last_date DESC LIMIT ?2 OFFSET ?3"));
+        assert!(sql.ends_with(") DESC, t.last_date DESC LIMIT ?2 OFFSET ?3"));
     }
 
     #[test]
@@ -163,23 +189,22 @@ mod tests {
             g,
         );
         assert!(sql.contains(" AND t.starred = 1 GROUP BY t.id"));
-        assert!(sql.contains("ORDER BY (EXISTS (SELECT 1 FROM messages m3"));
+        assert!(sql.contains(") DESC, (EXISTS (SELECT 1 FROM messages m3"));
         assert!(sql.contains(") DESC, t.last_date DESC LIMIT"));
     }
 
     #[test]
     fn flat_variants() {
         let sql = apply(FLAT, ListOpts::parse(Some("unread"), None), Shape::Flat);
-        assert!(sql
-            .contains("WHERE m.folder_id = ?1 AND m.is_read = 0 ORDER BY m.date DESC, m.id DESC"));
+        assert!(sql.contains(" AND m.is_read = 0 ORDER BY ("));
+        assert!(sql.ends_with(") DESC, m.date DESC, m.id DESC LIMIT ?2 OFFSET ?3"));
         let sql = apply(
             FLAT,
             ListOpts::parse(Some("starred"), Some("unread_first")),
             Shape::Flat,
         );
-        assert!(sql.contains(
-            "AND m.is_starred = 1 ORDER BY (m.is_read = 0) DESC, m.date DESC, m.id DESC"
-        ));
+        assert!(sql.contains("AND m.is_starred = 1 ORDER BY ("));
+        assert!(sql.contains(") DESC, (m.is_read = 0) DESC, m.date DESC, m.id DESC"));
     }
 
     #[test]

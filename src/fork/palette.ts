@@ -60,10 +60,10 @@ export function forkCommands(): ForkCommand[] {
   );
   if (navHooks.calendar)
     list.push({ id: "fork-calendar", label: t("palette.goto", { folder: t("fork.nav.calendar") }), hint: "G C", run: () => navHooks.calendar?.() });
-  if (navHooks.court) {
+  if (navHooks.reminders) {
     list.push(
-      { id: "fork-on-me", label: t("palette.goto", { folder: t("fork.nav.on_me") }), hint: "G O", run: () => navHooks.court?.("on_me") },
-      { id: "fork-waiting", label: t("palette.goto", { folder: t("fork.nav.waiting") }), hint: "G W", run: () => navHooks.court?.("waiting") },
+      { id: "fork-snoozed", label: t("palette.goto", { folder: t("fork.nav.snoozed") }), hint: "G Z", run: () => navHooks.reminders?.("snooze") },
+      { id: "fork-followups", label: t("palette.goto", { folder: t("fork.nav.followups") }), hint: "G F", run: () => navHooks.reminders?.("followup") },
     );
   }
   if (navHooks.crmToggle)

@@ -12,7 +12,7 @@ import { forkPrep, forkPrepUpcoming, runPrepBrief } from "./fork-prep";
 import { forkSmellRewrite, SMELL_FIXTURE_DRAFT } from "./fork-smell";
 import { forkComposeInvoke } from "./fork-compose";
 import { forkCalendarInvoke } from "./fork-calendar";
-import { forkCourtCounts, forkCourtList } from "./fork-court";
+import { forkCourtCounts, forkCourtList, forkReminderCounts, forkReminderGet, forkReminderList } from "./fork-court";
 
 // The app checks `"__TAURI_INTERNALS__" in window` to decide whether to boot
 // (vs. show onboarding). Presence is enough — our aliased invoke does the work.
@@ -296,6 +296,18 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     case "fork_court_counts":
       return ok(forkCourtCounts());
     case "fork_court_recompute":
+      return ok(undefined);
+    // ---- v1.1.1 reminders ----
+    case "fork_reminder_list":
+      return ok(forkReminderList(String(args.kind), args.offset ?? 0));
+    case "fork_reminder_counts":
+      return ok(forkReminderCounts());
+    case "fork_reminder_get":
+      return ok(forkReminderGet(Number(args.threadId)));
+    case "fork_reminder_set":
+    case "fork_reminder_followup_on_send":
+    case "fork_reminder_clear":
+    case "fork_reminder_seen":
       return ok(undefined);
     // ---- Phase 11 prep ----
     case "fork_prep":

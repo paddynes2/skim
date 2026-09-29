@@ -73,6 +73,16 @@ export function removeThread(thread: ThreadRow, kind: RemovalKind, ids: number[]
   undo.hold(kind, rows, ids, apiCallFor(kind, ids), { reopen });
 }
 
+/** v1.1.1: a snoozed thread leaves the list at once and the next one opens,
+ *  like archive. No undo hold: the reminder itself is the record, and the
+ *  status line offers Remove. */
+export function leaveList(threadId: number): void {
+  const wasOpen = mail.selectedThreadId === threadId;
+  const next = wasOpen ? nextAfterRemoval(mail.threads, threadId) : null;
+  mail.removeThreadFromList(threadId);
+  if (wasOpen) select(next);
+}
+
 /** Remove exactly these rows (the bulk path): ticked rows, not whole threads. */
 export function removeRows(rows: ThreadRow[], kind: RemovalKind, ids: number[]): void {
   if (rows.length === 0 || ids.length === 0) return;

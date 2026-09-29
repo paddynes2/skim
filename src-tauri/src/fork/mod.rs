@@ -17,6 +17,7 @@ pub mod google;
 pub mod list;
 pub mod mcp;
 pub mod prep;
+pub mod reminders;
 pub mod restore;
 pub mod scheduler;
 pub mod search_query;
@@ -44,6 +45,8 @@ pub fn start(app: AppHandle) {
     scheduler::start(app.clone());
     // 12: the local MCP server (127.0.0.1:8342), off when `fork_mcp` = off.
     mcp::start(app.clone());
+    // v1.1.1: Snooze / Follow-ups sweep, every minute and after mail updates.
+    reminders::start(app.clone());
     // 10: full ball-in-court pass at startup, then a pass per `mail:updated`.
     let db = app.state::<crate::state::AppState>().db.clone();
     court::full_pass(app.clone(), db.clone());
