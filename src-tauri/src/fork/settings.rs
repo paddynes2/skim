@@ -40,6 +40,9 @@ pub const ALLOWED: &[&str] = &[
     "fork_court_window_days", // look-back of On me / Waiting; default 30, "all" = everything
     // Phase 12
     "fork_mcp", // on | off
+    // v1.1.1
+    "fork_labels_collapsed", // on | off; sidebar Labels section folded
+    "fork_labels_hidden",    // JSON list of label paths hidden from the sidebar
 ];
 
 #[cfg(test)]

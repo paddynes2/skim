@@ -69,12 +69,9 @@
   let translating = $state<Record<number, Translating>>({});
   let loadedFor = $state<string | null>(null);
   // The focused (fully open) message in the conversation. Reply/AI actions
-  // target it; newer messages collapse above it, older ones below. Defaults to
-  // the latest-in-folder message on thread load.
+  // target it; the others show as one-line rows. Defaults to the newest
+  // message of the thread on load (the in-folder one in Drafts).
   let focusedId = $state<number | null>(null);
-  // Accordion open state for the two collapsed sections around the focused one.
-  let laterOpen = $state(false);
-  let earlierOpen = $state(false);
   let focusedEl = $state<HTMLDivElement | undefined>();
 
   // The newest message of the thread IN THE CURRENT FOLDER — the default focus,
@@ -97,12 +94,8 @@
     return msgs.find((m) => m.id === focusedId) ?? latest;
   });
 
-  // Whole thread, newest first. Split around the focused message: `newer` sits
-  // collapsed above it ("later in thread"), `older` collapsed below ("earlier").
+  // Whole thread, newest first; the focused message expands in place.
   const ordered = $derived.by(() => [...(detail?.messages ?? [])].reverse());
-  const focusIdx = $derived(ordered.findIndex((m) => m.id === focused?.id));
-  const newer = $derived(focusIdx < 0 ? [] : ordered.slice(0, focusIdx));
-  const older = $derived(focusIdx < 0 ? [] : ordered.slice(focusIdx + 1));
 
   // The single message shown when not in conversation view: the one picked from
   // a flat list, else the newest in folder.
@@ -274,17 +267,14 @@
       const d = await api.getThread(threadId);
       if (mail.selectedThreadId !== threadId) return;
       detail = d;
-      // Focus the latest-in-folder message (the one just opened). Newer messages
-      // collapse above it, older ones below; a side's accordion opens by default
-      // only when it hides unread mail. Body loading follows `focused`/`shown`.
+      // Fork (v1.1.1): open the newest message of the whole conversation, like
+      // Outlook, so a reply filed in another folder is never hidden. Drafts keep
+      // the in-folder message, because that is the draft being opened.
       const msgs = d.messages;
       const inFolder = msgs.filter((m) => m.folderId === mail.selectedFolderId);
-      const topId = (inFolder.length ? inFolder[inFolder.length - 1] : msgs[msgs.length - 1])?.id ?? null;
+      const draftsFolder = mail.selectedFolder?.role === "drafts";
+      const topId = (draftsFolder && inFolder.length ? inFolder[inFolder.length - 1] : msgs[msgs.length - 1])?.id ?? null;
       focusedId = topId;
-      const orderedNow = [...msgs].reverse();
-      const idx = orderedNow.findIndex((m) => m.id === topId);
-      laterOpen = idx > 0 && orderedNow.slice(0, idx).some((m) => !m.isRead);
-      earlierOpen = idx >= 0 && orderedNow.slice(idx + 1).some((m) => !m.isRead);
 
       const unread = d.messages.filter((m) => !m.isRead).map((m) => m.id);
       if (unread.length > 0) {
@@ -572,52 +562,20 @@
       <h1 class="subject">{shownSubject}</h1>
 
       {#if conversation}
-        {#if newer.length > 0}
-          <div class="thread-more">
-            <button
-              class="more-toggle"
-              onclick={() => (laterOpen = !laterOpen)}
-              aria-expanded={laterOpen}
-            >
-              <span class="chev" class:open={laterOpen}>▸</span>
-              {t("reading.later", { n: newer.length })}
-            </button>
-            {#if laterOpen}
-              <div class="convo">
-                {#each newer as m (m.id)}
-                  {@render chatRow(m)}
-                {/each}
+        <!-- Fork (v1.1.1): the whole conversation newest first, like Outlook.
+             The open message expands in place; the rest are one-line rows. -->
+        <div class="convo">
+          {#each ordered as m, i (m.id)}
+            {#if m.id === focused?.id}
+              <div bind:this={focusedEl} class="focused-msg" class:not-first={i > 0}>
+                {@render messageBlock(m, bodies[m.id])}
+                {@render inlineReplySlot()}
               </div>
+            {:else}
+              {@render chatRow(m)}
             {/if}
-          </div>
-        {/if}
-
-        {#if focused}
-          <div bind:this={focusedEl}>
-            {@render messageBlock(focused, bodies[focused.id])}
-            {@render inlineReplySlot()}
-          </div>
-        {/if}
-
-        {#if older.length > 0}
-          <div class="thread-more">
-            <button
-              class="more-toggle"
-              onclick={() => (earlierOpen = !earlierOpen)}
-              aria-expanded={earlierOpen}
-            >
-              <span class="chev" class:open={earlierOpen}>▸</span>
-              {t("reading.earlier", { n: older.length })}
-            </button>
-            {#if earlierOpen}
-              <div class="convo">
-                {#each older as m (m.id)}
-                  {@render chatRow(m)}
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/if}
+          {/each}
+        </div>
       {:else if shown}
         {@render messageBlock(shown, bodies[shown.id])}
         {@render inlineReplySlot()}
@@ -1054,28 +1012,10 @@
   }
 
   /* ---- Conversation (chat) view ---- */
-  .thread-more {
-    margin-top: 8px;
-  }
-  .more-toggle {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 4px;
-    color: var(--text-dim);
-    font-size: 12.5px;
-    font-weight: 600;
-  }
-  .more-toggle:hover {
-    color: var(--text);
-  }
-  .chev {
-    font-size: 10px;
-    transition: transform 0.12s;
-    display: inline-block;
-  }
-  .chev.open {
-    transform: rotate(90deg);
+  .focused-msg.not-first {
+    margin: 10px 0 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--hairline);
   }
   .convo {
     display: flex;

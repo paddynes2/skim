@@ -14,6 +14,7 @@
   import { VF_ON_ME, VF_WAITING } from "../fork/court/api";
   import { courtCounts } from "../fork/court/counts.svelte";
   import { courtStore } from "../fork/court/store.svelte";
+  import { labelPrefs } from "../fork/labels.svelte";
 
   async function compose() {
     const draft = await api.createDraft(await mail.composeAccountId());
@@ -37,6 +38,16 @@
   // The user's own folders, as a tree: a nested folder prints only what its
   // parent row does not already say, and leans on an indent for the rest.
   const labels = $derived(folderTree(mail.folders.filter((f) => f.role === null)));
+  // Fork (v1.1.1): the section folds, and single labels can be hidden.
+  void labelPrefs.load();
+  const visibleLabels = $derived(
+    labels.filter(
+      ({ folder }) =>
+        labelPrefs.revealHidden ||
+        !labelPrefs.isHidden(folderLabel(folder)) ||
+        (ui.view === "mail" && mail.selectedFolderId === folder.id),
+    ),
+  );
   // In the unified view every connected mailbox is in scope.
   const ownHeading = $derived(
     ownFoldersHeading(
@@ -149,27 +160,58 @@
 
     {#if labels.length > 0}
       <div class="section">
-        <div class="microlabel heading">{ownHeading}</div>
-        {#each labels as { folder, depth, label } (folder.id)}
-          {@const path = folderLabel(folder)}
-          <button
-            class="item"
-            class:selected={ui.view === "mail" && mail.selectedFolderId === folder.id}
-            onclick={() => {
-              ui.showMail();
-              void mail.selectFolder(folder.id);
-            }}
-            style="--depth: {Math.min(depth, 3)}"
-            title={collapsed || path !== label ? path : undefined}
-          >
-            <span class="dot"></span>
-            <span class="initial" aria-hidden="true">{(Array.from(label)[0] ?? "").toUpperCase()}</span>
-            <span class="name">{label}</span>
-            {#if folder.unreadCount > 0}
-              <span class="count">{folder.unreadCount}</span>
-            {/if}
-          </button>
-        {/each}
+        <button
+          class="microlabel heading fold"
+          onclick={() => labelPrefs.toggleCollapsed()}
+          aria-expanded={!labelPrefs.collapsed}
+        >
+          <span class="chev" class:open={!labelPrefs.collapsed} aria-hidden="true">▸</span>
+          {ownHeading}
+        </button>
+        {#if !labelPrefs.collapsed}
+          {#each visibleLabels as { folder, depth, label } (folder.id)}
+            {@const path = folderLabel(folder)}
+            {@const hiddenSelf = labelPrefs.isHiddenItself(path)}
+            <div class="label-row" class:is-hidden={labelPrefs.isHidden(path)}>
+              <button
+                class="item"
+                class:selected={ui.view === "mail" && mail.selectedFolderId === folder.id}
+                onclick={() => {
+                  ui.showMail();
+                  void mail.selectFolder(folder.id);
+                }}
+                style="--depth: {Math.min(depth, 3)}"
+                title={collapsed || path !== label ? path : undefined}
+              >
+                <span class="dot"></span>
+                <span class="initial" aria-hidden="true">{(Array.from(label)[0] ?? "").toUpperCase()}</span>
+                <span class="name">{label}</span>
+                {#if folder.unreadCount > 0}
+                  <span class="count">{folder.unreadCount}</span>
+                {/if}
+              </button>
+              {#if !collapsed && (hiddenSelf || !labelPrefs.isHidden(path))}
+                <button
+                  class="hide-label"
+                  onclick={() => (hiddenSelf ? labelPrefs.unhide(path) : labelPrefs.hide(path))}
+                  title={hiddenSelf ? t("fork.labels.show") : t("fork.labels.hide")}
+                  aria-label={hiddenSelf ? t("fork.labels.show") : t("fork.labels.hide")}
+                >
+                  {#if hiddenSelf}
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></svg>
+                  {:else}
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M1.5 8s2.4-4.5 6.5-4.5c1.3 0 2.4.4 3.3 1M14.5 8s-2.4 4.5-6.5 4.5c-1.3 0-2.4-.4-3.3-1M2 14L14 2" /></svg>
+                  {/if}
+                </button>
+              {/if}
+            </div>
+          {/each}
+          {#if labelPrefs.hiddenCount > 0 && !collapsed}
+            <button class="microlabel reveal" onclick={() => labelPrefs.toggleReveal()}>
+              {labelPrefs.revealHidden ? t("fork.labels.done") : t("fork.labels.hidden_n", { n: labelPrefs.hiddenCount })}
+            </button>
+          {/if}
+        {/if}
       </div>
     {/if}
   </div>
@@ -359,6 +401,60 @@
   }
   .heading {
     padding: 0 12px 6px;
+  }
+  /* Fork (v1.1.1): the Labels heading folds the section. */
+  .heading.fold {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+    padding-top: 2px;
+  }
+  .heading.fold:hover {
+    color: var(--text);
+  }
+  .chev {
+    display: inline-block;
+    font-size: 9px;
+    transition: transform 0.12s;
+  }
+  .chev.open {
+    transform: rotate(90deg);
+  }
+  .label-row {
+    position: relative;
+  }
+  .label-row .item {
+    width: 100%;
+  }
+  .label-row.is-hidden .item {
+    opacity: 0.45;
+  }
+  .hide-label {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    padding: 4px;
+    border-radius: var(--radius-s);
+    color: var(--text-dim);
+    background: var(--hover);
+  }
+  .label-row:hover .hide-label,
+  .hide-label:focus-visible {
+    display: flex;
+  }
+  .hide-label:hover {
+    color: var(--text);
+  }
+  .reveal {
+    text-align: left;
+    padding: 6px 12px;
+    color: var(--text-faint);
+  }
+  .reveal:hover {
+    color: var(--text);
   }
 
   .item {
