@@ -195,8 +195,8 @@
     color: var(--text);
   }
   .chip.active {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
   }
   .chip:disabled {
@@ -236,7 +236,7 @@
     background: var(--text-dim);
   }
   .switch.on {
-    background: var(--text);
+    background: var(--primary);
   }
   .switch.on .knob {
     transform: translateX(14px);

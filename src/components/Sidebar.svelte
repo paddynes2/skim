@@ -354,8 +354,8 @@
     gap: 8px;
     padding: 9px 12px;
     border-radius: var(--radius-m);
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
     font-size: 13.5px;
     transition: opacity 0.1s;
@@ -596,8 +596,8 @@
     height: 16px;
     padding: 0 4px;
     border-radius: 8px;
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-size: 9.5px;
     font-weight: 700;
     display: grid;
@@ -614,7 +614,7 @@
     width: 3px;
     height: 22px;
     border-radius: 2px;
-    background: var(--text);
+    background: var(--primary);
   }
   .sidebar.collapsed .footer {
     align-items: center;

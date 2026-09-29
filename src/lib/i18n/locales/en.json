@@ -255,6 +255,7 @@
   "theme.light": "Light",
   "theme.dark": "Dark",
   "theme.cold": "Cold",
+  "theme.base": "Base",
   "theme.warm": "Warm",
   "settings.title": "Settings",
   "settings.account": "Account",

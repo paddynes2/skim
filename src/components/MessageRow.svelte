@@ -313,8 +313,8 @@
   }
   .row-wrap.checked .check {
     opacity: 1;
-    border-color: var(--text);
-    background: var(--text);
+    border-color: var(--primary);
+    background: var(--primary);
     color: var(--surface);
   }
 

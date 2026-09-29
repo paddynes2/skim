@@ -344,8 +344,8 @@
     color: var(--text);
   }
   .chip.active {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
   }
   .chip:disabled {

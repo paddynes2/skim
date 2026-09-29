@@ -13,7 +13,7 @@ import { dirname, resolve } from "node:path";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const TOKENS = resolve(ROOT, "src", "styles", "tokens.css");
-export const THEMES = ["cold-light", "cold-dark", "warm-light", "warm-dark"];
+export const THEMES = ["cold-light", "cold-dark", "warm-light", "warm-dark", "base-light", "base-dark"];
 
 /** Parse `tokens.css` into { theme: { token: value } }. `:root` is cold-light. */
 export function parseTokens(css = readFileSync(TOKENS, "utf8")) {

@@ -193,9 +193,9 @@
     background: var(--hover);
   }
   .btn.primary {
-    background: var(--text);
-    color: var(--bg);
-    border-color: var(--text);
+    background: var(--primary);
+    color: var(--on-primary);
+    border-color: var(--primary);
   }
   .btn.primary:hover {
     opacity: 0.88;

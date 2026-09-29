@@ -136,8 +136,8 @@
     display: grid;
     place-items: center;
     border-radius: 0 var(--radius-m) var(--radius-m) 0;
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     border-left: 1px solid color-mix(in srgb, var(--bg) 30%, transparent);
   }
   .caret:hover:not(:disabled) {
@@ -223,8 +223,8 @@
   .go {
     padding: 5px 12px;
     border-radius: var(--radius-s);
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-size: 12.5px;
     font-weight: 600;
   }

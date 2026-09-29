@@ -337,8 +337,8 @@
     width: 100%;
     padding: 12px 18px;
     border-radius: var(--radius-m);
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 700;
     font-size: 14px;
     display: flex;
@@ -380,8 +380,8 @@
     color: var(--text);
   }
   .lang.active {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
   }
 

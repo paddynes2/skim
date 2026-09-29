@@ -503,7 +503,7 @@
       background 0.16s ease;
   }
   .switch.on {
-    background: var(--text);
+    background: var(--primary);
   }
   .switch.on .knob {
     transform: translateX(14px);
@@ -563,13 +563,13 @@
   }
   .btn.active,
   .btn.primary {
-    background: var(--text);
-    color: var(--bg);
-    border-color: var(--text);
+    background: var(--primary);
+    color: var(--on-primary);
+    border-color: var(--primary);
   }
   .btn.primary:hover,
   .btn.active:hover {
-    background: var(--text);
+    background: var(--primary);
     opacity: 0.88;
   }
   .btn.join {

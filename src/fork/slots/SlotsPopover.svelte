@@ -223,8 +223,8 @@
     color: var(--text);
   }
   .chip.active {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
   }
   .text {
@@ -285,12 +285,12 @@
     cursor: default;
   }
   .btn.primary {
-    background: var(--text);
-    color: var(--bg);
-    border-color: var(--text);
+    background: var(--primary);
+    color: var(--on-primary);
+    border-color: var(--primary);
   }
   .btn.primary:hover {
-    background: var(--text);
+    background: var(--primary);
     opacity: 0.88;
   }
   .btn.ghost {

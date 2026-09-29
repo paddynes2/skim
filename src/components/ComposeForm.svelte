@@ -1317,8 +1317,8 @@
   .send {
     padding: 8px 22px;
     border-radius: var(--radius-m);
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 700;
     font-size: 13.5px;
   }

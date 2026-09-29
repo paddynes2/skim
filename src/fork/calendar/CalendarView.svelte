@@ -366,8 +366,8 @@
     color: var(--text);
   }
   .chip.active {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
   }
   .views {
@@ -383,8 +383,8 @@
     gap: 6px;
     padding: 6px 12px;
     border-radius: var(--radius-m);
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
     font-size: 13px;
   }

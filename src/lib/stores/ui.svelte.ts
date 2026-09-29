@@ -53,7 +53,9 @@ function parseTheme(raw: string | undefined): { temperature: Temperature; lightn
     case "cold-light":
     case "cold-dark":
     case "warm-light":
-    case "warm-dark": {
+    case "warm-dark":
+    case "base-light":
+    case "base-dark": {
       const [temperature, lightness] = raw.split("-") as [Temperature, Lightness];
       return { temperature, lightness };
     }
@@ -64,7 +66,8 @@ function parseTheme(raw: string | undefined): { temperature: Temperature; lightn
     case "system":
       return { temperature: "cold", lightness: media.matches ? "dark" : "light" };
     default:
-      return { temperature: "warm", lightness: "light" };
+      // Fork (v1.1.1): new installs start on the Base look.
+      return { temperature: "base", lightness: "light" };
   }
 }
 

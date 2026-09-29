@@ -64,6 +64,26 @@
       line: "rgba(236,236,239,0.2)",
       line2: "rgba(236,236,239,0.14)",
     },
+    "base-light": {
+      bg: "#f8f9fb",
+      surface: "#ffffff",
+      text: "#1b2029",
+      accent: "#245edb",
+      accentSoft: "#e9f0fc",
+      accentBorder: "rgba(36,94,219,0.55)",
+      line: "#d6dce5",
+      line2: "#e6e9ee",
+    },
+    "base-dark": {
+      bg: "#15181e",
+      surface: "#1a1d24",
+      text: "#edf0f5",
+      accent: "#8bb6ff",
+      accentSoft: "#223451",
+      accentBorder: "rgba(139,182,255,0.6)",
+      line: "#414b5b",
+      line2: "#2c323d",
+    },
     "warm-dark": {
       bg: "#14110d",
       surface: "#1a1712",
@@ -672,10 +692,11 @@
           <div></div>
           <div class="axis">{t("theme.cold")}</div>
           <div class="axis">{t("theme.warm")}</div>
+          <div class="axis">{t("theme.base")}</div>
 
           {#each [{ light: "light" as Lightness }, { light: "dark" as Lightness }] as row (row.light)}
             <div class="axis right">{t(`theme.${row.light}`)}</div>
-            {#each ["cold" as Temperature, "warm" as Temperature] as temp (temp)}
+            {#each ["cold" as Temperature, "warm" as Temperature, "base" as Temperature] as temp (temp)}
               {@const p = THEME_PREVIEWS[`${temp}-${row.light}`]}
               <button
                 class="cell"
@@ -1191,8 +1212,8 @@
     color: var(--text);
   }
   .chip.active {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     font-weight: 600;
   }
 
@@ -1232,7 +1253,7 @@
     background: var(--text-dim);
   }
   .switch.on {
-    background: var(--text);
+    background: var(--primary);
   }
   .switch.on .knob {
     transform: translateX(14px);
@@ -1246,7 +1267,7 @@
   /* Theme matrix: temperature (columns) × lightness (rows), live mini-previews. */
   .theme-matrix {
     display: grid;
-    grid-template-columns: 64px 1fr 1fr;
+    grid-template-columns: 64px 1fr 1fr 1fr;
     gap: 10px 12px;
     align-items: center;
   }
@@ -1346,8 +1367,8 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
     display: grid;
     place-items: center;
   }

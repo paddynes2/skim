@@ -17,6 +17,8 @@ body {
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.45;
+  letter-spacing: var(--tracking-ui);
+  font-weight: var(--weight-ui);
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;

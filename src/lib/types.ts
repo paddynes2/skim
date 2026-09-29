@@ -203,7 +203,7 @@ export interface SkimError {
 }
 
 /** Theme is two independent axes: temperature × lightness. */
-export type Temperature = "cold" | "warm";
+export type Temperature = "cold" | "warm" | "base";
 export type Lightness = "light" | "dark";
 /** Persisted theme value, e.g. "warm-light". */
 export type Theme = `${Temperature}-${Lightness}`;

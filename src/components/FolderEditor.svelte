@@ -201,13 +201,13 @@
     cursor: default;
   }
   .btn.primary {
-    background: var(--text);
-    border-color: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--on-primary);
   }
   .btn.primary:hover:not(:disabled) {
     opacity: 0.85;
-    background: var(--text);
+    background: var(--primary);
   }
   .btn.primary kbd {
     color: var(--bg);

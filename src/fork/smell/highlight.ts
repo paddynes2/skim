@@ -60,7 +60,7 @@ function ensureStyle(): void {
   st.id = STYLE_ID;
   st.textContent = `
 :root { --smell-warn: #b7791f; }
-:root[data-theme="cold-dark"], :root[data-theme="warm-dark"] { --smell-warn: #e0b45a; }
+:root[data-theme="cold-dark"], :root[data-theme="warm-dark"], :root[data-theme="base-dark"] { --smell-warn: #e0b45a; }
 ::highlight(smell-hard) { text-decoration: underline wavy var(--danger); text-decoration-skip-ink: none; }
 ::highlight(smell-warn) { text-decoration: underline dotted var(--smell-warn); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 ::highlight(smell-info) { text-decoration: underline dotted var(--text-faint); }

@@ -86,7 +86,7 @@
     color: var(--text);
   }
   .join:hover {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--primary);
+    color: var(--on-primary);
   }
 </style>

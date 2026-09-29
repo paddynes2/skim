@@ -58,6 +58,13 @@
 
   --shadow-pop: 0 8px 32px rgba(17, 17, 20, 0.14), 0 1px 4px rgba(17, 17, 20, 0.08);
 
+  /* Fork (v1.1.1): the filled primary button. Ink-on-paper in the classic and
+     warm themes; blue in Base. Body tracking/weight are per theme for Inter. */
+  --primary: var(--text);
+  --on-primary: var(--bg);
+  --tracking-ui: normal;
+  --weight-ui: 400;
+
   color-scheme: light;
 }
 
@@ -177,6 +184,100 @@
   --acct-5: #93b578;
 
   --shadow-pop: 0 8px 32px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+/* Fork (v1.1.1): Base, the Paddy x Wes Base look (OS apps/internal/paddy-wes-base
+   tokens.css, itself the agent-fleet desk system measured from Attio): Inter,
+   neutral cool greys, hairlines, dense rows, one blue. Violet stays AI's alone,
+   taken from Base's lilac status ink. */
+:root[data-theme="base-light"] {
+  --font-ui: "Inter Variable", "Inter", "Segoe UI", sans-serif;
+  --tracking-ui: -0.01em;
+  --weight-ui: 450;
+  --radius-m: 8px;
+  --radius-l: 10px;
+
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --text: #1b2029;
+  --text-dim: #4c5564;
+  --text-faint: #5e6876;
+  --unread: #245edb;
+  --star: #a86500;
+  --focus: #245edb;
+  --row-unread-tint: rgba(36, 94, 219, 0.05);
+  --hairline: #e6e9ee;
+  --hairline-strong: #d6dce5;
+  --hover: #f0f2f5;
+  --active: rgba(0, 0, 0, 0.06);
+  --selected: #e9f0fc;
+
+  --accent: #4c2fa8;
+  --accent-soft: #eeeaff;
+  --accent-dim: rgba(76, 47, 168, 0.55);
+  --on-accent: #ffffff;
+
+  --primary: #245edb;
+  --on-primary: #ffffff;
+
+  --danger: #b4234f;
+  --success: #0f6b3a;
+
+  --acct-1: #2456ad;
+  --acct-2: #875100;
+  --acct-3: #0b5e57;
+  --acct-4: #9c1f4b;
+  --acct-5: #0f6b3a;
+
+  --shadow-pop: rgba(28, 40, 64, 0.12) 0 8px 28px -6px, rgba(28, 40, 64, 0.16) 0 18px 60px -4px;
+
+  color-scheme: light;
+}
+
+:root[data-theme="base-dark"] {
+  --font-ui: "Inter Variable", "Inter", "Segoe UI", sans-serif;
+  --tracking-ui: -0.01em;
+  --weight-ui: 450;
+  --radius-m: 8px;
+  --radius-l: 10px;
+
+  --bg: #15181e;
+  --surface: #1a1d24;
+  --surface-raised: #20242c;
+  --text: #edf0f5;
+  --text-dim: #bbc3cf;
+  --text-faint: #929eae;
+  --unread: #8bb6ff;
+  --star: #f2cf72;
+  --focus: #8bb6ff;
+  --row-unread-tint: rgba(139, 182, 255, 0.07);
+  --hairline: #2c323d;
+  --hairline-strong: #414b5b;
+  --hover: #252a34;
+  --active: rgba(255, 255, 255, 0.06);
+  --selected: #223451;
+
+  --accent: #c3b6ff;
+  --accent-soft: rgba(140, 118, 224, 0.22);
+  --accent-dim: rgba(195, 182, 255, 0.6);
+  --on-accent: #15181e;
+
+  --primary: #3265d6;
+  --on-primary: #ffffff;
+
+  --danger: #f5a9c6;
+  --success: #8fdcb2;
+
+  --acct-1: #a7c7ff;
+  --acct-2: #f2cf72;
+  --acct-3: #8fe0d8;
+  --acct-4: #f5a9c6;
+  --acct-5: #8fdcb2;
+
+  --shadow-pop: rgba(0, 0, 0, 0.5) 0 8px 28px -6px, rgba(0, 0, 0, 0.6) 0 18px 60px -4px;
 
   color-scheme: dark;
 }

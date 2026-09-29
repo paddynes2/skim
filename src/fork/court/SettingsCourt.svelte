@@ -204,7 +204,7 @@
     background: var(--text-dim);
   }
   .switch.on {
-    background: var(--text);
+    background: var(--primary);
   }
   .switch.on .knob {
     transform: translateX(14px);
