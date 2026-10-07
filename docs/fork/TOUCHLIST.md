@@ -164,3 +164,14 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/db/queries.rs` | `recompute_folder_unread` | v1.1.2: `count(DISTINCT COALESCE(thread_id, -id))` instead of `count(*)` | unread conversations, as Gmail counts (D55) |
 | `src-tauri/src/commands/mail.rs` | `mark_read`, `apply_read`, `set_starred` local closures | v1.1.2: ids pass through `fork::flags::with_shared_copies` first | Gmail label copies share one flag (D55) |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | `version` | 1.1.2 | updater moves (D55) |
+| `src/components/Sidebar.svelte` | fork rows above the folders | v1.1.3: the Snoozed and Follow-ups rows become one Deals row with its unread count | D56 |
+| `src/components/MessageList.svelte` | header, row overlay, empty state | v1.1.3: Deals header and per-row `DealBadge` replace the reminder ones; an empty Deals list points at Settings | D56 |
+| `src/components/ReadingPane.svelte` | toolbar, under the subject | v1.1.3: `fork/deals/DealTool` replaces `ThreadReminders` | D56 |
+| `src/components/ComposeForm.svelte` | send bar | v1.1.3: the follow-up picker and its send hook removed; the file matches its pre-1.1.1 state there | D56 |
+| `src/components/ShortcutsOverlay.svelte` | rows | v1.1.3: H and B rows gone; go-to list reads I/S/T/D/A/C/E | D56 |
+| `src/App.svelte` | mount-once effect | v1.1.3: starts the deals store instead of the reminders store | D56 |
+| `src/lib/stores/mail.svelte.ts` | `fetchPage`, `mail:updated` listener, `refreshFolders` guard, exports | v1.1.3: virtual folder -924 (Deals) replaces -922 / -923; any update refreshes an open Deals list and the badge | D56 |
+| `src/lib/i18n/locales/en.json` | `fork.rem.*`, `fork.nav.snoozed`, `fork.nav.followups` | v1.1.3: removed; `fork.nav.deals` and `fork.deals.*` added | D56 |
+| `src-tauri/src/lib.rs` | `generate_handler!` | v1.1.3: five `fork_deals_*` commands | D56 |
+| `demo/mock/tauri-core.ts` | `invoke` switch, `get_settings` | v1.1.3: `fork_deals_*` fixtures replace `fork_reminder_*`; demo `fork_deals` setting | D56 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | `version` | 1.1.3 | updater moves (D56) |

@@ -1,3 +1,8 @@
+//! DORMANT since v1.1.3 (D56): Deals replaced the Snooze / Follow-ups UI after
+//! zero uses, nothing sets a reminder any more and [`start`] is no longer
+//! called. The table, the commands and the `fork::list` clauses remain and
+//! match no rows; remove them together when convenient.
+//!
 //! Snooze and Follow-ups (v1.1.1), the replacement for the On me / Waiting
 //! views, which guessed from the last sender and were not useful. Here every
 //! reminder is one Patrick set on a thread; the table and its rules are in

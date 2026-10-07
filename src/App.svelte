@@ -31,7 +31,7 @@
   import SendHeld from "./fork/compose/SendHeld.svelte";
   import ScheduledList from "./fork/scheduled/ScheduledList.svelte";
   import { SCHEDULED_FOLDER_ID } from "./fork/compose/api";
-  import { remindersStore } from "./fork/reminders/store.svelte";
+  import { dealsStore } from "./fork/deals/store.svelte";
   import CalendarView from "./fork/calendar/CalendarView.svelte";
   import TitlebarExtras from "./fork/calendar/TitlebarExtras.svelte";
   import SlotsPopover from "./fork/slots/SlotsPopover.svelte";
@@ -63,11 +63,11 @@
   $effect(() => {
     const [stopCourt, stopCalendar] = untrack(() => {
       stopPrepReminder = startPrepReminder();
-      // Fork (v1.1.1): Snooze / Follow-ups replace the court views and their
-      // daily nudge (Patrick found both useless). The court table still feeds
+      // Fork (v1.1.3): Deals replaces Snooze / Follow-ups, which replaced the
+      // court views (Patrick used none of them). The court table still feeds
       // the MCP `list_court` tool.
       // Fork (7): calendar hooks (g c, m), calendar:* listeners, next-event chip.
-      return [remindersStore.start(), calendar.start()] as const;
+      return [dealsStore.start(), calendar.start()] as const;
     });
     return () => {
       stopPrepReminder?.();

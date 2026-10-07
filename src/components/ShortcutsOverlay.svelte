@@ -27,7 +27,7 @@
         // Fork (3.1)
         { label: t("fork.shortcuts.filter_unread"), keys: ["Shift U"] },
         { label: t("fork.shortcuts.filter_starred"), keys: ["Shift S"] },
-        { label: t("fork.shortcuts.goto"), keys: ["G  I/S/T/D/A/C/Z/F"] },
+        { label: t("fork.shortcuts.goto"), keys: ["G  I/S/T/D/A/C/E"] },
         // Fork (4.3)
         { label: t("fork.shortcuts.search_list"), keys: ["Shift Enter"] },
         { label: t("fork.shortcuts.search_close"), keys: ["Esc"] },
@@ -51,8 +51,6 @@
         { label: t("reading.forward"), keys: ["F"] },
         // Fork (3.2)
         { label: t("fork.shortcuts.undo"), keys: ["Z", "Ctrl Z"] },
-        { label: t("fork.rem.snooze"), keys: ["H"] },
-        { label: t("fork.rem.followup"), keys: ["B"] },
         // Fork (5, 6): composer keys.
         { label: t("fork.shortcuts.send"), keys: ["Ctrl Enter"] },
         { label: t("fork.shortcuts.smell_open"), keys: ["Alt Enter"] },

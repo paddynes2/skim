@@ -12,14 +12,9 @@ import { withoutToken } from "../../fork/search/query";
 import { COURT_UPDATED, courtApi, VF_ON_ME, VF_WAITING } from "../../fork/court/api";
 import { courtCounts } from "../../fork/court/counts.svelte";
 import type { CourtState } from "../../fork/court/types";
-import {
-  REMINDERS_UPDATED,
-  remindersApi,
-  VF_FOLLOWUPS,
-  VF_SNOOZED,
-  type ReminderKind,
-} from "../../fork/reminders/api";
-import { reminderCounts } from "../../fork/reminders/counts.svelte";
+// Fork (v1.1.3): Deals as virtual folder -924 (it replaced Snoozed / Follow-ups).
+import { dealsApi, VF_DEALS } from "../../fork/deals/api";
+import { dealsCount } from "../../fork/deals/count.svelte";
 import { undo } from "../../fork/stores/undo.svelte";
 import { insertAt, withoutPending } from "../../fork/undo-filter";
 import { folderSelected } from "../../fork/freshness";
@@ -135,10 +130,17 @@ async function attachListeners() {
   await listen<{ folderId?: number }>("mail:updated", (e) => {
     // The unified list can show any folder's mail, so every update may
     // concern it — one bounded page query, cheap enough to just refresh.
-    if (!e.payload?.folderId || isUnified() || e.payload.folderId === state.selectedFolderId) {
+    // Fork (v1.1.3): so can Deals, which spans every folder.
+    if (
+      !e.payload?.folderId ||
+      isUnified() ||
+      state.selectedFolderId === VF_DEALS ||
+      e.payload.folderId === state.selectedFolderId
+    ) {
       void refreshThreads();
     }
     void refreshFolders();
+    void dealsCount.refresh();
   });
   // Fork (10): a court pass moved a row. The two views are not folders, so
   // `mail:updated` cannot name them; this refreshes an open view and the
@@ -146,12 +148,6 @@ async function attachListeners() {
   await listen(COURT_UPDATED, () => {
     if (courtStateOf(state.selectedFolderId) !== null) void refreshThreads();
     void courtCounts.refresh();
-  });
-  // Fork (v1.1.1): a reminder was set, cleared, answered or fell due. Any list
-  // may hide or pin a thread because of it, so the open one is re-read.
-  await listen(REMINDERS_UPDATED, () => {
-    void refreshThreads();
-    void reminderCounts.refresh();
   });
   // Back from the tray. Hiding the window only hides the webview, so nothing
   // here re-runs on its own — and a view left empty by a failed read would
@@ -276,8 +272,8 @@ async function refreshFolders() {
   if (state.selectedFolderId === SEARCH_FOLDER_ID) return;
   // Fork (10): nor are the court views.
   if (courtStateOf(state.selectedFolderId) !== null) return;
-  // Fork (v1.1.1): nor Snoozed / Follow-ups.
-  if (reminderKindOf(state.selectedFolderId) !== null) return;
+  // Fork (v1.1.3): nor Deals.
+  if (state.selectedFolderId === VF_DEALS) return;
   // Auto-select inbox once it appears — also when the selected folder is gone
   // (e.g. a virtual label vanished with its last message).
   if (
@@ -368,9 +364,8 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
   // (a court row IS a thread), oldest first, across every account.
   const court = courtStateOf(folderId);
   if (court !== null) return courtApi.list(court, offset, limit);
-  // Fork (v1.1.1): Snoozed / Follow-ups, by thread, soonest due first.
-  const reminder = reminderKindOf(folderId);
-  if (reminder !== null) return remindersApi.list(reminder, offset, limit);
+  // Fork (v1.1.3): Deals, by thread, newest first, across every folder.
+  if (folderId === VF_DEALS) return dealsApi.list(offset, limit);
   if (folderId < 0) {
     const virtual = state.folders.find((f) => f.id === folderId);
     if (!virtual) return Promise.resolve([]);
@@ -527,20 +522,13 @@ async function selectCourt(court: CourtState) {
 }
 // ── end fork (10) ────────────────────────────────────────────────────────────
 
-// ── Fork (v1.1.1): Snoozed / Follow-ups as virtual folders, the same way ─────
-function reminderKindOf(folderId: number | null): ReminderKind | null {
-  if (folderId === VF_SNOOZED) return "snooze";
-  if (folderId === VF_FOLLOWUPS) return "followup";
-  return null;
-}
-
-async function selectReminders(kind: ReminderKind) {
-  const id = kind === "snooze" ? VF_SNOOZED : VF_FOLLOWUPS;
+// ── Fork (v1.1.3): Deals as a virtual folder, the same way ──────────────────
+async function selectDeals() {
   if (state.selectedFolderId === SEARCH_FOLDER_ID) {
     state.searchQuery = null;
     state.searchPrevFolderId = null;
   }
-  await selectFolder(id);
+  await selectFolder(VF_DEALS);
 }
 
 let loadingMore = false;
@@ -886,12 +874,12 @@ export const mail = {
     return courtStateOf(state.selectedFolderId);
   },
   selectCourt,
-  // Fork (v1.1.1)
-  /** Which reminder view the list is showing; `null` in every other folder. */
-  get reminderView(): ReminderKind | null {
-    return reminderKindOf(state.selectedFolderId);
+  // Fork (v1.1.3)
+  /** Whether the list is showing Deals. */
+  get dealsView(): boolean {
+    return state.selectedFolderId === VF_DEALS;
   },
-  selectReminders,
+  selectDeals,
   switchAccount,
   openLocation,
   // In the unified view the active account is null, so this syncs every engine.

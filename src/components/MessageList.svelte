@@ -12,9 +12,9 @@
   // Fork (10): the court views' header and per-row age + reason badge.
   import CourtRow from "../fork/court/CourtRow.svelte";
   import type { CourtRow as CourtRowShape } from "../fork/court/types";
-  // Fork (v1.1.1): Snoozed / Follow-ups header and per-row due badge.
-  import ReminderBadge from "../fork/reminders/ReminderBadge.svelte";
-  import type { ReminderRow as ReminderRowShape } from "../fork/reminders/api";
+  // Fork (v1.1.3): Deals header and per-row deal name.
+  import DealBadge from "../fork/deals/DealBadge.svelte";
+  import { dealsStore } from "../fork/deals/store.svelte";
 
   // "now" for the row ages, refreshed each minute so a row that crosses a
   // day boundary recolours without a reload.
@@ -27,9 +27,9 @@
     const r = row as Partial<CourtRowShape>;
     return typeof r.since === "number" ? (row as CourtRowShape) : null;
   };
-  const reminderOf = (row: unknown): ReminderRowShape | null => {
-    const r = row as Partial<ReminderRowShape>;
-    return typeof r.dueTs === "number" ? (row as ReminderRowShape) : null;
+  const dealOf = (row: unknown): string | null => {
+    const d = (row as { deal?: unknown }).deal;
+    return typeof d === "string" && d !== "" ? d : null;
   };
 
   const title = $derived.by(() => {
@@ -140,13 +140,11 @@
         onremove={(chip) => void mail.removeSearchToken(chip.token)}
         onclose={() => void mail.exitSearch()}
       />
-    {:else if mail.reminderView}
-      <!-- Fork (v1.1.1): Snoozed / Follow-ups. Soonest due first. -->
+    {:else if mail.dealsView}
+      <!-- Fork (v1.1.3): Deals. Newest first, every folder but Trash and Spam. -->
       <div class="court-head">
-        <h1>{t(mail.reminderView === "snooze" ? "fork.nav.snoozed" : "fork.nav.followups")}</h1>
-        <span class="court-sub">
-          {t(mail.reminderView === "snooze" ? "fork.rem.sub_snoozed" : "fork.rem.sub_followups", { n: mail.threads.length })}
-        </span>
+        <h1>{t("fork.nav.deals")}</h1>
+        <span class="court-sub">{t("fork.deals.sub", { n: mail.threads.length })}</span>
       </div>
     {:else if mail.courtView}
       <!-- Fork (10): a court view. The title names it; the sub-line says the
@@ -229,6 +227,9 @@
       <div class="empty">
         {#if mail.loadFailed}
           <button class="retry" onclick={() => void mail.retryLoad()}>{t("list.load_failed")}</button>
+        {:else if mail.dealsView && dealsStore.loaded && dealsStore.text.trim() === ""}
+          <!-- Fork (v1.1.3): an empty list says where the deals come from. -->
+          <button class="retry" onclick={() => ui.openSettings()}>{t("fork.deals.empty")}</button>
         {:else}
           {mail.syncState === "syncing" ? t("sync.syncing") : t("list.empty")}
         {/if}
@@ -237,11 +238,11 @@
       <div class="spacer" style="height: {start * rowH}px"></div>
       {#each visible as thread (thread.messageId ?? thread.id)}
         {@const court = mail.courtView ? courtOf(thread) : null}
-        {@const rem = mail.reminderView ? reminderOf(thread) : null}
+        {@const deal = mail.dealsView ? dealOf(thread) : null}
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" class:court={court !== null || rem !== null} class:compact={prefs.density === "compact"}>
+        <div class="court-wrap" class:court={court !== null || deal !== null} class:compact={prefs.density === "compact"}>
           <MessageRow
             {thread}
             selected={mail.groupThreads
@@ -258,9 +259,9 @@
             <div class="court-badge-slot">
               <CourtRow since={court.since} reason={court.reason} now={nowSecs} />
             </div>
-          {:else if rem}
+          {:else if deal}
             <div class="court-badge-slot">
-              <ReminderBadge kind={rem.kind} dueTs={rem.dueTs} now={nowSecs} />
+              <DealBadge {deal} />
             </div>
           {/if}
         </div>

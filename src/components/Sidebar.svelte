@@ -10,10 +10,10 @@
   import { updater } from "../lib/stores/update.svelte";
   import Settings from "./settings/Settings.svelte";
   import { starredCount } from "../fork/stores/starred.svelte";
-  // Fork (v1.1.1): Snoozed / Follow-ups with their counts, above the folders.
-  import { VF_FOLLOWUPS, VF_SNOOZED } from "../fork/reminders/api";
-  import { reminderCounts } from "../fork/reminders/counts.svelte";
-  import { remindersStore } from "../fork/reminders/store.svelte";
+  // Fork (v1.1.3): Deals with its unread count, above the folders.
+  import { VF_DEALS } from "../fork/deals/api";
+  import { dealsCount } from "../fork/deals/count.svelte";
+  import { dealsStore } from "../fork/deals/store.svelte";
   import { labelPrefs } from "../fork/labels.svelte";
 
   async function compose() {
@@ -87,38 +87,20 @@
         <span class="name">{t("fork.nav.calendar")}</span>
         <kbd>G C</kbd>
       </button>
-      <!-- Fork (v1.1.1): Snoozed and Follow-ups replace On me / Waiting.
-           Snoozed counts threads away until later; Follow-ups counts the
-           overdue ones, as an unread-style count, else the total waiting. -->
+      <!-- Fork (v1.1.3): Deals replaces Snoozed and Follow-ups. The count is
+           unread deal conversations, like the Inbox's. -->
       <button
         class="item court"
-        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_SNOOZED}
-        onclick={() => remindersStore.open("snooze")}
-        title={collapsed ? t("fork.nav.snoozed") : undefined}
+        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_DEALS}
+        onclick={() => dealsStore.open()}
+        title={collapsed ? t("fork.nav.deals") : undefined}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
-          <circle cx="8" cy="8.5" r="5.5" />
-          <path d="M8 5.5v3l2 1.2M3 2.5l-1.5 1.5M13 2.5l1.5 1.5" />
+          <rect x="1.5" y="4.5" width="13" height="9" rx="1.5" />
+          <path d="M5.5 4.5V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5M1.5 8.5h13" />
         </svg>
-        <span class="name">{t("fork.nav.snoozed")}</span>
-        {#if reminderCounts.snoozed > 0}<span class="count total">{reminderCounts.snoozed}</span>{/if}
-      </button>
-      <button
-        class="item court"
-        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_FOLLOWUPS}
-        onclick={() => remindersStore.open("followup")}
-        title={collapsed ? t("fork.nav.followups") : undefined}
-      >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
-          <path d="M6 4L2.5 7.5 6 11" />
-          <path d="M2.5 7.5h7a4 4 0 0 1 4 4v1" />
-        </svg>
-        <span class="name">{t("fork.nav.followups")}</span>
-        {#if reminderCounts.followupsDue > 0}
-          <span class="count">{reminderCounts.followupsDue}</span>
-        {:else if reminderCounts.followups > 0}
-          <span class="count total">{reminderCounts.followups}</span>
-        {/if}
+        <span class="name">{t("fork.nav.deals")}</span>
+        {#if dealsCount.unread > 0}<span class="count">{dealsCount.unread}</span>{/if}
       </button>
     </div>
 

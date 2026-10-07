@@ -12,7 +12,8 @@ import { forkPrep, forkPrepUpcoming, runPrepBrief } from "./fork-prep";
 import { forkSmellRewrite, SMELL_FIXTURE_DRAFT } from "./fork-smell";
 import { forkComposeInvoke } from "./fork-compose";
 import { forkCalendarInvoke } from "./fork-calendar";
-import { forkCourtCounts, forkCourtList, forkReminderCounts, forkReminderGet, forkReminderList } from "./fork-court";
+import { forkCourtCounts, forkCourtList } from "./fork-court";
+import { DEMO_DEALS_TEXT, forkDealsCount, forkDealsList, forkDealsPreview, forkDealsSuggest } from "./fork-deals";
 
 // The app checks `"__TAURI_INTERNALS__" in window` to decide whether to boot
 // (vs. show onboarding). Presence is enough — our aliased invoke does the work.
@@ -208,7 +209,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
           if (k.startsWith("skimdemo.fork_")) fork[k.slice("skimdemo.".length)] = ls.getItem(k);
         }
       } catch {}
-      return ok({ locale: "en", theme, images_policy: "ask", group_threads: "on", ...fork });
+      return ok({ locale: "en", theme, images_policy: "ask", group_threads: "on", fork_deals: DEMO_DEALS_TEXT, ...fork });
     }
     case "set_setting":
       return ok(undefined);
@@ -297,18 +298,18 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(forkCourtCounts());
     case "fork_court_recompute":
       return ok(undefined);
-    // ---- v1.1.1 reminders ----
-    case "fork_reminder_list":
-      return ok(forkReminderList(String(args.kind), args.offset ?? 0));
-    case "fork_reminder_counts":
-      return ok(forkReminderCounts());
-    case "fork_reminder_get":
-      return ok(forkReminderGet(Number(args.threadId)));
-    case "fork_reminder_set":
-    case "fork_reminder_followup_on_send":
-    case "fork_reminder_clear":
-    case "fork_reminder_seen":
-      return ok(undefined);
+    // ---- v1.1.3 deals ----
+    case "fork_deals_list":
+      return ok(forkDealsList(args.offset ?? 0));
+    case "fork_deals_count":
+      return ok(forkDealsCount());
+    case "fork_deals_suggest":
+      return ok(forkDealsSuggest(Number(args.threadId)));
+    case "fork_deals_preview":
+      return ok(forkDealsPreview(String(args.text ?? "")));
+    case "fork_deals_add":
+      return ok(`${DEMO_DEALS_TEXT}
+${args.name}: ${args.entry}`);
     // ---- Phase 11 prep ----
     case "fork_prep":
       return ok(forkPrep(args.eventId));

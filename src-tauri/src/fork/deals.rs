@@ -1,0 +1,912 @@
+//! Deals (v1.1.3, D56): one view of the conversations with people at Patrick's
+//! live deals. It replaces Snoozed and Follow-ups, which he never used.
+//!
+//! The list is his, kept by hand in the `fork_deals` setting, one deal per
+//! line:
+//!
+//! ```text
+//! Acme: acme.com
+//! Jo Bloggs: jo.bloggs@gmail.com
+//! ```
+//!
+//! A domain matches its addresses and any subdomain's; a full address matches
+//! only itself. A personal-mail provider (gmail.com, mweb.co.za and the like)
+//! and the mailbox's own domain are never taken as a whole domain, or one line
+//! would pull in half the mailbox. The list lives in the local settings table
+//! only: the fork's repository is public.
+//!
+//! A thread is a deal conversation when any cached message of it outside Trash
+//! and Spam has a matching sender or recipient; the first deal in the list
+//! wins. All Mail is not synced, so a thread archived out of the Inbox stays
+//! only while a Sent, Important, Starred or label copy of it is cached. Patrick
+//! keeps his mail in the Inbox, so that is rare.
+//!
+//! Working out membership reads every cached message (tens of milliseconds on
+//! his 30,000), so [`Cache`] keeps the answer until the list text or the
+//! database changes.
+
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+
+use rusqlite::{params, Connection};
+use serde::Serialize;
+use tauri::State;
+
+use crate::db::models::{Address, ThreadRow};
+use crate::db::queries;
+use crate::error::Result;
+use crate::state::AppState;
+
+pub const SETTING: &str = "fork_deals";
+
+/// Never matched as a whole domain: personal mail lives there.
+const PERSONAL: &[&str] = &[
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "hotmail.co.uk",
+    "live.com",
+    "msn.com",
+    "yahoo.com",
+    "yahoo.co.uk",
+    "ymail.com",
+    "icloud.com",
+    "me.com",
+    "mac.com",
+    "aol.com",
+    "proton.me",
+    "protonmail.com",
+    "pm.me",
+    "gmx.com",
+    "gmx.net",
+    "mail.com",
+    "zoho.com",
+    "yandex.com",
+    "hey.com",
+    "fastmail.com",
+    "btinternet.com",
+    "sky.com",
+    "comcast.net",
+    "verizon.net",
+    "att.net",
+    "bigpond.com",
+    "optusnet.com.au",
+    "web.de",
+    "t-online.de",
+    "orange.fr",
+    "free.fr",
+    // South African ISPs
+    "mweb.co.za",
+    "iafrica.com",
+    "telkomsa.net",
+    "vodamail.co.za",
+    "webmail.co.za",
+    "absamail.co.za",
+    "lantic.net",
+    "icon.co.za",
+    "cybersmart.co.za",
+    "afrihost.co.za",
+    "xsinet.co.za",
+];
+
+pub fn is_personal(domain: &str) -> bool {
+    PERSONAL.contains(&domain)
+}
+
+/// Two-label public suffixes common in his mail; the organisation's domain is
+/// one label to the left of them.
+const TWO_LABEL_SUFFIXES: &[&str] = &[
+    "co.za", "org.za", "ac.za", "gov.za", "net.za", "co.uk", "org.uk", "ac.uk", "com.au", "net.au",
+    "org.au", "co.nz", "com.br", "co.in", "com.sg", "co.ke", "com.ng",
+];
+
+/// The organisation's domain for a suggestion: `mail.acme.co.za` -> `acme.co.za`,
+/// `eu.mail.acme.com` -> `acme.com`. Only a suggestion; he can edit it.
+pub fn base_domain(domain: &str) -> String {
+    let labels: Vec<&str> = domain.split('.').filter(|l| !l.is_empty()).collect();
+    let keep = if labels.len() >= 3
+        && TWO_LABEL_SUFFIXES.contains(&labels[labels.len() - 2..].join(".").as_str())
+    {
+        3
+    } else {
+        2
+    };
+    labels[labels.len().saturating_sub(keep)..].join(".")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deal {
+    pub name: String,
+    pub domains: Vec<String>,
+    pub addresses: Vec<String>,
+}
+
+/// An entry the parser could not use, and why. Settings shows these.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ignored {
+    pub entry: String,
+    /// `personal` (a personal-mail domain), `own` (the mailbox's own domain,
+    /// a parent or a subdomain of it), `too_broad` (a bare suffix like `co.za`)
+    /// or `not_an_address` (no dot, no @).
+    pub why: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Parsed {
+    pub deals: Vec<Deal>,
+    pub ignored: Vec<Ignored>,
+}
+
+/// One entry as typed: lower-case, without a scheme, `www.`, a leading `@` or a
+/// trailing slash.
+fn clean_entry(raw: &str) -> String {
+    let mut s = raw.trim().to_ascii_lowercase();
+    for prefix in ["https://", "http://", "mailto:"] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            s = rest.to_string();
+        }
+    }
+    let s = s.trim_start_matches('@').trim_end_matches('/');
+    s.strip_prefix("www.").unwrap_or(s).to_string()
+}
+
+fn split_entries(rest: &str) -> impl Iterator<Item = &str> {
+    rest.split([',', ';', ' ', '\t'])
+}
+
+/// The `fork_deals` text, in order. Blank lines and lines starting with `#`
+/// are skipped; a line without a name is named after its first entry; a deal
+/// left with nothing to match is dropped. `own` are the mailboxes' own domains.
+pub fn parse(text: &str, own: &HashSet<String>) -> Parsed {
+    let mut out = Parsed::default();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (name, rest) = match line.split_once(':') {
+            // `mailto:` and `https:` start an entry, not a name.
+            Some((n, r))
+                if !n.trim().is_empty()
+                    && !["mailto", "http", "https"]
+                        .contains(&n.trim().to_ascii_lowercase().as_str()) =>
+            {
+                (n.trim().to_string(), r)
+            }
+            _ => (String::new(), line),
+        };
+        let mut deal = Deal {
+            name,
+            domains: Vec::new(),
+            addresses: Vec::new(),
+        };
+        for raw in split_entries(rest) {
+            let e = clean_entry(raw);
+            if e.is_empty() {
+                continue;
+            }
+            let why = if e.contains('@') {
+                if !deal.addresses.contains(&e) {
+                    deal.addresses.push(e);
+                }
+                continue;
+            } else if !e.contains('.') {
+                "not_an_address"
+            } else if TWO_LABEL_SUFFIXES.contains(&e.as_str()) {
+                // `co.za` would match every South African company.
+                "too_broad"
+            } else if is_personal(&e) {
+                "personal"
+            } else if own
+                .iter()
+                .any(|o| e == *o || o.ends_with(&format!(".{e}")) || e.ends_with(&format!(".{o}")))
+            {
+                "own"
+            } else {
+                if !deal.domains.contains(&e) {
+                    deal.domains.push(e);
+                }
+                continue;
+            };
+            out.ignored.push(Ignored {
+                entry: e,
+                why: why.into(),
+            });
+        }
+        if deal.domains.is_empty() && deal.addresses.is_empty() {
+            continue;
+        }
+        if deal.name.is_empty() {
+            deal.name = deal
+                .domains
+                .first()
+                .or(deal.addresses.first())
+                .cloned()
+                .unwrap_or_default();
+        }
+        out.deals.push(deal);
+    }
+    out
+}
+
+/// Index of the first deal `addr` belongs to.
+pub fn deal_for(deals: &[Deal], addr: &str) -> Option<usize> {
+    let addr = addr.trim().to_ascii_lowercase();
+    let domain = addr.rsplit_once('@').map(|(_, d)| d)?;
+    deals.iter().position(|d| {
+        d.addresses.contains(&addr)
+            || d.domains
+                .iter()
+                .any(|dom| domain == dom || domain.ends_with(&format!(".{dom}")))
+    })
+}
+
+fn addrs_of(json: Option<String>) -> Vec<String> {
+    json.and_then(|j| serde_json::from_str::<Vec<Address>>(&j).ok())
+        .map(|v| v.into_iter().map(|a| a.addr).collect())
+        .unwrap_or_default()
+}
+
+/// The domains of every configured mailbox, lower-case.
+fn own_domains(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
+    let mut stmt = conn.prepare_cached("SELECT email FROM accounts")?;
+    let emails = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(emails
+        .iter()
+        .filter_map(|e| {
+            e.rsplit_once('@')
+                .map(|(_, d)| d.trim().to_ascii_lowercase())
+        })
+        .collect())
+}
+
+/// The setting, parsed against the mailboxes' own domains.
+pub fn read_list(conn: &Connection) -> rusqlite::Result<Parsed> {
+    let text = queries::get_setting(conn, SETTING)?.unwrap_or_default();
+    Ok(parse(&text, &own_domains(conn)?))
+}
+
+/// Outside Trash and Spam: where a message counts as part of a conversation.
+const LIVE_FOLDER: &str = "(f.role IS NULL OR f.role NOT IN ('trash', 'junk'))";
+
+/// Thread id -> index of its deal.
+fn scan(conn: &Connection, deals: &[Deal]) -> rusqlite::Result<HashMap<i64, usize>> {
+    let mut map: HashMap<i64, usize> = HashMap::new();
+    if deals.is_empty() {
+        return Ok(map);
+    }
+    let mut stmt = conn.prepare(&format!(
+        "SELECT m.thread_id, m.from_addr, m.to_addrs, m.cc_addrs
+           FROM messages m JOIN folders f ON f.id = m.folder_id
+          WHERE m.thread_id IS NOT NULL AND {LIVE_FOLDER}"
+    ))?;
+    let mut rows = stmt.query([])?;
+    while let Some(r) = rows.next()? {
+        let tid: i64 = r.get(0)?;
+        let from: Option<String> = r.get(1)?;
+        let mut people = addrs_of(r.get(2)?);
+        people.extend(addrs_of(r.get(3)?));
+        people.extend(from);
+        if let Some(i) = people.iter().filter_map(|a| deal_for(deals, a)).min() {
+            map.entry(tid)
+                .and_modify(|cur| *cur = (*cur).min(i))
+                .or_insert(i);
+        }
+    }
+    Ok(map)
+}
+
+/// The deal of one thread, from that thread's own rows.
+fn deal_of_thread(
+    conn: &Connection,
+    deals: &[Deal],
+    thread_id: i64,
+) -> rusqlite::Result<Option<usize>> {
+    let mut stmt = conn.prepare_cached(&format!(
+        "SELECT m.from_addr, m.to_addrs, m.cc_addrs
+           FROM messages m JOIN folders f ON f.id = m.folder_id
+          WHERE m.thread_id = ?1 AND {LIVE_FOLDER}"
+    ))?;
+    let mut rows = stmt.query(params![thread_id])?;
+    let mut best: Option<usize> = None;
+    while let Some(r) = rows.next()? {
+        let from: Option<String> = r.get(0)?;
+        let mut people = addrs_of(r.get(1)?);
+        people.extend(addrs_of(r.get(2)?));
+        people.extend(from);
+        if let Some(i) = people.iter().filter_map(|a| deal_for(deals, a)).min() {
+            best = Some(best.map_or(i, |b| b.min(i)));
+        }
+    }
+    Ok(best)
+}
+
+pub type Membership = Arc<(Vec<Deal>, HashMap<i64, usize>)>;
+
+/// The last membership answer, keyed by the list text and SQLite's
+/// `data_version` (which moves whenever another connection commits) plus the
+/// message and thread table shape (which moves on this connection's own
+/// writes, the only kind tests make). One per app, on `ForkState`.
+#[derive(Default)]
+pub struct Cache {
+    slot: Mutex<Option<(CacheKey, Membership)>>,
+}
+
+type CacheKey = (String, i64, (i64, i64, i64, i64));
+
+fn shape(conn: &Connection) -> rusqlite::Result<(i64, i64, i64, i64)> {
+    conn.query_row(
+        "SELECT (SELECT count(*) FROM messages), (SELECT COALESCE(max(id), 0) FROM messages),
+                (SELECT count(*) FROM threads), (SELECT COALESCE(max(id), 0) FROM threads)",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    )
+}
+
+impl Cache {
+    /// The deals and their threads. The key and the scan are read inside one
+    /// transaction, so the key describes exactly the rows that were scanned.
+    pub fn membership(&self, conn: &mut Connection) -> rusqlite::Result<Membership> {
+        let tx = conn.transaction()?;
+        let text = queries::get_setting(&tx, SETTING)?.unwrap_or_default();
+        let version: i64 = tx.query_row("PRAGMA data_version", [], |r| r.get(0))?;
+        let key = (text, version, shape(&tx)?);
+        if let Ok(guard) = self.slot.lock() {
+            if let Some((k, m)) = guard.as_ref() {
+                if *k == key {
+                    return Ok(m.clone());
+                }
+            }
+        }
+        let deals = parse(&key.0, &own_domains(&tx)?).deals;
+        let map = scan(&tx, &deals)?;
+        tx.commit()?;
+        let m: Membership = Arc::new((deals, map));
+        if let Ok(mut guard) = self.slot.lock() {
+            *guard = Some((key, m.clone()));
+        }
+        Ok(m)
+    }
+}
+
+/// A row is bold while any copy of a message in it is unread outside Sent,
+/// Drafts, Trash and Spam (Gmail keeps one read flag per message, so an
+/// Important copy is as good as the Inbox one, and his own sent copies never
+/// count).
+const ROW_UNREAD: &str = "EXISTS (SELECT 1 FROM messages u JOIN folders uf ON uf.id = u.folder_id
+                WHERE u.thread_id = t.id AND u.is_read = 0
+                  AND (uf.role IS NULL OR uf.role NOT IN ('sent', 'drafts', 'trash', 'junk')))";
+
+/// The sidebar counts what the Inbox badge counts: conversations with an
+/// unread message in the Inbox. Deal mail archived while unread does not hold
+/// a number up that nothing in the Inbox can clear.
+const INBOX_UNREAD: &str = "EXISTS (SELECT 1 FROM messages u JOIN folders uf ON uf.id = u.folder_id
+                WHERE u.thread_id = t.id AND u.is_read = 0 AND uf.role = 'inbox')";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DealRow {
+    #[serde(flatten)]
+    pub row: ThreadRow,
+    pub deal: String,
+}
+
+/// Deal conversations, newest first, shaped like the ordinary thread list.
+pub fn list(
+    conn: &mut Connection,
+    cache: &Cache,
+    offset: i64,
+    limit: i64,
+) -> rusqlite::Result<Vec<DealRow>> {
+    let m = cache.membership(conn)?;
+    let (deals, map) = (&m.0, &m.1);
+    if map.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids = serde_json::to_string(&map.keys().collect::<Vec<_>>()).unwrap_or_default();
+    let sql = format!(
+        "SELECT t.id,
+                m.from_name, m.from_addr, m.subject, m.snippet, t.last_date,
+                NOT {ROW_UNREAD},
+                t.starred, max(m.has_attachments), t.message_count, t.account_id
+           FROM threads t
+           JOIN messages m ON m.thread_id = t.id
+          WHERE t.id IN (SELECT value FROM json_each(?3))
+            AND m.date = (SELECT max(m2.date) FROM messages m2 WHERE m2.thread_id = t.id)
+          GROUP BY t.id
+          ORDER BY t.last_date DESC, t.id DESC
+          LIMIT ?1 OFFSET ?2"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt
+        .query_map(params![limit, offset, ids], |r| {
+            let id: i64 = r.get(0)?;
+            let from_name: Option<String> = r.get(1)?;
+            let from_addr: Option<String> = r.get(2)?;
+            Ok(DealRow {
+                row: ThreadRow {
+                    id,
+                    message_id: None,
+                    account_id: r.get(10)?,
+                    from_name: from_name
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| from_addr.clone())
+                        .unwrap_or_default(),
+                    from_addr: from_addr.unwrap_or_default(),
+                    subject: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                    snippet: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                    date: r.get(5)?,
+                    is_read: r.get(6)?,
+                    is_starred: r.get(7)?,
+                    has_attachments: r.get::<_, i64>(8)? != 0,
+                    message_count: r.get(9)?,
+                },
+                deal: map
+                    .get(&id)
+                    .and_then(|i| deals.get(*i))
+                    .map(|d| d.name.clone())
+                    .unwrap_or_default(),
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// Deal conversations with an unread message in the Inbox, for the sidebar.
+pub fn unread_count(conn: &mut Connection, cache: &Cache) -> rusqlite::Result<i64> {
+    let m = cache.membership(conn)?;
+    if m.1.is_empty() {
+        return Ok(0);
+    }
+    let ids = serde_json::to_string(&m.1.keys().collect::<Vec<_>>()).unwrap_or_default();
+    conn.query_row(
+        &format!(
+            "SELECT count(*) FROM threads t
+              WHERE t.id IN (SELECT value FROM json_each(?1)) AND {INBOX_UNREAD}"
+        ),
+        params![ids],
+        |r| r.get(0),
+    )
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Suggestion {
+    /// The deal the thread already belongs to, if any.
+    pub deal: Option<String>,
+    /// A name for a new deal: the person's name for an address entry, the
+    /// domain's first label otherwise.
+    pub name: String,
+    /// What the line would match: the organisation's domain, or the address
+    /// on a personal-mail provider.
+    pub entry: String,
+}
+
+/// For "Add to Deals" on an open thread: the first person in it who is not on
+/// a mailbox's own domain, newest message first, sender before recipients.
+pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Suggestion>> {
+    let parsed = read_list(conn)?;
+    let own = own_domains(conn)?;
+    let deal = deal_of_thread(conn, &parsed.deals, thread_id)?
+        .and_then(|i| parsed.deals.get(i))
+        .map(|d| d.name.clone());
+
+    let mut stmt = conn.prepare_cached(
+        "SELECT from_name, from_addr, to_addrs, cc_addrs FROM messages
+          WHERE thread_id = ?1 ORDER BY date DESC, id DESC",
+    )?;
+    let mut rows = stmt.query(params![thread_id])?;
+    let mut pick: Option<(String, Option<String>)> = None;
+    while let Some(r) = rows.next()? {
+        let mut people: Vec<(String, Option<String>)> = Vec::new();
+        let from: Option<String> = r.get(1)?;
+        if let Some(f) = from {
+            people.push((f, r.get(0)?));
+        }
+        for col in [2, 3] {
+            let json: Option<String> = r.get(col)?;
+            if let Some(list) = json.and_then(|j| serde_json::from_str::<Vec<Address>>(&j).ok()) {
+                people.extend(list.into_iter().map(|a| (a.addr, a.name)));
+            }
+        }
+        pick = people.into_iter().find(|(addr, _)| {
+            addr.rsplit_once('@')
+                .map(|(_, d)| d.trim().to_ascii_lowercase())
+                .is_some_and(|d| !d.is_empty() && !own.contains(&d))
+        });
+        if pick.is_some() {
+            break;
+        }
+    }
+    let Some((addr, person)) = pick else {
+        return Ok(None);
+    };
+    let addr = addr.trim().to_ascii_lowercase();
+    let domain = addr
+        .rsplit_once('@')
+        .map(|(_, d)| d.to_string())
+        .unwrap_or_default();
+    let (name, entry) = if is_personal(&domain) {
+        let person = person
+            .filter(|p| !p.trim().is_empty() && !p.contains('@'))
+            .unwrap_or_else(|| addr.split('@').next().unwrap_or_default().to_string());
+        (person.trim().to_string(), addr)
+    } else {
+        let domain = base_domain(&domain);
+        let label = domain.split('.').next().unwrap_or_default();
+        let mut chars = label.chars();
+        let name = chars
+            .next()
+            .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+            .unwrap_or_default();
+        (name, domain)
+    };
+    Ok(Some(Suggestion { deal, name, entry }))
+}
+
+/// `text` with `entry` added under `name`: appended to that deal's line when
+/// the name exists (any case), else a new line at the end. An entry already on
+/// the line is not added twice.
+pub fn add_to(text: &str, name: &str, entry: &str) -> String {
+    let name = name.trim();
+    let entry = clean_entry(entry);
+    if name.is_empty() || entry.is_empty() {
+        return text.to_string();
+    }
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    for line in lines.iter_mut() {
+        let Some((n, rest)) = line.split_once(':') else {
+            continue;
+        };
+        if n.trim().eq_ignore_ascii_case(name) {
+            let present = split_entries(rest).any(|e| clean_entry(e) == entry);
+            if !present {
+                let rest = rest.trim();
+                *line = if rest.is_empty() {
+                    format!("{}: {entry}", n.trim())
+                } else {
+                    format!("{}: {rest}, {entry}", n.trim())
+                };
+            }
+            return lines.join("\n");
+        }
+    }
+    while lines.last().is_some_and(|l| l.trim().is_empty()) {
+        lines.pop();
+    }
+    lines.push(format!("{name}: {entry}"));
+    lines.join("\n")
+}
+
+#[tauri::command]
+pub async fn fork_deals_list(
+    state: State<'_, AppState>,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<DealRow>> {
+    let cache = state.fork.deals.clone();
+    state
+        .db
+        .read("fork_deals_list", move |conn| {
+            list(conn, &cache, offset, limit)
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn fork_deals_count(state: State<'_, AppState>) -> Result<i64> {
+    let cache = state.fork.deals.clone();
+    state
+        .db
+        .read("fork_deals_count", move |conn| unread_count(conn, &cache))
+        .await
+}
+
+#[tauri::command]
+pub async fn fork_deals_suggest(
+    state: State<'_, AppState>,
+    thread_id: i64,
+) -> Result<Option<Suggestion>> {
+    state
+        .db
+        .read("fork_deals_suggest", move |conn| suggest(conn, thread_id))
+        .await
+}
+
+/// How Settings reads `text`: the deals and the entries it ignored.
+#[tauri::command]
+pub async fn fork_deals_preview(state: State<'_, AppState>, text: String) -> Result<Parsed> {
+    state
+        .db
+        .read("fork_deals_preview", move |conn| {
+            Ok(parse(&text, &own_domains(conn)?))
+        })
+        .await
+}
+
+/// Adds `entry` under `name` and returns the new list text.
+#[tauri::command]
+pub async fn fork_deals_add(
+    state: State<'_, AppState>,
+    name: String,
+    entry: String,
+) -> Result<String> {
+    state
+        .db
+        .call(move |conn| {
+            let current = queries::get_setting(conn, SETTING)?.unwrap_or_default();
+            let text = add_to(&current, &name, &entry);
+            queries::set_setting(conn, SETTING, &text)?;
+            Ok(text)
+        })
+        .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::models::NewMessage;
+    use crate::db::queries::insert_message;
+    use crate::db::Db;
+
+    const LIST: &str = "# live deals\n\
+        Acme: acme.co.za, https://www.acme-group.com/\n\
+        \n\
+        Jo Bloggs: Jo.Bloggs@Gmail.com\n\
+        Broad: gmail.com, mine.ai, intranet\n\
+        mailto:solo@example.org\n\
+        Beta: beta.io";
+
+    fn own() -> HashSet<String> {
+        ["mine.ai".to_string()].into()
+    }
+
+    #[test]
+    fn parse_reads_names_entries_and_reports_what_it_ignored() {
+        let p = parse(LIST, &own());
+        let names: Vec<_> = p.deals.iter().map(|d| d.name.as_str()).collect();
+        // "Broad" has nothing left to match and is dropped.
+        assert_eq!(names, ["Acme", "Jo Bloggs", "solo@example.org", "Beta"]);
+        assert_eq!(p.deals[0].domains, ["acme.co.za", "acme-group.com"]);
+        assert_eq!(p.deals[1].addresses, ["jo.bloggs@gmail.com"]);
+        assert!(p.deals[1].domains.is_empty());
+        let ignored: Vec<_> = p
+            .ignored
+            .iter()
+            .map(|i| (i.entry.as_str(), i.why.as_str()))
+            .collect();
+        assert_eq!(
+            ignored,
+            [
+                ("gmail.com", "personal"),
+                ("mine.ai", "own"),
+                ("intranet", "not_an_address")
+            ]
+        );
+        // A subdomain of the own domain is own too, a South African ISP is
+        // personal, a bare country suffix is too broad.
+        let p = parse("X: ai, mail.mine.ai, mweb.co.za, co.za", &own());
+        assert!(p.deals.is_empty());
+        let why: Vec<_> = p.ignored.iter().map(|i| i.why.as_str()).collect();
+        assert_eq!(why, ["not_an_address", "own", "personal", "too_broad"]);
+    }
+
+    #[test]
+    fn matching_takes_subdomains_but_not_lookalikes() {
+        let deals = parse(LIST, &own()).deals;
+        assert_eq!(deal_for(&deals, "ceo@acme.co.za"), Some(0));
+        assert_eq!(deal_for(&deals, "it@mail.acme.co.za"), Some(0));
+        assert_eq!(deal_for(&deals, "x@notacme.co.za"), None);
+        assert_eq!(deal_for(&deals, "JO.BLOGGS@gmail.com"), Some(1));
+        assert_eq!(deal_for(&deals, "someone.else@gmail.com"), None);
+        assert_eq!(deal_for(&deals, "no-at-sign"), None);
+    }
+
+    #[test]
+    fn base_domain_drops_mail_hosts_but_keeps_country_suffixes() {
+        assert_eq!(base_domain("mail.acme.co.za"), "acme.co.za");
+        assert_eq!(base_domain("acme.co.za"), "acme.co.za");
+        assert_eq!(base_domain("eu.mail.acme.com"), "acme.com");
+        assert_eq!(base_domain("acme.com"), "acme.com");
+        assert_eq!(base_domain("verdantdata.ch"), "verdantdata.ch");
+    }
+
+    #[test]
+    fn add_to_appends_to_a_named_line_or_adds_one() {
+        let text = "Acme: acme.co.za\nBeta: beta.io\n";
+        assert_eq!(
+            add_to(text, "acme", "@acme.com"),
+            "Acme: acme.co.za, acme.com\nBeta: beta.io"
+        );
+        assert_eq!(
+            add_to(text, "Acme", "ACME.co.za"),
+            "Acme: acme.co.za\nBeta: beta.io"
+        );
+        assert_eq!(
+            add_to(text, "Gamma", "gamma.ai"),
+            "Acme: acme.co.za\nBeta: beta.io\nGamma: gamma.ai"
+        );
+        assert_eq!(add_to("", "Jo", "jo@gmail.com"), "Jo: jo@gmail.com");
+        assert_eq!(add_to(text, " ", "x.com"), text);
+    }
+
+    fn folder(conn: &Connection, imap: &str, role: Option<&str>) -> i64 {
+        conn.execute(
+            "INSERT INTO folders (account_id, imap_name, role, display_name, unread_count, sort_order)
+             VALUES ('a1', ?1, ?2, ?1, 0, 0)",
+            params![imap, role],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    struct Msg<'a> {
+        folder: i64,
+        uid: u32,
+        id: &'a str,
+        reply_to: Option<&'a str>,
+        subject: &'a str,
+        from: &'a str,
+        to: &'a str,
+        date: i64,
+        read: bool,
+    }
+
+    fn put(conn: &mut Connection, m: Msg) {
+        insert_message(
+            conn,
+            &NewMessage {
+                account_id: "a1".into(),
+                folder_id: m.folder,
+                uid: m.uid,
+                message_id: Some(m.id.into()),
+                in_reply_to: m.reply_to.map(Into::into),
+                subject: Some(m.subject.into()),
+                from_addr: Some(m.from.into()),
+                to_addrs: vec![Address {
+                    name: None,
+                    addr: m.to.into(),
+                }],
+                date: m.date,
+                is_read: m.read,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+
+    /// Inbox: an Acme thread with one unread, a Beta thread already read, a
+    /// thread with nobody on the list. Sent: his reply to Acme, unread as Gmail
+    /// sometimes leaves it. Important: a Delta mail archived out of the Inbox
+    /// while unread. Trash: a Gamma message, which must not qualify.
+    fn seed(conn: &mut Connection) -> i64 {
+        conn.execute(
+            "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
+             VALUES ('a1', 'me@mine.ai', 'gmail', 'imap.gmail.com', 'smtp.gmail.com', 0)",
+            [],
+        )
+        .unwrap();
+        let inbox = folder(conn, "INBOX", Some("inbox"));
+        let sent = folder(conn, "Sent", Some("sent"));
+        let important = folder(conn, "Important", Some("important"));
+        let trash = folder(conn, "Trash", Some("trash"));
+        #[rustfmt::skip]
+        let msgs = [
+            Msg { folder: inbox, uid: 1, id: "<a1@x>", reply_to: None, subject: "Acme terms", from: "ceo@mail.acme.co.za", to: "me@mine.ai", date: 100, read: false },
+            Msg { folder: sent, uid: 1, id: "<a2@x>", reply_to: Some("<a1@x>"), subject: "Re: Acme terms", from: "me@mine.ai", to: "ceo@mail.acme.co.za", date: 200, read: false },
+            Msg { folder: inbox, uid: 2, id: "<b1@x>", reply_to: None, subject: "Beta kickoff", from: "me@mine.ai", to: "cto@beta.io", date: 300, read: true },
+            Msg { folder: inbox, uid: 3, id: "<n1@x>", reply_to: None, subject: "Newsletter", from: "news@elsewhere.com", to: "me@mine.ai", date: 400, read: false },
+            Msg { folder: trash, uid: 1, id: "<g1@x>", reply_to: None, subject: "Gamma", from: "x@gamma.ai", to: "me@mine.ai", date: 500, read: false },
+            Msg { folder: important, uid: 1, id: "<d1@x>", reply_to: None, subject: "Delta memo", from: "cfo@delta.com", to: "me@mine.ai", date: 50, read: false },
+        ];
+        for m in msgs {
+            put(conn, m);
+        }
+        queries::set_setting(
+            conn,
+            SETTING,
+            "Acme: acme.co.za\nBeta: beta.io\nGamma: gamma.ai\nDelta: delta.com",
+        )
+        .unwrap();
+        inbox
+    }
+
+    #[test]
+    fn list_and_count_follow_the_setting_and_the_inbox() {
+        let db = Db::open_in_memory().unwrap();
+        let cache = Cache::default();
+        db.with(|conn| {
+            seed(conn);
+            let rows = list(conn, &cache, 0, 50)?;
+            let got: Vec<_> = rows
+                .iter()
+                .map(|r| (r.deal.as_str(), r.row.subject.as_str(), r.row.is_read))
+                .collect();
+            assert_eq!(
+                got,
+                [
+                    ("Beta", "Beta kickoff", true),
+                    ("Acme", "Re: Acme terms", false),
+                    ("Delta", "Delta memo", false)
+                ]
+            );
+            // Delta is bold in the list but not counted: it is not in the Inbox.
+            assert_eq!(unread_count(conn, &cache)?, 1);
+
+            // Reading the Acme mail leaves only his unread Sent copy: not unread.
+            conn.execute(
+                "UPDATE messages SET is_read = 1 WHERE uid = 1 AND from_addr != 'me@mine.ai'",
+                [],
+            )?;
+            assert_eq!(unread_count(conn, &cache)?, 0);
+
+            // Editing the list is seen at once (the text is in the cache key).
+            queries::set_setting(conn, SETTING, "Beta: beta.io")?;
+            let rows = list(conn, &cache, 0, 50)?;
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].deal, "Beta");
+
+            // So is new mail on this connection (the table shape is too).
+            let inbox: i64 =
+                conn.query_row("SELECT id FROM folders WHERE role = 'inbox'", [], |r| {
+                    r.get(0)
+                })?;
+            put(
+                conn,
+                Msg {
+                    folder: inbox,
+                    uid: 9,
+                    id: "<b2@x>",
+                    reply_to: None,
+                    subject: "Beta pricing",
+                    from: "cfo@beta.io",
+                    to: "me@mine.ai",
+                    date: 600,
+                    read: false,
+                },
+            );
+            assert_eq!(list(conn, &cache, 0, 50)?.len(), 2);
+            assert_eq!(unread_count(conn, &cache)?, 1);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn suggest_picks_the_outside_person_and_knows_the_deal() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn);
+            let tid = |conn: &Connection, subject: &str| -> i64 {
+                conn.query_row(
+                    "SELECT thread_id FROM messages WHERE subject = ?1",
+                    params![subject],
+                    |r| r.get(0),
+                )
+                .unwrap()
+            };
+            let acme = suggest(conn, tid(conn, "Acme terms"))?.unwrap();
+            assert_eq!(acme.deal.as_deref(), Some("Acme"));
+            assert_eq!(
+                (acme.name.as_str(), acme.entry.as_str()),
+                ("Acme", "acme.co.za")
+            );
+            let news = suggest(conn, tid(conn, "Newsletter"))?.unwrap();
+            assert_eq!(news.deal, None);
+            assert_eq!(
+                (news.name.as_str(), news.entry.as_str()),
+                ("Elsewhere", "elsewhere.com")
+            );
+            // The Gamma thread lives only in Trash: no deal.
+            assert_eq!(suggest(conn, tid(conn, "Gamma"))?.unwrap().deal, None);
+            Ok(())
+        })
+        .unwrap();
+    }
+}

@@ -71,26 +71,3 @@ export function forkCourtCounts(): { onMe: number; waiting: number } {
   return { onMe: ON_ME.length, waiting: WAITING.length };
 }
 
-// v1.1.1: Snoozed / Follow-ups fixtures (`fork_reminder_*`), reusing the rows above.
-export function forkReminderList(kind: string, offset: number) {
-  if (offset > 0) return [];
-  if (kind === "snooze") {
-    return [
-      { ...ON_ME[2], kind, setTs: NOW - D, dueTs: NOW + 5 * H },
-      { ...ON_ME[5], kind, setTs: NOW - H, dueTs: NOW + 3 * D },
-    ];
-  }
-  return [
-    { ...WAITING[0], kind, setTs: NOW - 5 * D, dueTs: NOW - 2 * D },
-    { ...WAITING[2], kind, setTs: NOW - 2 * D, dueTs: NOW + D },
-  ];
-}
-
-export function forkReminderCounts() {
-  return { snoozed: 2, followups: 2, followupsDue: 1 };
-}
-
-export function forkReminderGet(threadId: number) {
-  if (threadId === WAITING[0].id) return [{ kind: "followup", setTs: NOW - 5 * D, dueTs: NOW - 2 * D }];
-  return [];
-}

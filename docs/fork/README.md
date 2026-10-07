@@ -60,16 +60,18 @@ What changed on screen, and how to use it. Decisions are D50 to D54.
   (there and on an invite card in the inbox) picks up to three free slots of the
   same length, or a typed time, and opens a draft to the organiser. Nothing is
   sent until you press Send.
-- **Snooze (H):** pick a time; the thread leaves every list and comes back at
-  the top when due, or earlier if someone else replies. Snoozed lists them
-  (`g z`). Local to Skim: Gmail elsewhere still shows the thread.
-- **Follow up (B):** "remind me if no reply by". Also the picker beside Send in
-  the composer. A reply from anyone else clears it; otherwise the thread comes
-  back to the top on the date. Follow-ups lists them, most overdue first
-  (`g f`), and the sidebar count turns into an unread-style count when one is
-  overdue.
-- **Gone:** the On me and Waiting views, their daily nudge, `g o` and `g w`.
-  The court classifier still runs because the MCP `list_court` tool reads it.
+- **Deals (`g e`, 1.1.3):** every conversation with someone at a live deal,
+  newest first, each row tagged with its deal; the sidebar count is unread deal
+  conversations in the Inbox. The list is yours, in Settings, Deals: one line
+  per deal, `Name: domain, person@address`. Under the box Skim says how it read
+  each line and which entries it will not use (a personal-mail domain like
+  gmail.com, your own domain, a bare `co.za`). On an open thread the briefcase
+  in the toolbar offers **Add to Deals** with the sender's domain (or address,
+  on Gmail) filled in. Archive is not offered inside Deals, because its rows
+  span every folder.
+- **Gone:** Snooze and Follow-ups (1.1.3, never used), and before them the On
+  me and Waiting views. The court classifier still runs because the MCP
+  `list_court` tool reads it.
 
 One line per phase. The phase numbers match `PLAN.md` section 2 and the
 `fork(<phase>):` commit prefixes.
@@ -93,9 +95,11 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 | 12 | MCP server: loopback HTTP on port 8342 with a bearer token, twelve tools (`search_mail`, `get_thread`, `list_unread`, `list_court`, `get_calendar`, `find_free_slots`, `create_draft`, `archive`, `star`, `mark_read`, `create_event`, `crm_lookup`). There is no send tool and no invite tool. |
 | 13 | Release: `build-install.ps1`, the live smoke test on the installed app, and the fixes it forced (D41-D47). Phase 13 has no shots folder; it re-ran the earlier phases' scenarios. |
 | 1.1.1 | Thread opens on its newest message (Outlook order); labels fold and hide; Base theme; calendar typed time field, answer bar on top, propose a new time; Snooze and Follow-ups replace On me / Waiting. See DECISIONS D50 to D54. |
+| 1.1.2 | Read and starred state follow the server for the whole folder; unread counts are conversations (D55). |
+| 1.1.3 | Deals replaces Snooze and Follow-ups (D56). |
 
 Not in this fork by decision (D12): split inbox, screener, bundles,
-templates. Snooze was reopened in 1.1.1 (D54).
+templates. Snooze was reopened in 1.1.1 (D54) and removed again in 1.1.3 (D56).
 
 Two rules bind every phase and are worth repeating here: nothing sends mail on
 its own (no feature, timer or MCP tool submits an email or an external invite
@@ -118,7 +122,8 @@ Manager under `fork:` keys, never in the database, settings, logs or repo.
 | Share availability | `availability.rs` | `slots/` |
 | CRM drawer | `crm.rs` | `crm/` |
 | Ball in my court | `court.rs` | `court/` |
-| Snooze and Follow-ups | `reminders.rs` | `reminders/` |
+| Deals | `deals.rs` | `deals/` |
+| Snooze and Follow-ups (dormant since 1.1.3) | `reminders.rs` | (removed) |
 | Meeting prep | `prep.rs` | `prep/` |
 | MCP server | `mcp/` | `mcp/` |
 
@@ -184,7 +189,8 @@ themes at 1440x900 and writes PNGs to `docs/fork/shots/<phase>/<scenario>-<theme
     node demo/fork-shots.mjs <phase> [scenario ...]   # default: every scenario tagged for the phase
     SHOTS_THEMES=base-dark,base-light node demo/fork-shots.mjs 1.1.1   # other themes for one run
 
-The 1.1.1 scenarios (`v111-*`) also exercise the reminder mocks and the
+The 1.1.3 scenarios (`v113-*`) use the Deals mocks in `demo/mock/fork-deals.ts`
+(fictional companies only). The 1.1.1 scenarios (`v111-*`) use the
 `skimdemo.fork_thread_multi` flag, which gives the hero thread an older message
 and a newer reply filed in Sent.
 
@@ -247,10 +253,9 @@ Read-only except where marked. Check that:
 - the Calendar screen shows its events or its connect state
 - (1.1.1) a thread with a reply in Sent opens on that reply, with no
   "Later in thread" button
-- (1.1.1) the sidebar shows Snoozed and Follow-ups, not On me / Waiting, and
-  the Labels section folds
-- (1.1.1) H on a thread snoozes it out of the list, it appears under Snoozed,
-  and Remove there brings it back (local only; marked)
+- (1.1.3) the sidebar shows Deals, not Snoozed / Follow-ups, and the Labels
+  section folds; Deals lists deal conversations with their deal names and no
+  Archive button; an open deal thread shows "Deal · name" under the subject
 - (1.1.1) the new-event time field opens its list without scrolling the panel
   sideways; close the panel without saving
 - Meet opens meet.new when Google is not connected; when it is, it creates a

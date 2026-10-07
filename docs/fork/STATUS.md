@@ -25,8 +25,8 @@ PowerShell wrapper clippy exited 1 with no diagnostic, so the install ran with
 installed 07:45 SAST; installed SHA256
 `e2dc75a470cfb902f5cf89b021413a90b2ad9c88ec3e04fa06900f0edc223154`. Backup:
 `C:/Users/Patrick/.skim-fork/backups/20261007-074524/`. Live on his mailbox:
-fork schema 8 applied; the first Inbox sync flipped 17 of the 19 unread IQ-EQ
-messages to read from the server's answer; Inbox went from 38 (messages) to
+fork schema 8 applied; the first Inbox sync flipped 17 of the 19 unread messages in one
+long client thread to read from the server's answer; Inbox went from 38 (messages) to
 8 (conversations, 21 messages the server still holds unread).
 
 Not exercised live: a read or star propagating to label copies (unit tests

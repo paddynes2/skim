@@ -68,7 +68,30 @@ async function openHero(page) {
 
 /** Scenario registry. Add one entry per UI state the plan asks to shoot. */
 export const SCENARIOS = {
-  // v1.1.1: newest message first, labels folded, Snooze / Follow-ups, calendar.
+  // v1.1.1: newest message first, labels folded, calendar. (Snooze / Follow-ups retired in v1.1.3.)
+  // v1.1.3: Deals replaces Snoozed / Follow-ups.
+  "v113-deals": {
+    phase: "1.1.3",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.locator(".sidebar .item", { hasText: "Deals" }).click();
+      await page.locator(".deal-badge").first().waitFor();
+      await page.locator(".row").first().click();
+      await page.locator(".status .chip").first().waitFor();
+      await sleep(300);
+    },
+  },
+  "v113-add-deal": {
+    phase: "1.1.3",
+    setup: async (page) => {
+      await openInbox(page);
+      await page.locator(".row", { hasText: "Your receipt" }).first().click();
+      await page.locator("header.toolbar .tool[aria-label='Add to Deals']").first().click();
+      await page.locator("form.menu input").first().waitFor();
+      await sleep(300);
+    },
+  },
+  "v113-settings": { phase: "1.1.3", setup: async (page) => { await openSettingsTo(page, "One deal per line"); } },
   "v111-thread": { phase: "1.1.1", flags: { "skimdemo.fork_thread_multi": "1" }, setup: async (page) => { await openHero(page); } },
   "v111-labels-open": {
     phase: "1.1.1",
@@ -80,26 +103,6 @@ export const SCENARIOS = {
       const row = page.locator(".sidebar .label-row").first();
       if (await row.count()) await row.hover();
       await sleep(200);
-    },
-  },
-  "v111-snooze-menu": {
-    phase: "1.1.1",
-    setup: async (page) => {
-      await openHero(page);
-      await page.locator("header.toolbar .tool", { hasText: "H" }).first().click();
-      await page.locator(".menu .opt").first().waitFor();
-      await sleep(200);
-    },
-  },
-  "v111-followups": {
-    phase: "1.1.1",
-    setup: async (page) => {
-      await openInbox(page);
-      await page.locator(".sidebar .item", { hasText: "Follow-ups" }).click();
-      await page.locator(".rem-badge").first().waitFor();
-      await page.locator(".row").first().click();
-      await page.locator(".status .chip").first().waitFor();
-      await sleep(300);
     },
   },
   "v111-cal-invite": {
@@ -121,14 +124,6 @@ export const SCENARIOS = {
       await page.locator(".panel .time-input input").nth(1).click();
       await page.locator(".time-input .list").waitFor();
       await sleep(300);
-    },
-  },
-  "v111-compose-followup": {
-    phase: "1.1.1",
-    setup: async (page) => {
-      await openInlineReply(page);
-      await page.locator(".followup-pick").first().selectOption("2d");
-      await sleep(200);
     },
   },
   // Phase 0: today's inbox, reading pane open.

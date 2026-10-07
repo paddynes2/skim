@@ -18,6 +18,9 @@ const NO_ARCHIVE_ROLES = new Set(["sent", "trash", "junk"]);
 /** Whether the Archive action is offered for mail in a folder with `role`
  *  (`null` = a user label, `undefined` = unknown/unified: offered). */
 export function archiveOffered(role: string | null | undefined): boolean {
+  // v1.1.3: not in Deals either. Its rows span every folder, so Archive would
+  // act on the Sent and Important copies too (D56).
+  if (mail.dealsView) return false;
   return !(role && NO_ARCHIVE_ROLES.has(role));
 }
 

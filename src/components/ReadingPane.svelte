@@ -17,8 +17,8 @@
   import { prefs } from "../fork/stores/prefs.svelte";
   import { crmFocus } from "../fork/crm/store.svelte";
   import EstateReplyAction from "../fork/estate/ReplyAction.svelte";
-  // Fork (v1.1.1): Snooze / Follow-up tools and the status line.
-  import ThreadReminders from "../fork/reminders/ThreadReminders.svelte";
+  // Fork (v1.1.3): Add to Deals, and the line naming the thread's deal.
+  import DealTool from "../fork/deals/DealTool.svelte";
 
   let detail = $state<ThreadDetail | null>(null);
   // Fork (1.2): no Archive in Sent / Trash / Spam.
@@ -560,7 +560,7 @@
       </button>
       {#if mail.selectedThreadId !== null}
         {#key mail.selectedThreadId}
-          <ThreadReminders threadId={mail.selectedThreadId} mode="tools" />
+          <DealTool threadId={mail.selectedThreadId} mode="tools" />
         {/key}
       {/if}
     </header>
@@ -569,7 +569,7 @@
       <h1 class="subject">{shownSubject}</h1>
       {#if mail.selectedThreadId !== null}
         {#key mail.selectedThreadId}
-          <ThreadReminders threadId={mail.selectedThreadId} mode="status" />
+          <DealTool threadId={mail.selectedThreadId} mode="status" />
         {/key}
       {/if}
 

@@ -43,6 +43,8 @@ pub const ALLOWED: &[&str] = &[
     // v1.1.1
     "fork_labels_collapsed", // on | off; sidebar Labels section folded
     "fork_labels_hidden",    // JSON list of label paths hidden from the sidebar
+    // v1.1.3
+    "fork_deals", // one deal per line, "Name: domain, person@address" (fork::deals)
 ];
 
 #[cfg(test)]

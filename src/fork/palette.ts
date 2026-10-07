@@ -60,12 +60,8 @@ export function forkCommands(): ForkCommand[] {
   );
   if (navHooks.calendar)
     list.push({ id: "fork-calendar", label: t("palette.goto", { folder: t("fork.nav.calendar") }), hint: "G C", run: () => navHooks.calendar?.() });
-  if (navHooks.reminders) {
-    list.push(
-      { id: "fork-snoozed", label: t("palette.goto", { folder: t("fork.nav.snoozed") }), hint: "G Z", run: () => navHooks.reminders?.("snooze") },
-      { id: "fork-followups", label: t("palette.goto", { folder: t("fork.nav.followups") }), hint: "G F", run: () => navHooks.reminders?.("followup") },
-    );
-  }
+  if (navHooks.deals)
+    list.push({ id: "fork-deals", label: t("palette.goto", { folder: t("fork.nav.deals") }), hint: "G E", run: () => navHooks.deals?.() });
   if (navHooks.crmToggle)
     list.push({ id: "fork-crm", label: t("fork.nav.crm"), hint: "I", run: () => navHooks.crmToggle?.() });
   if (navHooks.meetNow)

@@ -9,6 +9,7 @@
   import { setListOrder } from "./keys";
   import { loadSmellSettings, unignoreRule, type SmellSettings } from "./smell/api";
   import SettingsCourt from "./court/SettingsCourt.svelte";
+  import SettingsDeals from "./deals/SettingsDeals.svelte";
   import SettingsCalendar from "./calendar/SettingsCalendar.svelte";
 
   const zoomPct = $derived(Math.round(prefs.zoom * 100));
@@ -154,6 +155,7 @@
   </div>
 </section>
 
+<SettingsDeals />
 <SettingsCourt />
 <SettingsCalendar />
 
