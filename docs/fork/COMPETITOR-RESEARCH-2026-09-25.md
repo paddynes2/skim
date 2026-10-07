@@ -22,6 +22,10 @@ Waiting. The installed reply feature and inbox recovery change are tracked in
 explicit per-thread Snooze and "follow up if no reply by" reminders (DECISIONS
 D54). That is a simpler cut of improvement 2 below: one date per thread,
 cleared by any reply from someone else, not a ledger of partial deliverables.
+
+**Update, 7 October:** neither was used once in eight days. Version 1.1.3
+replaced both with Deals: one view of the conversations with people at his
+live deals, from a list he keeps (DECISIONS D56).
 Patrick declined further AI features in the same release. Prepared replies with
 evidence and the Finish session remain proposals.
 

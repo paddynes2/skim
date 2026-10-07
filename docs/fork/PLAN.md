@@ -8,8 +8,9 @@ This is the original phase plan, retained as implementation history. Current
 installed scope and open work live in [STATUS.md](STATUS.md). The September 25
 estate-reply addition has its own [build contract](ESTATE-REPLY-PLAN.md).
 The later [product research](COMPETITOR-RESEARCH-2026-09-25.md) records Patrick's
-request to replace the broad On me / Waiting destinations; that redesign has
-not been implemented, and Phase 10 below describes the existing behavior.
+request to replace the broad On me / Waiting destinations. 1.1.1 replaced them
+with Snooze and Follow-ups (D54), and 1.1.3 replaced those with Deals (D56);
+Phase 10 below describes the original design.
 
 Owner: Patrick Nesbitt. Daily account: `patrick@autospark.ai` (Google Workspace,
 IMAP app password, `accounts.provider = 'custom'`, theme `warm-dark`).

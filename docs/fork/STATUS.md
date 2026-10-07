@@ -31,9 +31,10 @@ deal under the subject, no Archive button in Deals, `g e` in the go hint, no
 page errors. Skim relaunched without the debug port. Nothing was sent; no
 mail was moved or flagged.
 
-Not exercised live: Add to Deals saving a new line (unit tests and the demo
-cover it; doing it live would change his list), the Settings box saving an
-edit. Rollback: run `Skim_1.1.2_x64-setup.exe /S` from the bundle folder;
+Add to Deals ran live once, on his request: `fork_deals_add` put a twelfth
+deal on the list through the app, the list read back with nothing ignored and
+the total rose from 107 to 108. Not exercised live: the toolbar panel's click
+path (the demo covers it) and the Settings box saving an edit. Rollback: run `Skim_1.1.2_x64-setup.exe /S` from the bundle folder;
 1.1.2 ignores the newer fork schema rows and the `fork_deals` setting.
 
 ## Version 1.1.2 (installed October 7)
@@ -61,7 +62,7 @@ long client thread to read from the server's answer; Inbox went from 38 (message
 
 Not exercised live: a read or star propagating to label copies (unit tests
 cover it; testing it live would change his mail). Snooze and Follow-ups had
-zero uses in eight days; what replaces them is open (his call).
+zero uses in eight days; Deals replaced them in 1.1.3 the same day.
 
 ## Version 1.1.1 (installed September 29)
 
@@ -135,7 +136,8 @@ in Sent, Drafts, Trash and Junk and for unsupported accounts. Optional direction
 progress, **Open draft** and **Context used** live with that action. See the
 [usage guide](ESTATE-REPLY-PLAN.md#using-it).
 
-On me and Waiting were replaced by Snooze and Follow-ups in 1.1.1. A bounded
+On me and Waiting were replaced by Snooze and Follow-ups in 1.1.1, and those
+by Deals in 1.1.3. A bounded
 Finish session remains unimplemented. The estate reply feature is the delivered
 slice of the broader proposal. The inbox recovery fix is also installed; instant
 end-to-end mail delivery has not been established.

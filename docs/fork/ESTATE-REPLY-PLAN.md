@@ -28,7 +28,8 @@ Junk. Estate access uses the existing SSH connection and requires connectivity.
 No separate AI-provider key in Skim is needed for this action.
 
 This feature preserves the existing layout. On me and Waiting were later
-replaced by Snooze and Follow-ups in 1.1.1 (D54); the wider competitor-inspired
+replaced by Snooze and Follow-ups in 1.1.1 (D54), and those by Deals in 1.1.3
+(D56); the wider competitor-inspired
 redesign is outside this implementation. The current deployment and remaining
 work are recorded in [STATUS.md](STATUS.md).
 
