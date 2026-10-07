@@ -6,7 +6,7 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
-## Version 1.1.4 (implementation, installation pending)
+## Version 1.1.4 (installed October 7)
 
 Patrick requested company logos in Deals, Inbox above Calendar, clearer email
 threads, and the full event editor before any broader calendar redesign. He
@@ -47,7 +47,28 @@ its Inbox-first assertion. Separate hand mutations of time conversion, recurrenc
 count and changed-settings filtering each fail the frontend helper tests.
 Backend mutations of partial-option merge, optional guests and visibility
 validation each fail the new backend tests. Original bytes were restored.
-Installation and installed-app readback are pending.
+The first installed build passed native-app readback: Inbox, Calendar, Deals;
+19 of 19 visible company icons loaded; all requested editor control groups
+present; the empty draft closed without saving; zero page errors. Two visual
+issues found there were fixed: a white logo canvas for dark transparent marks,
+and subject spacing for rows with no preview. Svelte check and both-theme browser
+checks passed again after these CSS changes. Final signed installer built from `4f4761c`, installed at 11:26 SAST.
+Installed executable SHA256:
+`ac5040e9719600660d0adba7b5e37ded863f4c67f20efedea02e460ba28ac82e`.
+Second pre-install backup: `C:/Users/Patrick/.skim-fork/backups/20261007-112631/`.
+Final native readback passed again, including white logo backgrounds, reserved
+subject space, collapsed history on an already-read thread, navigation and the
+editor. No page errors. Skim was returned to Inbox and restarted without the
+debug port. Private live screenshots remain in local Temp, outside this repo.
+
+The pre-migration database backup is
+`C:/Users/Patrick/.skim-fork/backups/20261007-111952/` (DB, WAL and SHM).
+Read-only schema check: fork version 10, options_json present, 313 cached events,
+295 with synchronized options. No live event changes or invitations were made.
+
+Context used: project_skim_fork.md, checked against this checkout's documents.
+Proposed memory update for Claude Code: record 1.1.4 and link this status file;
+no memory note was changed.
 
 Rollback: reinstall the retained 1.1.3 signed installer. Migration f0010 is
 additive, so the old app can leave the new column in place. For a full data
