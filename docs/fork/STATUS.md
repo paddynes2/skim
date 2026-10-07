@@ -6,6 +6,26 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
+## Version 1.1.6 (installed October 7)
+
+Patrick reported flicker in the open email after 1.1.5. Cached list refreshes inserted a loading row on every mail update. A metadata refresh of the open thread also inserted a status row above its body. Both paths now keep cached content in place. Initial loading and error recovery remain available.
+
+The browser regression exercises three list refreshes and one open-thread metadata refresh. It checks iframe and document identity, load events, scroll position, and content geometry. All stay unchanged. The store test also checks that an empty view still shows loading. Before the fix, the native 1.1.5 check observed six loading rows across six local refresh events. The open iframe stayed intact in that native sample.
+
+Full gates passed: 536 Rust tests, one existing ignored, all frontend tests, contrast, formatting, all-target Clippy and production build. Svelte check reports zero errors and the existing ComposeForm warning.
+
+`PROVE_TEST: status=PROVEN base=df6050773b3b reverted=8 tests=2 exit_without_fix=1`
+
+Both the browser and store proof commands fail with the implementation removed. The browser also failed on the reading-pane status row before its separate correction. Run `node demo/refresh-check.mjs` to reproduce the continuity check with fictional data.
+
+Signed updater installer built from `f14a839` and installed at 13:49 SAST. Installed executable version is 1.1.6, SHA256 `d61cfcedfaab53feb9ada97e7848281086dfb3fc10f69d80880d8afea850e3a9`. Database, WAL and SHM backup: `C:/Users/Patrick/.skim-fork/backups/20261007-134929/`. No migration or dependency changes.
+
+Native installed verification passed over six local refresh events and another 40 seconds. Across 1,721 samples: zero iframe loads, inserted loading/status rows, missing frames, or message movement. The original iframe, document and scroll position survived. Zero page errors. Skim was restarted without the temporary debug port. These checks establish continuity for the exercised refresh paths, not every possible WebView rendering issue.
+
+Rollback installer: `src-tauri/target/release/bundle/nsis/Skim_1.1.5_x64-setup.exe`. A binary rollback needs no schema rollback.
+
+Context: project_skim_fork.md, verified against this status file and the current checkout. Proposed memory update for Claude Code: record installed 1.1.6 and link this verified status.
+
 ## Version 1.1.5 (installed October 7)
 
 Patrick asked to implement all eight daily-use improvements in one pass and explicitly requested parallel builders. The changes use the existing Base design and local tables. No additional migration, dependency or Google permission was added.
