@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "project": "C:\\Users\\Patrick\\Projects\\skim-daily-use-20261007",
+  "task": "skim-115-daily-use",
+  "inputs": {
+    "src/components/MessageList.svelte": "bfd133a4fe784dca0e270865c4b961948a225175c3f4918fcdd10bfad2e47a2b",
+    "src/components/MessageRow.svelte": "a62ea826622636958c2ffdf08f0a7934fd105396c0c645ea17c424f4ab951000",
+    "src/components/ReadingPane.svelte": "7239bf4c512134a7c9ee929e15edb43377da780708f7c8cdc9a4d829dce12f36",
+    "src/components/Sidebar.svelte": "701694531f549a8c3e7bf21ef2cec018dd9cd52fb91627d1566859a9411e48fc",
+    "src/fork/calendar/CalendarView.svelte": "69d42b3884ae9912a41e5dc27e6afc79462eeeb9129203b96d51a4e1a6b6eddc",
+    "src/fork/calendar/EventPanel.svelte": "3d4d32f3623811ea2409172764a3a29428acae413d72725d787dee9f58a3c912",
+    "src/fork/calendar/EventPreview.svelte": "e79a93f9d487c520f137cc932ff15e386f3f1fa60f972172a155f048869ff9ce",
+    "src/fork/calendar/FindTime.svelte": "223026889f80e95074944a52972717e88ef2fc5a5253993b129c8fefbdf2720a",
+    "src/fork/deals/DealsToolbar.svelte": "eb9e2b582f4810ef3bc7ae720a285ce3ebe8d040e68c833c96e1c7a42c832eac",
+    "src/fork/deals/SettingsDeals.svelte": "08d8b0fd66310f1cf35591cd08986a3f426899b7155486930b569d4045be7be3",
+    "src/fork/search/SearchTools.svelte": "b9cc7975241a3a7c0e0185f3086f9765f64b900c741ef0a8df0b47c5b392f893",
+    "src/fork/reading/ConversationTools.svelte": "4ccb094f91d770704a3ec48620db044c2fa96597bd9289f8b7578e4f1ca9ce93",
+    "src/fork/sync/SyncStatus.svelte": "fd5c618f73015d72e12b27ae31b9482945ebfc36d50a3336d61c2317d8a7cdc6",
+    "docs/fork/DECISIONS.md": "6c2f519d8482442f7e2d4d15d934525b449c4a87f3ea95475d25244732b4029d"
+  },
+  "reference_files": [
+    "docs/fork/DECISIONS.md"
+  ],
+  "intended_improvement": "Make daily mail, company context and event scheduling easier to read and control, with durable failure recovery.",
+  "selection": {
+    "outcome": "adapt",
+    "reason": "Keep the approved Base direction and existing Svelte controls. Registered-source searches returned no compatible candidates. No external component or package added.",
+    "sources": []
+  },
+  "inspection": {
+    "component": "Verified resizer keyboard and persistence, saved search, company context, conversation search/files and expand controls, draft target preservation, event preview/editor/scope, unknown availability and cache labels.",
+    "screen": "Inspected settled fictional renders in Base light and dark at 1600, 1200 and 900 pixels. At narrow widths the event editor uses the full calendar region and Save remains visible.",
+    "journey": "demo/v115-check.mjs exercises reading, search, company overview and calendar paths. Updated v114 regression retains earlier event option assertions. No live mail sends or calendar invitations.",
+    "product": "Uses existing Base semantic colors, borders and density. New controls disclose secondary panels. Root inspected inbox, preview and narrow editor. This records implementation evidence, not human visual acceptance."
+  },
+  "evidence": [
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-editor-1200-base-dark.png",
+      "sha256": "fab487d3423fd60bb5edc0d4b1ea88f8ebb44c0e832991daca4a2cbb19b4caa3",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-editor-1200-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-editor-1200-base-light.png",
+      "sha256": "78d70e3e4eddf8e87953ec9abb2cbab43f623685c251248b4007952ec49222c1",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-editor-1200-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-editor-1600-base-dark.png",
+      "sha256": "3796fdc912d44afe965ca5aaf04d2605cd9784064133ced9cb33681c5366c6a7",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-editor-1600-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-editor-1600-base-light.png",
+      "sha256": "7578c7f0dbbde07ea2d9e0fc55fdd1678fc793782db1784f1c63e068aee7846c",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-editor-1600-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-editor-900-base-dark.png",
+      "sha256": "a7f219e18dd40fd8796bc4c569527bc5deac62782e867b20659e83a9bb0a2c3e",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-editor-900-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-editor-900-base-light.png",
+      "sha256": "e1c2858722dba5fd39f34d6bd532e5d2b98dac26fba9eb240aae5dc95229a7dd",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-editor-900-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-find-time-base-dark.png",
+      "sha256": "1397338f5aa0566e1b6509981579ad35f767e412243118815aba49eec806030d",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-find-time-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-find-time-base-light.png",
+      "sha256": "9a4d38766d1b95a4ec64e7cb50aaf7892fd4b24faa09a1bd1038403359280c0c",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-find-time-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-preview-base-dark.png",
+      "sha256": "9532879e2accf713e5395f076f6f563fc9e1237dcc7f0eca52b12edabc8d5869",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-preview-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/calendar-preview-base-light.png",
+      "sha256": "508332c60e9e31aa4e52f60f3b05aa02c8af0ab068cd00adb5460b7d4decd266",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; calendar-preview-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/deals-base-dark.png",
+      "sha256": "4b64bbb5f095372b3008deb8f0a1b50164ebbefa1a95d43760a442d40a0a90ee",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; deals-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/deals-base-light.png",
+      "sha256": "526f46b6a527abb6bdac042e206c9b39c533ec098be89fed449f8f2631d063b1",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; deals-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/inbox-1200-base-dark.png",
+      "sha256": "a88d9bdd88914c466c2d292a0edb830a7f98e85c4d2259aced2e2256d6b2bf61",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; inbox-1200-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/inbox-1200-base-light.png",
+      "sha256": "2851cf6d7cb37ed3775ae464d9c79ad4c37d4f9b87de9289bad2b6791a0fa518",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; inbox-1200-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/inbox-1600-base-dark.png",
+      "sha256": "ee05f71bb20c3cc774fe12ff287f2e265374bc576975e5827882dd8f04f98781",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; inbox-1600-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/inbox-1600-base-light.png",
+      "sha256": "5a5b13eaf4f7ee8461cb2206a986b436afa65735cfe8c7e606ff1803cdf85c95",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; inbox-1600-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/inbox-900-base-dark.png",
+      "sha256": "550ddcd32c1851c268c57fa3e3d2684f2d54338570c4bade8dc3a91f3011cfdc",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; inbox-900-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.5/inbox-900-base-light.png",
+      "sha256": "cb60d35a9edc963be18202baab8015f9c7373232a10ba813e5efaf520170db98",
+      "description": "Fictional 1.1.5 fixture on feat/skim-daily-use-20261007; inbox-900-base-light"
+    }
+  ],
+  "limitations": [
+    "Search and files cover loaded bodies; explicit Load remaining messages fetches the rest.",
+    "Google series splits are non-atomic and complex exception schedules require Google Calendar.",
+    "Availability is unknown for inaccessible calendars. No authenticated calendar writes were tested.",
+    "Mail queue failures show action, account and date; exact source-message links are future work."
+  ],
+  "human_feedback": null
+}

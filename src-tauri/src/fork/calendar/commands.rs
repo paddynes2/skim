@@ -61,6 +61,22 @@ fn emit_updated(app: &AppHandle, account_id: &str) {
     let _ = app.emit(super::EVT_UPDATED, json!({ "account_id": account_id }));
 }
 
+async fn require_no_split(state: &State<'_, AppState>, event_id: i64) -> Result<()> {
+    if state
+        .db
+        .read("fork_cal_split_pending", move |conn| {
+            store::event_has_split(conn, event_id)
+        })
+        .await?
+    {
+        return Err(SkimError::other(
+            "gcal_input",
+            "Resolve the pending or failed series change before editing this series.",
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn fork_cal_status(state: State<'_, AppState>, account_id: String) -> Result<CalStatus> {
     status(&state.db, &account_id).await
@@ -386,6 +402,16 @@ pub async fn fork_cal_patch(
     send_updates: String,
 ) -> Result<EventRow> {
     let send = SendUpdates::parse(&send_updates)?;
+    require_no_split(&state, event_id).await?;
+    if input.following && input.series {
+        return Err(SkimError::other(
+            "gcal_input",
+            "Choose one recurrence edit scope.",
+        ));
+    }
+    if input.following {
+        return patch_following(app, state, event_id, input, send).await;
+    }
     if input.series {
         let master = fork_cal_series(state.clone(), event_id).await?;
         let mut validated = master.clone();
@@ -468,8 +494,220 @@ pub async fn fork_cal_patch(
     Ok(row)
 }
 
-/// Delete an event: row gone at once. A row whose create never left the
-/// machine just drops its pending ops; anything else queues a `delete`.
+async fn patch_following(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    event_id: i64,
+    input: EventInput,
+    send: SendUpdates,
+) -> Result<EventRow> {
+    let (row, cal) = state
+        .db
+        .read("fork_cal_following", move |conn| {
+            let Some(row) = store::get_event(conn, event_id)? else {
+                return Ok(None);
+            };
+            Ok(store::get_calendar(conn, row.calendar_id)?.map(|cal| (row, cal)))
+        })
+        .await?
+        .ok_or_else(|| SkimError::other("gcal_input", "Unknown event"))?;
+    require_connected(&cal.account_id)?;
+    if !matches!(cal.access_role.as_str(), "owner" | "writer") {
+        return Err(SkimError::other(
+            "gcal_input",
+            "This calendar is read only.",
+        ));
+    }
+    let series_id = row.recurring_event_id.as_deref().ok_or_else(|| {
+        SkimError::other("gcal_input", "Select an occurrence of a recurring event.")
+    })?;
+    let master = gapi::fetch_event(&cal.account_id, &cal.google_id, series_id).await?;
+    let instance = gapi::fetch_event(&cal.account_id, &cal.google_id, &row.google_id).await?;
+    if master["organizer"]["self"] == false {
+        return Err(SkimError::other(
+            "gcal_input",
+            "Only the organizer can split this recurring event.",
+        ));
+    }
+    let mut validation = row.clone();
+    apply_input(&mut validation, &input)?;
+    let body = gapi::event_body(&input, master.get("attendees"));
+    let instances = if super::split::occurrence_count(&master)?.is_some() {
+        gapi::fetch_instances(&cal.account_id, &cal.google_id, series_id).await?
+    } else {
+        vec![]
+    };
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    let plan = super::split::plan(
+        &cal.google_id,
+        &master,
+        &instance,
+        &body,
+        &instances,
+        &token,
+    )?;
+    let aid = cal.account_id.clone();
+    let queued = state
+        .db
+        .call(move |conn| {
+            if store::event_has_ops(conn, event_id)? {
+                return Ok(false);
+            }
+            store::queue_op(
+                conn,
+                &aid,
+                "split",
+                &json!({ "event_id": event_id, "send_updates": send.as_str(), "plan": plan }),
+            )?;
+            Ok(true)
+        })
+        .await?;
+    if !queued {
+        return Err(SkimError::other(
+            "gcal_input",
+            "Wait for this event to sync before splitting its series.",
+        ));
+    }
+    emit_updated(&app, &cal.account_id);
+    if let Some(handle) = super::handle(&cal.account_id) {
+        handle.run_ops();
+    }
+    Ok(row)
+}
+
+#[tauri::command]
+pub async fn fork_cal_availability(
+    state: State<'_, AppState>,
+    account_id: String,
+    from_ts: i64,
+    to_ts: i64,
+    attendees: Vec<String>,
+    exclude_event_id: Option<i64>,
+) -> Result<super::availability::Availability> {
+    let aid = account_id.clone();
+    let (account, exclude, selected) = state
+        .db
+        .read("fork_cal_availability", move |conn| {
+            let account = db_accounts::get(conn, &aid)?;
+            let exclude = exclude_event_id
+                .map(|id| store::get_event(conn, id))
+                .transpose()?
+                .flatten();
+            let selected = store::list_calendars(conn, &aid)?
+                .into_iter()
+                .filter(|cal| cal.selected)
+                .map(|cal| cal.google_id)
+                .collect::<Vec<_>>();
+            Ok((account, exclude, selected))
+        })
+        .await?;
+    let account = account.ok_or_else(|| SkimError::other("gcal_input", "Unknown account"))?;
+    let exclude_id = exclude.as_ref().map(|event| event.google_id.as_str());
+    super::availability::fetch(
+        &account_id,
+        &account.email,
+        from_ts,
+        to_ts,
+        attendees,
+        exclude_id,
+        &selected,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn fork_cal_sync_state(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<store::SyncState> {
+    let health = super::sync_health(&account_id);
+    let mut state = state
+        .db
+        .read("fork_cal_sync_state", move |conn| {
+            store::sync_state(conn, &account_id)
+        })
+        .await?;
+    state.syncing = health.syncing;
+    state.last_synced_at = health.last_synced_at;
+    state.last_sync_error = health.last_sync_error;
+    Ok(state)
+}
+
+#[tauri::command]
+pub async fn fork_cal_retry(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    account_id: String,
+    event_id: Option<i64>,
+) -> Result<usize> {
+    require_connected(&account_id)?;
+    let aid = account_id.clone();
+    let count = state
+        .db
+        .call(move |conn| store::retry_failed(conn, &aid, event_id))
+        .await?;
+    emit_updated(&app, &account_id);
+    if let Some(handle) = super::handle(&account_id) {
+        handle.run_ops();
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+pub async fn fork_cal_discard_split(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    account_id: String,
+    event_id: i64,
+    send_updates: String,
+) -> Result<()> {
+    require_connected(&account_id)?;
+    let send = SendUpdates::parse(&send_updates)?;
+    let aid = account_id.clone();
+    let (op_id, payload) = state
+        .db
+        .call(move |conn| store::claim_failed_split(conn, &aid, event_id))
+        .await?
+        .ok_or_else(|| {
+            SkimError::other(
+                "gcal_input",
+                "This event has no failed series change to discard.",
+            )
+        })?;
+    let result = async {
+        let payload: Value = serde_json::from_str(&payload)
+            .map_err(|_| SkimError::other("gcal_op", "The failed operation is invalid."))?;
+        let plan: super::split::SplitPlan = serde_json::from_value(payload["plan"].clone())
+            .map_err(|_| SkimError::other("gcal_op", "The series split is invalid."))?;
+        let mut transport = super::split::GoogleTransport {
+            account_id: &account_id,
+            calendar_id: &plan.calendar_google_id,
+        };
+        super::split::discard(&mut transport, &plan, send).await
+    }
+    .await;
+    let message = result.as_ref().err().map(ToString::to_string);
+    let success = result.is_ok();
+    state
+        .db
+        .call(move |conn| {
+            if let Some(message) = message {
+                store::record_op_error(conn, op_id, &message)?;
+            }
+            store::finish_op(conn, op_id, success)
+        })
+        .await?;
+    emit_updated(&app, &account_id);
+    if success {
+        if let Some(handle) = super::handle(&account_id) {
+            handle.sync_now();
+        }
+    }
+    result
+}
+
+/// Delete removes the local row and queues the server deletion.
+/// A stable create ID also covers a create whose reply was lost.
 #[tauri::command]
 pub async fn fork_cal_delete(
     app: AppHandle,
@@ -479,6 +717,7 @@ pub async fn fork_cal_delete(
     series: Option<bool>,
 ) -> Result<()> {
     let send = SendUpdates::parse(&send_updates)?;
+    require_no_split(&state, event_id).await?;
     let account_id = state
         .db
         .call(move |conn| {
@@ -489,7 +728,15 @@ pub async fn fork_cal_delete(
                 return Ok(None);
             };
             if model::is_local_id(&row.google_id) {
+                // The server can accept a create even when its reply never reaches this device.
+                let remote_id = store::create_operation_token(conn, event_id)?;
                 store::drop_ops_for_event(conn, event_id)?;
+                if let Some(remote_id) = remote_id {
+                    store::queue_op(conn, &cal.account_id, "delete", &json!({
+                        "calendar_google_id": cal.google_id, "google_id": remote_id,
+                        "send_updates": send.as_str()
+                    }))?;
+                }
             } else {
                 store::drop_ops_for_event(conn, event_id)?;
                 store::queue_op(

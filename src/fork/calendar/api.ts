@@ -4,6 +4,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CalStatus,
+  AvailabilityResult,
+  CalendarSyncState,
   CalendarRow,
   ClientStatus,
   EventInput,
@@ -28,6 +30,10 @@ export const googleApi = {
 };
 
 export const calendarApi = {
+  discardSplit: (accountId: string, eventId: number, sendUpdates: SendUpdates) => invoke<void>("fork_cal_discard_split", {accountId, eventId, sendUpdates}),
+  availability: (accountId: string, fromTs: number, toTs: number, attendees: string[], excludeEventId: number | null = null) => invoke<AvailabilityResult>("fork_cal_availability", { accountId, fromTs, toTs, attendees, excludeEventId }),
+  syncState: (accountId: string) => invoke<CalendarSyncState>("fork_cal_sync_state", { accountId }),
+  retry: (accountId: string, eventId: number | null = null) => invoke<number>("fork_cal_retry", { accountId, eventId }),
   status: (accountId: string) => invoke<CalStatus>("fork_cal_status", { accountId }),
   /** Opens the browser for consent; resolves once the grant is stored and the engine runs. */
   connect: (accountId: string) => invoke<CalStatus>("fork_cal_connect", { accountId }),

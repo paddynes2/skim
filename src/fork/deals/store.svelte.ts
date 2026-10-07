@@ -8,7 +8,7 @@ import { navHooks } from "../nav";
 import { DEALS_SETTING, dealsApi } from "./api";
 import { dealsCount } from "./count.svelte";
 
-const state = $state({ text: "", loaded: false, failed: false });
+const state = $state({ text: "", loaded: false, failed: false, selectedCompany: "" });
 let started = false;
 
 /** The list changed: the open Deals view and the badge follow at once. */
@@ -18,6 +18,8 @@ function changed() {
 }
 
 export const dealsStore = {
+  get selectedCompany() { return state.selectedCompany; },
+  selectCompany(name: string) { state.selectedCompany = name; },
   get text() {
     return state.text;
   },

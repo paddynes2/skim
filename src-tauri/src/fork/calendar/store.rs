@@ -214,6 +214,15 @@ pub fn replace_window(
     // Upsert first, prune second: a row Google still returns keeps its id
     // across pulls (the UI keys on it), instead of dying and coming back.
     for e in fresh {
+        let held: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM fork_cal_ops o WHERE o.state IN ('pending','failed','discarding') AND (
+              json_extract(o.payload, '$.event_id') = (SELECT id FROM fork_cal_events WHERE calendar_id = ?1 AND google_id = ?2)
+              OR (json_extract(o.payload, '$.calendar_google_id') = (SELECT google_id FROM fork_cal_calendars WHERE id = ?1)
+                  AND json_extract(o.payload, '$.google_id') = ?2)))",
+            params![calendar_id, e.google_id], |r| r.get(0))?;
+        if held {
+            continue;
+        }
         upsert_event(&tx, e)?;
     }
     let keep: Vec<Value> = fresh
@@ -224,6 +233,8 @@ pub fn replace_window(
         "DELETE FROM fork_cal_events
           WHERE calendar_id = ?1 AND local_only = 0
             AND end_ts > ?2 AND start_ts < ?3
+            AND id NOT IN (SELECT json_extract(payload, '$.event_id') FROM fork_cal_ops
+                WHERE state IN ('pending', 'failed', 'discarding') AND json_extract(payload, '$.event_id') IS NOT NULL)
             AND google_id NOT IN (SELECT value FROM json_each(?4))",
         params![
             calendar_id,
@@ -345,6 +356,22 @@ pub fn queue_op(
     kind: &str,
     payload: &Value,
 ) -> rusqlite::Result<i64> {
+    let mut payload = payload.clone();
+    payload["_operation_token"] = Value::String(uuid::Uuid::new_v4().simple().to_string());
+    let series_id = payload["plan"]["master_id"]
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| payload["google_id"].as_str().map(str::to_string));
+    let series_id = match (series_id, payload["event_id"].as_i64()) {
+        (Some(id), _) => Some(id),
+        (None, Some(id)) => {
+            get_event(conn, id)?.map(|row| row.recurring_event_id.unwrap_or(row.google_id))
+        }
+        _ => None,
+    };
+    if let Some(id) = series_id {
+        payload["_series_id"] = Value::String(id);
+    }
     conn.execute(
         "INSERT INTO fork_cal_ops (account_id, kind, payload, created_at, attempts, state)
          VALUES (?1, ?2, ?3, ?4, 0, 'pending')",
@@ -360,7 +387,12 @@ pub fn next_op(
 ) -> rusqlite::Result<Option<(i64, String, String, i64)>> {
     conn.query_row(
         "SELECT id, kind, payload, attempts FROM fork_cal_ops
-          WHERE account_id = ?1 AND state = 'pending' ORDER BY id LIMIT 1",
+          WHERE account_id = ?1 AND state = 'pending'
+          AND NOT EXISTS (SELECT 1 FROM fork_cal_ops failed WHERE failed.account_id = ?1
+            AND failed.state IN ('failed', 'discarding') AND failed.id < fork_cal_ops.id
+            AND (json_extract(failed.payload, '$._series_id') = json_extract(fork_cal_ops.payload, '$._series_id')
+              OR json_extract(failed.payload, '$.event_id') = json_extract(fork_cal_ops.payload, '$.event_id')))
+          ORDER BY id LIMIT 1",
         [account_id],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )
@@ -391,10 +423,151 @@ pub fn bump_attempts(conn: &Connection, op_id: i64) -> rusqlite::Result<()> {
 /// whose create never left the machine).
 pub fn drop_ops_for_event(conn: &Connection, event_id: i64) -> rusqlite::Result<usize> {
     conn.execute(
-        "DELETE FROM fork_cal_ops WHERE state = 'pending'
+        "DELETE FROM fork_cal_ops WHERE state IN ('pending', 'failed')
            AND json_extract(payload, '$.event_id') = ?1",
         [event_id],
     )
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct EventSyncState {
+    pub event_id: i64,
+    pub status: String,
+    pub message: Option<String>,
+    pub can_discard: bool,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SyncState {
+    pub pending_ops: i64,
+    pub failed_ops: i64,
+    pub events: Vec<EventSyncState>,
+    pub syncing: bool,
+    pub last_synced_at: Option<i64>,
+    pub last_sync_error: Option<String>,
+}
+
+pub fn sync_state(conn: &Connection, account_id: &str) -> rusqlite::Result<SyncState> {
+    let pending_ops = pending_op_count(conn, account_id)?;
+    let failed_ops = conn.query_row(
+        "SELECT count(*) FROM fork_cal_ops WHERE account_id = ?1 AND state = 'failed'",
+        [account_id],
+        |r| r.get(0),
+    )?;
+    let mut query = conn.prepare(
+        "SELECT json_extract(payload, '$.event_id'), CASE state WHEN 'discarding' THEN 'pending' ELSE state END, json_extract(payload, '$._last_error'), kind
+        FROM fork_cal_ops WHERE account_id = ?1 AND json_extract(payload, '$.event_id') IS NOT NULL
+        ORDER BY CASE state WHEN 'failed' THEN 0 ELSE 1 END, id",
+    )?;
+    let rows = query.query_map([account_id], |r| {
+        Ok(EventSyncState {
+            event_id: r.get(0)?,
+            status: r.get(1)?,
+            message: r.get(2)?,
+            can_discard: r.get::<_, String>(1)? == "failed" && r.get::<_, String>(3)? == "split",
+        })
+    })?;
+    let mut events = vec![];
+    for row in rows {
+        let row = row?;
+        if !events
+            .iter()
+            .any(|old: &EventSyncState| old.event_id == row.event_id)
+        {
+            events.push(row);
+        }
+    }
+    Ok(SyncState {
+        pending_ops,
+        failed_ops,
+        events,
+        syncing: false,
+        last_synced_at: None,
+        last_sync_error: None,
+    })
+}
+
+pub fn record_op_error(conn: &Connection, op_id: i64, message: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE fork_cal_ops SET payload = json_set(payload, '$._last_error', ?2) WHERE id = ?1",
+        params![op_id, message],
+    )?;
+    Ok(())
+}
+
+pub fn retry_failed(
+    conn: &Connection,
+    account_id: &str,
+    event_id: Option<i64>,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE fork_cal_ops SET state = 'pending', attempts = 0,
+        payload = json_remove(payload, '$._last_error') WHERE account_id = ?1 AND state = 'failed'
+        AND (?2 IS NULL OR json_extract(payload, '$.event_id') = ?2)",
+        params![account_id, event_id],
+    )
+}
+
+pub fn event_has_ops(conn: &Connection, event_id: i64) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM fork_cal_ops WHERE json_extract(payload, '$.event_id') = ?1)",
+        [event_id],
+        |r| r.get(0),
+    )
+}
+
+pub fn event_has_split(conn: &Connection, event_id: i64) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM fork_cal_ops WHERE kind = 'split' AND (
+        json_extract(payload, '$.event_id') = ?1 OR json_extract(payload, '$._series_id') =
+        (SELECT coalesce(recurring_event_id, google_id) FROM fork_cal_events WHERE id = ?1)))",
+        [event_id],
+        |r| r.get(0),
+    )
+}
+
+pub fn create_operation_token(
+    conn: &Connection,
+    event_id: i64,
+) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT json_extract(payload, '$._operation_token') FROM fork_cal_ops
+        WHERE kind = 'create' AND json_extract(payload, '$.event_id') = ?1 ORDER BY id LIMIT 1",
+        [event_id],
+        |r| r.get::<_, Option<String>>(0),
+    )
+    .optional()
+    .map(Option::flatten)
+}
+
+pub fn claim_failed_split(
+    conn: &Connection,
+    account_id: &str,
+    event_id: i64,
+) -> rusqlite::Result<Option<(i64, String)>> {
+    let row: Option<(i64, String)> = conn
+        .query_row(
+            "SELECT id, payload FROM fork_cal_ops WHERE account_id = ?1 AND kind = 'split'
+        AND state = 'failed' AND json_extract(payload, '$.event_id') = ?2 ORDER BY id LIMIT 1",
+            params![account_id, event_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    if let Some((id, _)) = &row {
+        conn.execute(
+            "UPDATE fork_cal_ops SET state = 'discarding' WHERE id = ?1",
+            [id],
+        )?;
+    }
+    Ok(row)
+}
+
+pub fn recover_interrupted_discards(conn: &Connection, account_id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE fork_cal_ops SET state = 'failed' WHERE account_id = ?1 AND state = 'discarding'",
+        [account_id],
+    )?;
+    Ok(())
 }
 
 pub fn pending_op_count(conn: &Connection, account_id: &str) -> rusqlite::Result<i64> {

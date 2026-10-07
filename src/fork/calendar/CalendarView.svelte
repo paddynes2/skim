@@ -18,6 +18,8 @@
   import { palette } from "../../lib/stores/palette.svelte";
   import { ui } from "../../lib/stores/ui.svelte";
   import { toast } from "../stores/toast.svelte";
+  import MiniMonth from "./MiniMonth.svelte";
+  import EventPreview from "./EventPreview.svelte";
   import EventPanel from "./EventPanel.svelte";
   import { EVENT_COLORS } from "./editor";
   import GuestsPrompt from "./GuestsPrompt.svelte";
@@ -29,6 +31,7 @@
   const VIEWS: { key: CalView; ec: string; label: string; hint: string }[] = [
     { key: "day", ec: "timeGridDay", label: "fork.cal.view_day", hint: "D" },
     { key: "week", ec: "timeGridWeek", label: "fork.cal.view_week", hint: "W" },
+    { key: "workweek", ec: "timeGridWeek", label: "fork.cal.view_workweek", hint: "" },
     { key: "month", ec: "dayGridMonth", label: "fork.cal.view_month", hint: "M" },
     { key: "agenda", ec: "listWeek", label: "fork.cal.view_agenda", hint: "A" },
   ];
@@ -37,6 +40,20 @@
   const PLUGINS = [TimeGrid, DayGrid, List, Interaction];
   let title = $state("");
   let lastRange = "";
+  let eventOpener: HTMLElement | null = null;
+  function closePanel() { calendar.close(); if (eventOpener?.isConnected) eventOpener.focus({ preventScroll: true }); }
+  let monthOpen = $state(false);
+  let filtersOpen = $state(false);
+  let visibilityBusy = $state<number | null>(null);
+  async function toggleCalendar(id: number, selected: boolean) {
+    visibilityBusy = id;
+    try { await calendar.setVisible(id, selected); }
+    catch (e) { toast.show({ text: calendarErrorText(e) }); }
+    finally { visibilityBusy = null; }
+  }
+  async function retryFailed() {
+    try { await calendar.retry(); } catch (e) { toast.show({ text: calendarErrorText(e) }); }
+  }
 
   const sec = (d: Date) => Math.floor(d.getTime() / 1000);
 
@@ -85,6 +102,7 @@
 
   function onEventClick(info: EC.EventClickInfo) {
     const id = Number(info.event.id);
+    eventOpener = info.el;
     if (Number.isFinite(id)) calendar.open(id);
   }
 
@@ -122,7 +140,10 @@
       allDaySlot: true,
       scrollTime: "08:00:00",
       slotDuration: "00:30:00",
-      slotHeight: 26,
+      slotHeight: 32,
+      slotEventOverlap: false,
+      slotMinTime: `${calPrefs.visibleStart}:00`,
+      slotMaxTime: `${calPrefs.visibleEnd}:00`,
       dayMaxEvents: true,
       selectable: true,
       selectMinDistance: 0,
@@ -163,6 +184,9 @@
   $effect(() => {
     options.view = ecView(calendar.view);
     options.date = calendar.date;
+    options.hiddenDays = calendar.view === "workweek" ? [0, 6] : [];
+    options.slotMinTime = `${calPrefs.visibleStart}:00`;
+    options.slotMaxTime = `${calPrefs.visibleEnd}:00`;
   });
 
   $effect(() => {
@@ -180,8 +204,9 @@
     if (ui.view !== "calendar" || palette.open || ui.settingsOpen || ui.shortcutsOpen) return;
     if (e.ctrlKey || e.metaKey || e.altKey || isTyping()) return;
     if (e.key === "Escape") {
+      monthOpen = false; filtersOpen = false;
       if (calendar.selectedId !== null || calendar.draft) {
-        calendar.close();
+        closePanel();
         e.preventDefault();
         e.stopImmediatePropagation();
       }
@@ -245,8 +270,10 @@
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4" /></svg>
           </button>
         </div>
-        <h1 class="title">{title}</h1>
-        {#if calendar.loading}<span class="spinner" aria-hidden="true"></span>{/if}
+        <div class="month-anchor"><button class="title month-toggle" onclick={() => (monthOpen = !monthOpen)} aria-expanded={monthOpen} aria-label={t("fork.cal.choose_date")}>{title}<span aria-hidden="true"> &#9662;</span></button>
+          {#if monthOpen}<div class="month-popup"><MiniMonth selected={calendar.date} onselect={(d) => { calendar.goto(d); monthOpen = false; }} /></div>{/if}
+        </div>
+        {#if calendar.loading}<span class="spinner" aria-hidden="true"></span><span class="loading-label" role="status">{t("fork.cal.refreshing")}</span>{/if}
       </div>
       <div class="right">
         <div class="views" role="radiogroup" aria-label={t("fork.cal.views")}>
@@ -270,6 +297,16 @@
       </div>
     </header>
 
+    <div class="calendar-controls">
+      <button class="control" class:active={filtersOpen} aria-expanded={filtersOpen} onclick={() => (filtersOpen = !filtersOpen)}>{t("fork.cal.calendars")} <span>{calendar.calendars.filter((c) => c.selected).length}</span></button>
+      {#if calendar.view === "day" || calendar.view === "week" || calendar.view === "workweek"}
+        <label>{t("fork.cal.visible_hours")}<select aria-label={t("fork.cal.visible_from")} value={calPrefs.visibleStart} onchange={(e) => calPrefs.setVisibleHours(e.currentTarget.value, calPrefs.visibleEnd)}>{#each Array.from({length: 24}, (_, n) => `${String(n).padStart(2, "0")}:00`) as hour}<option value={hour} disabled={hour >= calPrefs.visibleEnd}>{hour}</option>{/each}</select></label>
+        <span aria-hidden="true">&ndash;</span><select aria-label={t("fork.cal.visible_to")} value={calPrefs.visibleEnd} onchange={(e) => calPrefs.setVisibleHours(calPrefs.visibleStart, e.currentTarget.value)}>{#each Array.from({length: 24}, (_, n) => `${String(n + 1).padStart(2, "0")}:00`) as hour}<option value={hour} disabled={hour <= calPrefs.visibleStart}>{hour}</option>{/each}</select>
+      {/if}
+      <span class="zone">{localZone()}</span>
+    </div>
+    {#if filtersOpen}<div class="calendar-filters">{#each calendar.calendars as cal}<label><input type="checkbox" checked={cal.selected} disabled={visibilityBusy !== null} onchange={(e) => toggleCalendar(cal.id, e.currentTarget.checked)} /><span class="color" style:background={cal.color || "var(--primary)"}></span>{cal.summary}</label>{/each}</div>{/if}
+    {#if calendar.failedEvents.length}<div class="sync-alert" role="status"><span>{t("fork.cal.failed_changes", { count: calendar.failedEvents.length })}</span><button onclick={retryFailed}>{t("fork.cal.retry")}</button></div>{/if}
     {#if setupText}
       <div class="setup">
         <span class="microlabel">{t("fork.nav.calendar")}</span>
@@ -278,7 +315,7 @@
       </div>
     {/if}
     {#if calendar.error}
-      <div class="error">{calendar.error}</div>
+      <div class="error" role="alert">{calendar.error} <button onclick={() => calendar.reload()}>{t("fork.cal.retry")}</button></div>
     {/if}
 
     <div class="grid">
@@ -288,7 +325,11 @@
 
   {#if panelOpen}
     {#key panelKey}
-      <EventPanel row={panelRow} draft={calendar.draft} onclose={() => calendar.close()} />
+      {#if panelRow && !calendar.editing}
+        <EventPreview row={panelRow} onclose={closePanel} />
+      {:else}
+        <EventPanel row={panelRow} draft={calendar.draft} onclose={closePanel} />
+      {/if}
     {/key}
   {/if}
 </section>
@@ -296,6 +337,20 @@
 <GuestsPrompt />
 
 <style>
+  .loading-label { color: var(--text-dim); font-size: 11px; }
+  .month-anchor { position: relative; min-width: 0; }
+  .month-toggle { padding: 5px 4px; border-radius: var(--radius-s); }
+  .month-toggle:hover { background: var(--hover); }
+  .month-popup { position: absolute; top: calc(100% + 8px); left: 0; z-index: 20; }
+  .calendar-controls { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
+  .calendar-controls label { display: flex; align-items: center; gap: 8px; margin-left: 6px; }
+  .calendar-controls select { padding: 4px 6px; border: 1px solid var(--hairline); border-radius: var(--radius-s); background: var(--surface); color: var(--text); font-size: 12px; }
+  .control { padding: 5px 9px; border: 1px solid var(--hairline); border-radius: var(--radius-s); }.control:hover, .control.active { background: var(--hover); } .control span { margin-left: 6px; color: var(--text); }
+  .zone { margin-left: auto; font-size: 11px; }
+  .calendar-filters { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 6px 20px 14px; border-bottom: 1px solid var(--hairline); }
+  .calendar-filters label { display: flex; align-items: center; gap: 7px; font-size: 12px; }.calendar-filters input { accent-color: var(--primary); }.color { width: 8px; height: 8px; border-radius: 50%; }
+  .sync-alert { display: flex; justify-content: space-between; gap: 12px; margin: 4px 16px 10px; font-size: 12px; color: var(--danger); }.sync-alert button, .error button { text-decoration: underline; }
+
   .fork-cal {
     flex: 1;
     min-width: 0;
@@ -438,6 +493,10 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  @media (max-width: 1100px) {
+    .fork-cal.with-panel .main { display: none; }
+    .fork-cal.with-panel :global(.panel), .fork-cal.with-panel :global(.preview) { width: 100%; border-left: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     .spinner {

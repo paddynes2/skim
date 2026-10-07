@@ -16,6 +16,8 @@ const state = $state({
   /** IANA zone shown as the second clock and the default /slots recipient zone; "" = none. */
   secondTz: "",
   bookingLink: "",
+  visibleStart: "06:00",
+  visibleEnd: "22:00",
   loaded: false,
 });
 
@@ -37,6 +39,8 @@ export const calPrefs = {
     if (s.fork_cal_work_days !== undefined) state.workDays = s.fork_cal_work_days;
     if (s.fork_cal_second_tz !== undefined) state.secondTz = s.fork_cal_second_tz;
     if (s.fork_booking_link !== undefined) state.bookingLink = s.fork_booking_link;
+    if (s.fork_cal_visible_start && HHMM.test(s.fork_cal_visible_start)) state.visibleStart = s.fork_cal_visible_start;
+    if (s.fork_cal_visible_end && HHMM.test(s.fork_cal_visible_end)) state.visibleEnd = s.fork_cal_visible_end;
     state.loaded = true;
   },
   /** Read the settings once; later calls resolve at once. */
@@ -52,6 +56,13 @@ export const calPrefs = {
         loading = null;
       });
     return loading;
+  },
+  get visibleStart() { return state.visibleStart; },
+  get visibleEnd() { return state.visibleEnd; },
+  setVisibleHours(start: string, end: string) {
+    if (!HHMM.test(start) || !HHMM.test(end) || end <= start) return;
+    state.visibleStart = start; state.visibleEnd = end;
+    persist("fork_cal_visible_start", start); persist("fork_cal_visible_end", end);
   },
   get loaded() {
     return state.loaded;

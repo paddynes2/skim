@@ -12,9 +12,9 @@ const DEALS: Record<number, string> = {
 
 export const DEMO_DEALS_TEXT = "Northwind: northwind.example\nAcme Partners: acme-partners.example\nBrightwave: brightwave.io";
 
-export function forkDealsList(offset: number) {
+export function forkDealsList(offset: number, company: string | null = null) {
   if (offset > 0) return [];
-  return db.INBOX_THREADS.filter((t) => t.id in DEALS).map((t) => ({
+  return db.INBOX_THREADS.filter((t) => t.id in DEALS && (!company || DEALS[t.id] === company)).map((t) => ({
     ...t,
     accountId: "acc-1",
     messageId: null,
@@ -57,4 +57,9 @@ export function forkDealsPreview(text: string) {
     if (d.domains.length || d.addresses.length) deals.push(d);
   }
   return { deals, ignored };
+}
+
+export function forkDealsContext(company: string) {
+  const conversations=forkDealsList(0,company);
+  return {conversationCount:conversations.length,conversations,people:conversations.map(t=>({name:t.fromName,addr:t.fromAddr})),attachments:conversations.filter(t=>t.hasAttachments).map(t=>({threadId:t.id,filename:"Project outline.pdf",date:t.date})),meetings:[]};
 }

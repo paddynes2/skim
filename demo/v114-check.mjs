@@ -29,20 +29,21 @@ try {
   assert.ok(await page.locator('.deal-badge .initials').count());
   if (capture) await page.screenshot({path:`${out}/deals-${theme}.png`});
   await page.locator('.row', {hasText:'Q3 launch'}).first().click();
-  await page.locator('.thread-history').waitFor();
-  assert.equal(await page.locator('.thread-history').getAttribute('open'), null);
+  await page.locator('.history-label').waitFor();
+  assert.equal(await page.locator('.convo .message').count(), 1);
   if (capture) await page.screenshot({path:`${out}/thread-${theme}.png`});
-  await page.locator('.thread-history > summary').click();
-  await page.locator('.thread-history .chat-row').first().click();
-  await page.locator('.thread-history .focused-msg .message').waitFor();
-  await page.waitForFunction(() => document.querySelector('.thread-history .focused-msg iframe')?.contentDocument?.body?.textContent?.trim().length > 0);
-  await page.locator('.thread-history .focused-msg iframe').evaluate(async el => {
+  await page.locator('.chat-row').first().click();
+  await page.locator('.reply-target .message').waitFor();
+  await page.waitForFunction(() => document.querySelector('.reply-target iframe')?.contentDocument?.body?.textContent?.trim().length > 0);
+  await page.locator('.reply-target iframe').evaluate(async el => {
    await el.contentDocument.fonts.ready;
    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   if (capture) await page.screenshot({path:`${out}/thread-history-${theme}.png`});
-  await page.locator('.thread-history > summary').click();
-  await page.locator('.convo > .focused-msg .message').waitFor();
+  await page.getByRole('button', {name:'Collapse all',exact:true}).click();
+  assert.equal(await page.locator('.convo .message').count(), 0);
+  await page.locator('.chat-row').first().click();
+  await page.locator('.convo .reply-target .message').waitFor();
   await page.locator('.sidebar .item.calendar').click();
   await page.locator('.fork-cal .new').click();
   const panel = page.locator('.fork-cal .panel');
@@ -69,6 +70,7 @@ try {
   await panel.getByRole('button', {name:'Create',exact:true}).click();
   await panel.waitFor({state:'detached'}).catch(async e => { console.log(await panel.innerText()); throw e; });
   await page.locator('.ec-event', {hasText:'Planning session'}).first().click();
+  await page.getByRole('button', {name:'Edit event',exact:true}).click();
   await panel.waitFor();
   assert.equal(await panel.getByRole('combobox', {name:'Visibility',exact:true}).inputValue(), 'private');
   assert.equal(await panel.getByRole('combobox', {name:'Show as',exact:true}).inputValue(), 'transparent');
@@ -79,8 +81,9 @@ try {
   assert.match(await panel.locator('.rule').textContent(), /Every 2.*8 occurrences/);
   await panel.getByRole('button', {name:'Close',exact:true}).click();
   await page.locator('.ec-event', {hasText:'Board prep'}).first().click();
-  await panel.getByRole('button', {name:'Edit the whole series',exact:true}).click();
-  await panel.getByText('Editing the whole series', {exact:true}).waitFor();
+  await page.getByRole('button', {name:'Edit event',exact:true}).click();
+  await panel.getByLabel('Apply changes to', {exact:true}).selectOption('series');
+  await page.waitForFunction(() => document.querySelector('#event-scope')?.value === 'series');
   assert.match(await panel.locator('.rule').textContent(), /Weekly/);
   if (capture) await page.screenshot({path:`${out}/series-${theme}.png`});
   await page.setViewportSize({width:1200,height:800});

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SyncStatus from "../fork/sync/SyncStatus.svelte";
   import { api } from "../lib/api";
   import { SCHEDULED_FOLDER_ID } from "../fork/compose/api";
   import { folderIcon, folderLabel, folderTree, ownFoldersHeading } from "../lib/folders";
@@ -221,22 +222,7 @@
         <span class="name">{mail.opError}</span>
       </button>
     {/if}
-    {#if mail.syncState === "syncing"}
-      <div class="sync microlabel">
-        <span class="spinner"></span>
-        <span class="name">
-          {t("sync.syncing")}
-          {#if mail.syncProgress}
-            {Math.round((mail.syncProgress.done / Math.max(1, mail.syncProgress.total)) * 100)}%
-          {/if}
-        </span>
-      </div>
-    {:else if mail.syncState === "error"}
-      <button class="sync error microlabel" onclick={() => mail.syncNow()} title={mail.syncMessage}>
-        <span class="warn-icon">⚠</span>
-        <span class="name">{t("sync.error")}</span>
-      </button>
-    {/if}
+    <SyncStatus />
     {#if updater.status === "available"}
       <div class="sync update microlabel">
         <button

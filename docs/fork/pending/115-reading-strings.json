@@ -1,0 +1,19 @@
+{
+  "fork.reading.search_thread": "Search conversation",
+  "fork.reading.thread_files": "Files",
+  "fork.reading.loaded_coverage": "{loaded} of {total} message bodies loaded. Headers and previews are always searchable.",
+  "fork.reading.load_remaining": "Load remaining messages",
+  "fork.reading.loading_remaining": "Loading messages?",
+  "fork.reading.search_placeholder": "Search people, subjects and message text",
+  "fork.reading.no_matches": "No messages match this search.",
+  "fork.reading.no_loaded_matches": "No matches in loaded messages. Load the remaining messages to search the full conversation.",
+  "fork.reading.no_files": "No attachments in this conversation.",
+  "fork.reading.no_loaded_files": "No files in loaded messages. Load the remaining messages to check the full conversation.",
+  "fork.reading.refreshing": "Refreshing cached message?",
+  "fork.reading.message_count": "{count} messages",
+  "fork.reading.expand_all": "Expand all",
+  "fork.reading.collapse_all": "Collapse all",
+  "fork.reading.reply_target": "Selected for reply",
+  "fork.reading.select_for_reply": "Select for reply",
+  "fork.reading.collapse_message": "Collapse message"
+}

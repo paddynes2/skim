@@ -66,3 +66,6 @@ pub fn start(app: AppHandle) {
         court::on_mail_updated(app2.clone(), db.clone(), touched);
     });
 }
+
+pub mod mail_status;
+pub mod reading;

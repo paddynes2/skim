@@ -30,10 +30,19 @@ export interface DealSuggestion {
 }
 
 export const dealsApi = {
-  list: (offset: number, limit: number) => invoke<DealRow[]>("fork_deals_list", { offset, limit }),
+  list: (offset: number, limit: number, company: string | null = null) => invoke<DealRow[]>("fork_deals_list", { offset, limit, company }),
+  context: (company: string) => invoke<DealContext>("fork_deals_context", { company }),
   count: () => invoke<{ unread: number; total: number }>("fork_deals_count"),
   suggest: (threadId: number) => invoke<DealSuggestion | null>("fork_deals_suggest", { threadId }),
   preview: (text: string) => invoke<ParsedDeals>("fork_deals_preview", { text }),
   /** Adds `entry` under `name`; returns the new list text. */
   add: (name: string, entry: string) => invoke<string>("fork_deals_add", { name, entry }),
 };
+
+export interface DealContext {
+  conversationCount: number;
+  conversations: DealRow[];
+  people: { name: string | null; addr: string }[];
+  attachments: { threadId: number; filename: string; date: number }[];
+  meetings: { id: number; summary: string; startTs: number; allDay: boolean }[];
+}

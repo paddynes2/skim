@@ -183,3 +183,11 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/lib/i18n/locales/en.json` | reading and calendar labels | history and event editor controls | D57, D58 |
 | `src-tauri/src/lib.rs` | generate_handler | register fork_cal_series read command | D58 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | app version | 1.1.4 | D57, D58 |
+
+| `src/components/MessageList.svelte` | list shell | persisted resizer, batched outgoing recipients, company/search controls and loading feedback | daily-use pass 1.1.5 |
+| `src/components/MessageRow.svelte` | sender/date | outgoing recipient label and larger metadata | daily-use pass 1.1.5 |
+| `src/components/ReadingPane.svelte` | conversation and reply | expandable messages, search/files, primary reply and cache-preserving refresh | daily-use pass 1.1.5 |
+| `src/components/Sidebar.svelte` | footer | persistent queue/sync status | daily-use pass 1.1.5 |
+| `src/lib/stores/mail.svelte.ts` | page loading | company filter, view identity and stale response guards | daily-use pass 1.1.5 |
+| `src/lib/i18n/locales/en.json` | fork strings | daily-use control labels | daily-use pass 1.1.5 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.5 | daily-use pass |

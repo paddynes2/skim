@@ -11,12 +11,14 @@
 
   let {
     thread,
+    recipientLabel = "",
     selected = false,
     checked = false,
     onselect,
     ontoggle,
   }: {
     thread: ThreadRow;
+    recipientLabel?: string;
     selected?: boolean;
     checked?: boolean;
     onselect?: (id: number) => void;
@@ -25,6 +27,7 @@
 
   // Which mailbox this row came from — shown only in the unified view, where
   // rows from every account interleave.
+  const sender = $derived(mail.myEmails.includes(thread.fromAddr.toLowerCase()) ? (recipientLabel ? `${t("reading.you")} → ${recipientLabel}` : t("reading.you")) : thread.fromName);
   const badge = $derived(mail.unified ? mail.accountBadge(thread.accountId) : null);
   const compact = $derived(prefs.density === "compact");
   const avatar = $derived(
@@ -51,7 +54,7 @@
     const parts: string[] = [];
     if (!thread.isRead) parts.push(t("fork.row.unread"));
     if (thread.isStarred) parts.push(t("fork.row.starred"));
-    parts.push(t("fork.row.from", { name: thread.fromName }));
+    parts.push(t("fork.row.from", { name: sender }));
     parts.push(thread.subject || t("fork.row.no_subject"));
     if (thread.messageCount > 1) parts.push(t("fork.row.messages", { n: thread.messageCount }));
     if (thread.hasAttachments) parts.push(t("fork.row.attachment"));
@@ -120,7 +123,7 @@
         {#if badge}
           <span class="acct" style:background="var(--acct-{badge.color})">{badge.letter}</span>
         {/if}
-        <span class="from-name">{thread.fromName}</span>
+        <span class="from-name">{sender}</span>
         {#if thread.messageCount > 1}<span class="mcount">{thread.messageCount}</span>{/if}
       </span>
       {#if compact}
@@ -208,7 +211,7 @@
      2px bar in the text colour. */
   .row-wrap.selected .row {
     background: var(--selected);
-    box-shadow: inset 2px 0 0 var(--text);
+    box-shadow: inset 3px 0 0 var(--primary);
   }
   .row-wrap.checked .row {
     background: var(--hover);
@@ -278,7 +281,7 @@
     align-items: center;
     justify-content: center;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--surface);
@@ -401,7 +404,7 @@
   }
   .mcount {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-faint);
     flex-shrink: 0;
   }
@@ -429,7 +432,7 @@
   }
   .date {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11.5px;
     color: var(--text-faint);
     flex-shrink: 0;
   }

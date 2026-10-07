@@ -9,6 +9,7 @@ export type ListOrder = "date" | "unread_first";
 const state = $state({
   density: "comfortable" as Density,
   avatars: false,
+  listWidth: 420,
   zoom: 1,
   afterArchive: "next" as AfterArchive,
   listOrder: "date" as ListOrder,
@@ -38,6 +39,7 @@ function persist(key: string, value: string) {
 export const prefs = {
   /** Apply a settings map (boot path). Unknown or absent keys keep defaults. */
   hydrate(s: Record<string, string>) {
+    if (s.fork_list_width) state.listWidth = Math.min(640, Math.max(300, Number(s.fork_list_width) || 420));
     if (s.fork_density === "compact" || s.fork_density === "comfortable") state.density = s.fork_density;
     if (s.fork_avatars) state.avatars = s.fork_avatars === "on";
     if (s.fork_zoom) state.zoom = clampZoom(Number(s.fork_zoom));
@@ -64,6 +66,11 @@ export const prefs = {
     if (s.fork_mcp) state.mcp = s.fork_mcp !== "off";
   },
 
+  get listWidth() { return state.listWidth; },
+  setListWidth(value: number, save = true) {
+    state.listWidth = Math.round(Math.min(640, Math.max(300, value)));
+    if (save) persist("fork_list_width", String(state.listWidth));
+  },
   get density() {
     return state.density;
   },

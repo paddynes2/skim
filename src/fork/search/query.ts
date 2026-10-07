@@ -5,6 +5,7 @@
 
 /** Operators the Rust parser understands; anything else stays free text. */
 const KEYS = new Set([
+  "company",
   "from",
   "to",
   "cc",
@@ -68,6 +69,7 @@ export function chipsOf(query: string): SearchChip[] {
       const accepts =
         KEYS.has(key) &&
         (!negated || NEGATABLE.has(key)) &&
+        (key !== "company" || (value.length <= 4096 && value.split(",").length <= 50 && value.split(",").every(v => /^[A-Za-z0-9._+@-]+$/.test(v.trim())))) &&
         (key !== "is" || IS_VALUES.has(value.toLowerCase())) &&
         (key !== "has" || /^attachments?$/i.test(value));
       if (accepts && value) {

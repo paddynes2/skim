@@ -181,3 +181,8 @@
 /* A short slot has one line. Give its title the available height. */
 .fork-cal .ec-time-grid .cal-short .ec-event-time { display: none; }
 .fork-cal .ec-time-grid .cal-short .ec-event-title { line-height: 18px; }
+
+/* Leave room for two title lines in normal slots and separate overlapping columns. */
+.fork-cal .ec-time-grid .ec-event { margin-right: 2px; }
+.fork-cal .ec-time-grid .ec-event:not(.cal-short) .ec-event-title { white-space: normal; overflow-wrap: anywhere; }
+.fork-cal .ec-day-head, .fork-cal .ec-sidebar .ec-time { font-size: 11px; color: var(--text-dim); }

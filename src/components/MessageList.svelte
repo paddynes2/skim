@@ -17,6 +17,29 @@
   import type { DealRow } from "../fork/deals/api";
   import { dealsStore } from "../fork/deals/store.svelte";
   import { dealsCount } from "../fork/deals/count.svelte";
+  import DealsToolbar from "../fork/deals/DealsToolbar.svelte";
+  import SearchTools from "../fork/search/SearchTools.svelte";
+  import ListResizer from "../fork/layout/ListResizer.svelte";
+  import { calendar } from "../fork/calendar/store.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+
+  let windowWidth = $state(1200);
+  const maxWidth = $derived(Math.max(300, Math.min(640, windowWidth - 580)));
+  let recipientLabels = $state<Record<string, string>>({});
+  const recipientCache = new Map<string, string>();
+  const recipientKey = (row: (typeof mail.threads)[number]) => `${row.messageId == null ? "thread" : "message"}:${row.messageId ?? row.id}:${row.fromAddr}:${row.date}`;
+  $effect(() => {
+    const rows = visible.filter(r => mail.myEmails.includes(r.fromAddr.toLowerCase()));
+    const missing = rows.filter(r => !recipientCache.has(recipientKey(r))).slice(0, 100);
+    if (missing.length) void invoke<{key: string; label: string}[]>("fork_reading_recipients", {
+      rows: missing.map(r => ({key: recipientKey(r), threadId:r.id, messageId:r.messageId, fromAddr:r.fromAddr, date:r.date})),
+    }).then(result => {
+      for (const row of result) recipientCache.set(row.key, row.label);
+      if (recipientCache.size > 500) for (const key of [...recipientCache.keys()].slice(0, 200)) recipientCache.delete(key);
+      recipientLabels = Object.fromEntries(recipientCache);
+    }).catch(() => {});
+
+  });
 
   // "now" for the row ages, refreshed each minute so a row that crosses a
   // day boundary recolours without a reload.
@@ -127,7 +150,9 @@
   }
 </script>
 
-<section class="list">
+<svelte:window bind:innerWidth={windowWidth} />
+<section class="list" style:width={`${Math.min(prefs.listWidth, maxWidth)}px`}>
+  <ListResizer max={maxWidth} />
   <header class="head">
     {#if mail.selecting}
       <!-- The header becomes the action bar rather than a second strip
@@ -218,6 +243,13 @@
       </div>
     {/if}
   </header>
+  {#if mail.dealsView}
+    <DealsToolbar onselect={() => {mail.selectedThreadId=null; mail.selectedMessageId=null; if(rowsEl) rowsEl.scrollTop=0; scrollTop=0; void mail.selectFolder(mail.selectedFolderId!);}} onthread={id => {mail.selectedThreadId=id; mail.selectedMessageId=null;}} onevent={(id, startTs) => {calendar.goto(new Date(startTs * 1000)); ui.showCalendar(); calendar.open(id);}} onsearch={query => void mail.enterSearch(query)} />
+  {:else if !mail.courtView}
+    <SearchTools query={mail.searchQuery ?? ""} onsearch={query => void mail.enterSearch(query)} />
+  {/if}
+  {#if mail.loadFailed && mail.threads.length}<button class="load-status" onclick={() => void mail.retryLoad()}>{t("fork.list.refresh_failed")}</button>{/if}
+  {#if mail.threadsLoading}<div class="load-status" role="status">{t(mail.threads.length ? "fork.list.refreshing" : "fork.list.loading")}</div>{/if}
   <div
     class="rows"
     class:selecting={mail.selecting}
@@ -247,6 +279,7 @@
         <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:compact={prefs.density === "compact"}>
           <MessageRow
             {thread}
+            recipientLabel={recipientLabels[recipientKey(thread)] ?? ""}
             selected={mail.groupThreads
               ? mail.selectedThreadId === thread.id
               : mail.selectedMessageId === thread.messageId}
@@ -275,6 +308,7 @@
 
 <style>
   .list {
+    position: relative;
     width: var(--list-w);
     flex-shrink: 0;
     display: flex;
@@ -284,6 +318,7 @@
     min-width: 0;
   }
   .head {
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -471,6 +506,7 @@
     overflow-y: auto;
     flex: 1;
   }
+  .load-status { padding: 8px 16px; font-size: 12px; color: var(--text-dim); border-bottom: 1px solid var(--hairline); }
   .empty {
     padding: 48px 16px;
     text-align: center;

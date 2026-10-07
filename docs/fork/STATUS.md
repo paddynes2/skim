@@ -6,6 +6,23 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
+## Version 1.1.5 (verification complete, installation pending)
+
+Patrick asked to implement all eight daily-use improvements in one pass and explicitly requested parallel builders. The changes use the existing Base design and local tables. No additional migration, dependency or Google permission was added.
+
+- Adjustable, persisted message-list width; outgoing recipient labels; clearer metadata.
+- Conversation expand/collapse, search and files with loaded-body coverage; explicit bounded loading for remaining messages. Cached bodies survive refresh. Primary Reply/Reply all and a retained single inline composer.
+- Company selector and cached overview in Deals, editable company rows, search filters and saved searches.
+- Calendar workweek, visible hours, month navigation and calendar visibility. Compact preview, larger editor, duplicate draft, conflicts and Find a time with unknown availability called out.
+- This-and-following recurring edits, durable retries and guarded failed-split discard. Local edits survive sync refresh. Persistent mail queue status offers read/star retries without replaying sends.
+- Inbox requests reject stale folder, filter, search, company and paging responses. Load failures retain cached content and expose Retry.
+
+Full gates: 536 Rust tests passed, one existing ignored; all frontend tests, contrast, format and all-target Clippy passed. Production build passed. Svelte check has zero errors and the existing ComposeForm warning. Browser v114 and v115 checks pass in both Base themes, with 1600/1200/900px coverage. Evidence: review-1.1.5.json and shots/1.1.5. Test proof and installed readback will be recorded below before this version is marked installed.
+
+Limits: company context uses cached data; conversation search/files offer explicit loading of remaining bodies. Inaccessible guest calendars remain unknown. Google series splitting is not atomic: a partial failure may temporarily show both series until Retry or guarded Discard. Complex recurrence exceptions, room resources, calendar attachments, appointment schedules and special event types still use Google Calendar. Future individual occurrence customizations reset on a following split. Failed mail actions show kind/account/date; exact-message links are not yet included. No live calendar writes or invitations are used for verification.
+
+Context: project_skim_fork.md, checked against current checkout and installed 1.1.4 facts below. Proposed memory update for Claude Code: record 1.1.5 and link this status file after installed readback.
+
 ## Version 1.1.4 (installed October 7)
 
 Patrick requested company logos in Deals, Inbox above Calendar, clearer email

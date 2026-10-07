@@ -62,6 +62,8 @@ pub enum Place {
 /// Every filter a query can carry. Unset = no constraint.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub struct Filters {
+    /// Exact domain or address, across senders and recipients. Commas mean OR.
+    pub company: Vec<String>,
     pub from: Vec<Term>,
     pub to: Vec<Term>,
     pub cc: Vec<Term>,
@@ -218,6 +220,21 @@ pub fn parse_at(input: &str, now: DateTime<Local>) -> ParsedQuery {
         let lower = value.to_ascii_lowercase();
 
         let consumed = match key.as_str() {
+            "company"
+                if !negated
+                    && value.len() <= 4096
+                    && value.split(',').count() <= 50
+                    && value.split(',').all(|v| {
+                        !v.trim().is_empty()
+                            && v.trim().chars().all(|c| {
+                                c.is_ascii_alphanumeric()
+                                    || matches!(c, '.' | '-' | '_' | '+' | '@')
+                            })
+                    }) =>
+            {
+                f.company.push(lower);
+                true
+            }
             "from" => {
                 f.from.push(Term::new(value, negated));
                 true
@@ -343,6 +360,14 @@ pub fn filter_sql(f: &Filters) -> (String, Vec<SqlValue>) {
     if let Some(b) = f.before {
         clauses.push("m.date < ?".into());
         params.push(SqlValue::Integer(b));
+    }
+    for company in &f.company {
+        let entries: Vec<&str> = company.split(',').map(str::trim).collect();
+        // Exact address or domain boundary matching avoids lookalike companies.
+        clauses.push("EXISTS (SELECT 1 FROM (SELECT lower(COALESCE(m.from_addr,'')) AS addr UNION ALL SELECT lower(json_extract(value,'$.addr')) FROM json_each(COALESCE(m.to_addrs,'[]')) UNION ALL SELECT lower(json_extract(value,'$.addr')) FROM json_each(COALESCE(m.cc_addrs,'[]'))) people JOIN json_each(?) domains WHERE (instr(domains.value,'@') > 0 AND people.addr=domains.value) OR (instr(domains.value,'@')=0 AND instr(people.addr,'@') > 0 AND (substr(people.addr,instr(people.addr,'@')+1)=domains.value OR substr(people.addr, -length(domains.value)-1)='.' || domains.value)))".into());
+        params.push(SqlValue::Text(
+            serde_json::to_string(&entries).unwrap_or_default(),
+        ));
     }
     for t in &f.from {
         let not = if t.negated { "NOT " } else { "" };
@@ -1174,5 +1199,26 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+    #[test]
+    fn company_search_checks_address_boundaries_and_recipients() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn)?;
+            conn.execute("UPDATE messages SET from_addr='a@mail.filter-test.example' WHERE id=(SELECT min(id) FROM messages)", [])?;
+            assert_eq!(run(conn, "company:filter-test.example")?.len(), 1);
+            assert_eq!(run(conn, "company:a@mail.filter-test.example")?.len(), 1);
+            assert!(run(conn, "company:notfilter-test.example")?.is_empty());
+            assert!(run(conn, "company:mail.filter-test.example.evil")?.is_empty());
+            conn.execute("UPDATE messages SET from_addr='a@notfilter-test.example',to_addrs='[]' WHERE id=(SELECT min(id) FROM messages)", [])?;
+            assert!(run(conn, "company:filter-test.example")?.is_empty());
+            conn.execute("UPDATE messages SET from_addr='a@notfilter-test.example',to_addrs='[{\"addr\":\"b@filter-test.example\"}]' WHERE id=(SELECT min(id) FROM messages)", [])?;
+            assert_eq!(run(conn, "company:missing.example,filter-test.example")?.len(), 1);
+            assert!(run(conn, "company:a@mail.filter-test.example")?.is_empty());
+            conn.execute("UPDATE messages SET to_addrs='[]',cc_addrs='[{\"addr\":\"c@child.filter-test.example\"}]' WHERE id=(SELECT min(id) FROM messages)", [])?;
+            assert_eq!(run(conn, "company:filter-test.example")?.len(), 1);
+            assert!(p("-company:filter-test.example").filters.company.is_empty());
+            Ok(())
+        }).unwrap();
     }
 }

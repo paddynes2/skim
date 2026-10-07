@@ -14,6 +14,7 @@ import { courtCounts } from "../../fork/court/counts.svelte";
 import type { CourtState } from "../../fork/court/types";
 // Fork (v1.1.3): Deals as virtual folder -924 (it replaced Snoozed / Follow-ups).
 import { dealsApi, VF_DEALS } from "../../fork/deals/api";
+import { dealsStore } from "../../fork/deals/store.svelte";
 import { dealsCount } from "../../fork/deals/count.svelte";
 import { undo } from "../../fork/stores/undo.svelte";
 import { insertAt, withoutPending } from "../../fork/undo-filter";
@@ -219,10 +220,11 @@ function activeAccount(): Account | null {
  *  read: refreshes run in pairs, and a folder query that outlives its sibling's
  *  failure must not talk the list back into trusting itself. */
 async function guard<T>(read: () => Promise<T>): Promise<T | null> {
+  const identity = listIdentity(), request = listRequest;
   try {
     return await read();
   } catch (e) {
-    state.loadFailed = true;
+    if (identity === listIdentity() && request === listRequest) state.loadFailed = true;
     reportError("mail.load", e);
     return null;
   }
@@ -291,6 +293,7 @@ async function switchAccount(id: string) {
   const valid =
     id === UNIFIED ? state.accounts.length > 1 : state.accounts.some((a) => a.id === id);
   if (id === state.activeAccountId || !valid) return;
+  listRequest++;
   state.activeAccountId = id;
   state.selectedFolderId = null;
   state.selectedThreadId = null;
@@ -365,7 +368,7 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
   const court = courtStateOf(folderId);
   if (court !== null) return courtApi.list(court, offset, limit);
   // Fork (v1.1.3): Deals, by thread, newest first, across every folder.
-  if (folderId === VF_DEALS) return dealsApi.list(offset, limit);
+  if (folderId === VF_DEALS) return dealsApi.list(offset, limit, dealsStore.selectedCompany || undefined);
   if (folderId < 0) {
     const virtual = state.folders.find((f) => f.id === folderId);
     if (!virtual) return Promise.resolve([]);
@@ -395,20 +398,25 @@ async function setListOrder(order: ListOrder) {
 
 async function reloadList() {
   const folderId = state.selectedFolderId;
+  const request = ++listRequest;
+  const identity = listIdentity();
   clearSelection();
   if (folderId === null) return;
   state.threadsLoading = true;
   try {
     const rows = await guard(() => fetchPage(folderId, 0));
-    if (rows !== null) shown(rows);
+    if (request === listRequest && identity === listIdentity() && rows !== null) shown(rows);
   } finally {
-    state.threadsLoading = false;
+    if (request === listRequest) state.threadsLoading = false;
   }
 }
 
 /** Deepest a refresh will re-read. A list scrolled thousands of rows down does
  *  not need all of them re-fetched every time a message arrives. */
 const MAX_REFRESH = 500;
+
+let listRequest = 0;
+const listIdentity = () => JSON.stringify([state.selectedFolderId, state.activeAccountId, state.groupThreads, state.listFilter, state.searchQuery, prefs.listOrder, dealsStore.selectedCompany]);
 
 async function refreshThreads() {
   const folderId = state.selectedFolderId;
@@ -423,13 +431,21 @@ async function refreshThreads() {
     Math.max(PAGE, Math.ceil(state.threads.length / PAGE) * PAGE),
     MAX_REFRESH,
   );
+  const request = ++listRequest;
+  const identity = listIdentity();
+  state.threadsLoading = true;
   const rows = await guard(() => fetchPage(folderId, 0, depth));
+  if (request !== listRequest || identity !== listIdentity()) return;
+  state.threadsLoading = false;
   if (rows === null) return;
   shown(rows);
   pruneSelection();
 }
 
 async function selectFolder(id: number) {
+  const request = ++listRequest;
+  state.threads = [];
+  state.fetched = 0;
   state.selectedFolderId = id;
   void folderSelected(state.folders.find((f) => f.id === id)); // fork (3.4)
   state.selectedThreadId = null;
@@ -438,6 +454,7 @@ async function selectFolder(id: number) {
   state.threadsLoading = true;
   try {
     const rows = await guard(() => fetchPage(id, 0));
+    if (request !== listRequest) return;
     // A failed read must not leave the previous folder's mail under the new
     // folder's name — the list says "couldn't load" instead.
     if (rows === null) {
@@ -447,7 +464,7 @@ async function selectFolder(id: number) {
       shown(rows);
     }
   } finally {
-    state.threadsLoading = false;
+    if (request === listRequest) state.threadsLoading = false;
   }
 }
 
@@ -538,13 +555,14 @@ async function loadMoreThreads() {
   // the same offset and append the same page twice (duplicate {#each} keys).
   if (state.selectedFolderId === null || loadingMore) return;
   const folderId = state.selectedFolderId;
-  const grouped = state.groupThreads;
+  const identity = listIdentity();
+  const request = listRequest;
   loadingMore = true;
   try {
-    const more = await fetchPage(folderId, state.fetched);
+    const more = await guard(() => fetchPage(folderId, state.fetched));
     // The user may have switched folders (or grouping) mid-fetch — these rows
     // belong to the previous view, don't append them to the new one.
-    if (state.selectedFolderId !== folderId || state.groupThreads !== grouped) return;
+    if (identity !== listIdentity() || request !== listRequest || more === null) return;
     state.fetched += more.length;
     // A concurrent refresh can shift the offset; drop rows we already show.
     const seen = new Set(state.threads.map(rowKey));
@@ -610,20 +628,7 @@ function selectAllLoaded() {
 async function setGroupThreads(on: boolean) {
   if (state.groupThreads === on) return;
   state.groupThreads = on;
-  state.selectedThreadId = null;
-  state.selectedMessageId = null;
-  // Row keys mean different things in the two modes, so a selection cannot
-  // survive the switch.
-  clearSelection();
-  if (state.selectedFolderId !== null) {
-    state.threadsLoading = true;
-    try {
-      state.threads = await fetchPage(state.selectedFolderId, 0);
-      state.fetched = state.threads.length;
-    } finally {
-      state.threadsLoading = false;
-    }
-  }
+  if (state.selectedFolderId !== null) await selectFolder(state.selectedFolderId);
 }
 
 export const mail = {

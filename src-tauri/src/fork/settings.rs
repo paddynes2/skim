@@ -3,6 +3,10 @@
 //! list onto its own `ALLOWED`). Values are plain strings, like upstream's.
 
 pub const ALLOWED: &[&str] = &[
+    "fork_list_width",
+    "fork_saved_searches",
+    "fork_cal_visible_start",
+    "fork_cal_visible_end",
     // Phase 2
     "fork_density",       // comfortable | compact
     "fork_avatars",       // on | off

@@ -20,6 +20,14 @@ Where to read next:
 
 ## What the fork adds
 
+### Version 1.1.5 daily-use controls
+
+Drag the divider beside the message list, or focus it and press Left/Right, to resize it. Double-click restores the default. Conversations open the newest message; earlier rows expand in place. Expand all and Collapse all, Find in conversation and Files are above the messages. Search and files report how much of the conversation is loaded, with an explicit action to load the rest. The primary reply button chooses Reply all when other recipients exist.
+
+Deals has a company selector and optional overview of cached conversations, people, files and meetings. Settings edits companies as rows; Save commits the changes. Search filters and saved searches are below the list heading.
+
+Calendar adds Workweek, visible hours, a month navigator and calendar toggles. Click an event for a preview, then Edit event. Duplicate opens a draft. Find a time identifies unknown guest availability. Recurring events support this event, this and following, or the whole series. Persistent status shows queued and failed changes; failed series splits offer guarded recovery. Mail status in the left footer shows queued actions and explicit read/star retry. See STATUS for verified installation and limits.
+
 ### Campaign drafts
 
 Surface campaign drafts are temporary storage for the campaign scheduler, not a

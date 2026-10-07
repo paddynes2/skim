@@ -6,6 +6,8 @@
   import { mail } from "../lib/stores/mail.svelte";
   import { ui } from "../lib/stores/ui.svelte";
   import type { MessageMeta, RenderedBody, ThreadDetail, ThreadRow } from "../lib/types";
+  import { untrack, tick } from "svelte";
+  import ConversationTools from "../fork/reading/ConversationTools.svelte";
   import AiAsk from "./AiAsk.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
   import HtmlViewer from "./HtmlViewer.svelte";
@@ -21,6 +23,15 @@
   import DealTool from "../fork/deals/DealTool.svelte";
 
   let detail = $state<ThreadDetail | null>(null);
+  let detailLoading = $state(false);
+  let detailError = $state("");
+  let threadSeq = 0;
+  let bulkToken = 0;
+  let bulkLoading = $state(false);
+  let expanded = $state<Record<number, boolean>>({});
+  let bodyRefreshing = $state<Record<number, boolean>>({});
+  let inlineMessageId = $state<number | null>(null);
+  let lastInlineDraft: number | null = null;
   // Fork (1.2): no Archive in Sent / Trash / Spam.
   const canArchive = $derived(archiveOffered(mail.selectedFolder?.role));
   // "loading" = already in the local cache, back in milliseconds; "fetching" =
@@ -74,7 +85,19 @@
   // target it; the others show as one-line rows. Defaults to the newest
   // message of the thread on load (the in-folder one in Drafts).
   let focusedId = $state<number | null>(null);
-  let focusedEl = $state<HTMLDivElement | undefined>();
+
+
+  $effect(() => {
+    const draftId = inlineReply.draftId;
+    if (draftId === null) { inlineMessageId = null; lastInlineDraft = null; return; }
+    if (draftId !== lastInlineDraft) {
+      lastInlineDraft = draftId;
+      inlineMessageId = untrack(() => focusedId);
+    }
+    if (inlineReply.threadId === detail?.id && inlineMessageId !== null && !expanded[inlineMessageId]) {
+      expanded = { ...expanded, [inlineMessageId]: true };
+    }
+  });
 
   // The newest message of the thread IN THE CURRENT FOLDER — the default focus,
   // the flat-view fallback, and the read/loadKey anchor.
@@ -193,8 +216,10 @@
   // Open a different message from the chain. The AI target follows, so the dock
   // shows that message's chat (usually none, until it is asked something).
   function setFocus(id: number) {
+    expanded = { ...expanded, [id]: true };
     if (id === focusedId) return;
     focusedId = id;
+    void tick().then(() => document.querySelector(`[data-message-id="${id}"]`)?.scrollIntoView({ block: "nearest" }));
   }
 
   // Fetch on demand the body of the open message (focused in conversation view,
@@ -202,12 +227,6 @@
   $effect(() => {
     const m = conversation ? focused : shown;
     if (m && bodies[m.id] === undefined) void loadBody(m.id);
-  });
-
-  // Keep the open message in view when navigating the chain.
-  $effect(() => {
-    void focusedId;
-    if (conversation) focusedEl?.scrollIntoView({ block: "nearest" });
   });
 
   // Expose the AI actions to the global keyboard handler (Q, T) in App.svelte.
@@ -255,11 +274,13 @@
   });
 
   async function loadThread(threadId: number) {
-    detail = null;
-    bodies = {};
-    bodyErrors = {};
-    bodyReq.clear();
-    viewOpts = {};
+    const seq = ++threadSeq;
+    const sameThread = untrack(() => detail?.id === threadId);
+    detailLoading = true; detailError = "";
+    if (!sameThread) {
+      bulkToken++; bulkLoading = false;
+      detail = null; bodies = {}; bodyErrors = {}; bodyReq.clear(); viewOpts = {}; expanded = {}; bodyRefreshing = {};
+    }
     // `translating` is NOT reset: a translation still being generated belongs to
     // its message, not to this pane, and clearing it here would offer to start a
     // second one for the same message on the way back.
@@ -267,7 +288,7 @@
     // follows whichever message the pane settles on.
     try {
       const d = await api.getThread(threadId);
-      if (mail.selectedThreadId !== threadId) return;
+      if (mail.selectedThreadId !== threadId || seq !== threadSeq) return;
       detail = d;
       // Fork (v1.1.1): open the newest message of the whole conversation, like
       // Outlook, so a reply filed in another folder is never hidden. Drafts keep
@@ -276,15 +297,51 @@
       const inFolder = msgs.filter((m) => m.folderId === mail.selectedFolderId);
       const draftsFolder = mail.selectedFolder?.role === "drafts";
       const topId = (draftsFolder && inFolder.length ? inFolder[inFolder.length - 1] : msgs[msgs.length - 1])?.id ?? null;
-      focusedId = topId;
+      if (!sameThread || !msgs.some((m) => m.id === focusedId)) focusedId = topId;
+      if (topId !== null && expanded[topId] === undefined) expanded = { ...expanded, [topId]: true };
 
       const unread = d.messages.filter((m) => !m.isRead).map((m) => m.id);
       if (unread.length > 0) {
         mail.patchThreadRow(threadId, { isRead: true });
         void api.markRead(unread, true);
       }
-    } catch {
-      detail = null;
+    } catch (e) {
+      if (seq === threadSeq && mail.selectedThreadId === threadId) detailError = errorMessage(e);
+    } finally {
+      if (seq === threadSeq) detailLoading = false;
+    }
+  }
+
+  async function loadRemaining() {
+    if (!detail || bulkLoading) return;
+    const threadId = detail.id, token = ++bulkToken;
+    const ids = detail.messages.filter((m) => typeof bodies[m.id] !== "object" && bodies[m.id] !== "loading" && bodies[m.id] !== "fetching").map((m) => m.id);
+    bulkLoading = true;
+    let cursor = 0;
+    async function worker() {
+      while (token === bulkToken && mail.selectedThreadId === threadId && cursor < ids.length) {
+        const id = ids[cursor++];
+        await loadBody(id);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, ids.length) }, worker));
+    if (token === bulkToken) bulkLoading = false;
+  }
+  function expandAll() {
+    expanded = Object.fromEntries((detail?.messages ?? []).map((m) => [m.id, true]));
+    void loadRemaining();
+  }
+  function collapseAll() {
+    const newest = ordered[0];
+    const draftOpen = inlineReply.draftId !== null && inlineReply.threadId === detail?.id;
+    expanded = draftOpen && inlineMessageId !== null ? { [inlineMessageId]: true } : {};
+    if (newest && !draftOpen) focusedId = newest.id;
+  }
+  function collapseMessage(id: number) {
+    expanded = { ...expanded, [id]: false };
+    if (focusedId === id) {
+      const next = ordered.find((m) => expanded[m.id]);
+      focusedId = next?.id ?? ordered[0]?.id ?? null;
     }
   }
 
@@ -357,7 +414,10 @@
     const local =
       typeof bodies[messageId] === "object" ||
       detail?.messages.find((m) => m.id === messageId)?.bodyState === 1;
-    bodies = { ...bodies, [messageId]: local ? "loading" : "fetching" };
+    const cached = typeof bodies[messageId] === "object" ? bodies[messageId] : null;
+    if (!cached) bodies = { ...bodies, [messageId]: local ? "loading" : "fetching" };
+    else bodyRefreshing = { ...bodyRefreshing, [messageId]: true };
+    bodyErrors = { ...bodyErrors, [messageId]: "" };
     // Each flag keeps its last value, so passing one doesn't reset the other.
     const prev = viewOpts[messageId];
     const opts = {
@@ -372,8 +432,10 @@
     } catch (e) {
       console.warn("getMessageBody failed", messageId, e);
       if (stale()) return;
-      bodies = { ...bodies, [messageId]: "error" };
+      if (!cached) bodies = { ...bodies, [messageId]: "error" };
       bodyErrors = { ...bodyErrors, [messageId]: errorMessage(e) };
+    } finally {
+      if (!stale()) bodyRefreshing = { ...bodyRefreshing, [messageId]: false };
     }
   }
 
@@ -468,6 +530,7 @@
     if (!target) return;
     // Fork (6.2): inline under the message when the setting is on.
     if (prefs.replyInline && detail) {
+      expanded = { ...expanded, [target.id]: true };
       await inlineReply.open(mode, target.id, detail.id);
       return;
     }
@@ -518,7 +581,8 @@
     {:else}
       <div class="placeholder">
         <div class="ghost">✉</div>
-        {mail.selectedThreadId === null ? t("reading.no_selection") : t("reading.loading")}
+        {mail.selectedThreadId === null ? t("reading.no_selection") : detailError || t("reading.loading")}
+        {#if detailError}<button class="btn" onclick={() => mail.selectedThreadId !== null && loadThread(mail.selectedThreadId)}>{t("reading.retry")}</button>{/if}
       </div>
     {/if}
   {:else}
@@ -573,38 +637,24 @@
         {/key}
       {/if}
 
+      {#key detail.id}<ConversationTools messages={detail.messages} {bodies} loading={bulkLoading} onload={() => void loadRemaining()} onselect={setFocus} />{/key}
+      {#if detailLoading}<div class="refresh-note" role="status">{t("fork.reading.refreshing")}</div>{/if}
+      {#if detailError}<div class="refresh-error" role="alert">{detailError}<button onclick={() => loadThread(detail!.id)}>{t("reading.retry")}</button></div>{/if}
       {#if conversation}
-        {@const latest = ordered[0]}
+        <div class="conversation-heading"><span>{t("fork.reading.message_count", { count: ordered.length })}</span>{#if ordered.length > 1}<div><button onclick={expandAll}>{t("fork.reading.expand_all")}</button><button onclick={collapseAll}>{t("fork.reading.collapse_all")}</button></div>{/if}</div>
         <div class="convo">
-          {#if latest}
-            {#if latest.id === focused?.id}
-              <div bind:this={focusedEl} class="focused-msg">
-                {@render messageBlock(latest, bodies[latest.id])}
-                {@render inlineReplySlot()}
+          {#each ordered as m, i (m.id)}
+            {#if i === 1}<div class="history-label">{t("fork.reading.history", { n: ordered.length - 1 })}</div>{/if}
+            {#if expanded[m.id]}
+              <div class="focused-msg" class:not-first={i > 0} class:reply-target={m.id === focused?.id}>
+                <div class="message-controls"><button class:chosen={m.id === focused?.id} onclick={() => setFocus(m.id)}>{t(m.id === focused?.id ? "fork.reading.reply_target" : "fork.reading.select_for_reply")}</button><button disabled={m.id === inlineMessageId && inlineReply.draftId !== null && inlineReply.threadId === detail.id} onclick={() => collapseMessage(m.id)} aria-label={t("fork.reading.collapse_message")}>{t("fork.reading.collapse_message")}</button></div>
+                {@render messageBlock(m, bodies[m.id])}
+                {#if m.id === inlineMessageId}{@render inlineReplySlot()}{/if}
               </div>
             {:else}
-              {@render chatRow(latest)}
+              {@render chatRow(m)}
             {/if}
-          {/if}
-          {#if ordered.length > 1}
-            {#key detail?.id}
-              <details class="thread-history" ontoggle={(e) => { if (!e.currentTarget.open && latest && focused?.id !== latest.id) void setFocus(latest.id); }}>
-                <summary>{t("fork.reading.history", { n: ordered.length - 1 })}</summary>
-                <div class="history-messages">
-                  {#each ordered.slice(1) as m (m.id)}
-                    {#if m.id === focused?.id}
-                      <div bind:this={focusedEl} class="focused-msg not-first">
-                        {@render messageBlock(m, bodies[m.id])}
-                        {@render inlineReplySlot()}
-                      </div>
-                    {:else}
-                      {@render chatRow(m)}
-                    {/if}
-                  {/each}
-                </div>
-              </details>
-            {/key}
-          {/if}
+          {/each}
         </div>
       {:else if shown}
         {@render messageBlock(shown, bodies[shown.id])}
@@ -625,17 +675,15 @@
     {/if}
 
     <footer class="actions">
+      <div class="reply-controls"><button class="btn primary-reply" onclick={() => reply(canReplyAll ? "reply_all" : "reply")} title={`${t(canReplyAll ? "reading.reply_all" : "reading.reply")}  ${canReplyAll ? "A" : "R"}`}>{t(canReplyAll ? "reading.reply_all" : "reading.reply")}<kbd>{canReplyAll ? "A" : "R"}</kbd></button>
+      {#if canReplyAll}<button class="btn secondary-reply" onclick={() => reply("reply")} title={`${t("reading.reply")}  R`}>{t("reading.reply")}<kbd>R</kbd></button>{/if}
+      <button class="btn secondary-reply" onclick={() => reply("forward")} title={`${t("reading.forward")}  F`}>{t("reading.forward")}<kbd>F</kbd></button></div>
+      <div class="ai-actions">
       {#if replyTarget && mail.accounts.some(a => a.id === mail.selectedThread?.accountId && a.email.toLowerCase() === "patrick@autospark.ai") && !["sent", "drafts", "trash", "junk"].includes(mail.selectedFolder?.role ?? "")}
         {#key replyTarget.id}<EstateReplyAction messageId={replyTarget.id} />{/key}
       {/if}
-      {#if ai.keyPresent}
-        <button class="ai-btn" onclick={openAsk} title={`${t("ai.ask")}  Q`}>✦ {t("ai.ask")}<kbd>Q</kbd></button>
-      {/if}
-      <button class="btn" onclick={() => reply("reply")} title={`${t("reading.reply")}  R`}>{t("reading.reply")}<kbd>R</kbd></button>
-      {#if canReplyAll}
-        <button class="btn" onclick={() => reply("reply_all")} title={`${t("reading.reply_all")}  A`}>{t("reading.reply_all")}<kbd>A</kbd></button>
-      {/if}
-      <button class="btn" onclick={() => reply("forward")} title={`${t("reading.forward")}  F`}>{t("reading.forward")}<kbd>F</kbd></button>
+      {#if ai.keyPresent}<button class="ai-btn" onclick={openAsk} title={`${t("ai.ask")}  Q`}>{t("ai.ask")}<kbd>Q</kbd></button>{/if}
+      </div>
     </footer>
 
     {#if hoverUrl}
@@ -670,7 +718,9 @@
   {@const loaded = typeof body === "object" ? body : null}
   {@const job = translating[message.id]}
   {@const offerTranslate = ai.keyPresent && (loaded?.translate != null || job != null)}
-  <article class="message">
+  <article class="message" data-message-id={message.id}>
+    {#if bodyRefreshing[message.id]}<div class="refresh-note" role="status">{t("fork.reading.refreshing")}</div>{/if}
+    {#if loaded && bodyErrors[message.id]}<div class="refresh-error" role="alert">{bodyErrors[message.id]}<button onclick={() => loadBody(message.id)}>{t("reading.retry")}</button></div>{/if}
     <div class="meta">
       <span class="avatar">{initial(message.from.name ?? message.from.addr)}</span>
       <div class="who">
@@ -732,7 +782,7 @@
     {/if}
 
     {#if body === "loading" || body === "fetching" || body === undefined}
-      <div class="body-note">{t(body === "fetching" ? "reading.fetching" : "reading.loading")}</div>
+      <div class="body-note" role="status">{t(body === "fetching" ? "reading.fetching" : "reading.loading")}<div class="body-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>
     {:else if body === "error"}
       <div class="body-note" title={bodyErrors[message.id]}>
         {t("reading.load_failed")}
@@ -850,6 +900,15 @@
 {/snippet}
 
 <style>
+  .body-skeleton { display: grid; gap: 10px; margin-top: 18px; max-width: 620px; }.body-skeleton span { height: 10px; border-radius: 3px; background: var(--hairline); }.body-skeleton span:nth-child(2) { width: 90%; }.body-skeleton span:nth-child(3) { width: 65%; }
+  .body-skeleton { display: grid; gap: 10px; margin-top: 18px; max-width: 620px; }.body-skeleton span { height: 10px; border-radius: 3px; background: var(--hairline); }.body-skeleton span:nth-child(2) { width: 90%; }.body-skeleton span:nth-child(3) { width: 65%; }
+  .conversation-heading, .message-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--text-dim); }
+  .conversation-heading { margin: 12px 0; }.conversation-heading div { display: flex; gap: 16px; }.conversation-heading button:hover, .message-controls button:hover { color: var(--text); }
+  .message-controls button:disabled { opacity: .4; cursor: default; }
+  .message-controls { padding: 8px 0 0; }.message-controls .chosen { color: var(--primary); }.history-label { padding: 20px 0 8px; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .reply-controls, .ai-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }.ai-actions { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--hairline); }.btn.primary-reply { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }.btn.secondary-reply { border-color: transparent; color: var(--text-dim); }
+  .refresh-note { font-size: 11px; color: var(--text-dim); padding: 8px 0; }.refresh-error { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--danger); padding: 8px 0; }.refresh-error button { text-decoration: underline; }
+
   /* Fork (6.2): the inline reply, framed under the message it answers. */
   .inline-reply {
     margin: 14px 0 6px;
@@ -1047,19 +1106,6 @@
     padding-top: 10px;
     border-top: 1px solid var(--hairline);
   }
-  .thread-history {
-    margin-top: 20px;
-    border-top: 1px solid var(--hairline);
-  }
-  .thread-history > summary {
-    cursor: pointer;
-    padding: 16px 0;
-    color: var(--text-dim);
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .thread-history > summary:hover { color: var(--text); }
-  .history-messages { display: grid; gap: 6px; }
   .convo {
     display: flex;
     flex-direction: column;
@@ -1108,13 +1154,13 @@
   }
   .chat-date {
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-faint);
+    font-size: 11px;
+    color: var(--text-dim);
     flex-shrink: 0;
   }
   .chat-snippet {
-    font-size: 12.5px;
-    color: var(--text-faint);
+    font-size: 13px;
+    color: var(--text-dim);
     margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;

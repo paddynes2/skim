@@ -13,7 +13,7 @@ import { forkSmellRewrite, SMELL_FIXTURE_DRAFT } from "./fork-smell";
 import { forkComposeInvoke } from "./fork-compose";
 import { forkCalendarInvoke } from "./fork-calendar";
 import { forkCourtCounts, forkCourtList } from "./fork-court";
-import { DEMO_DEALS_TEXT, forkDealsCount, forkDealsList, forkDealsPreview, forkDealsSuggest } from "./fork-deals";
+import { DEMO_DEALS_TEXT, forkDealsContext, forkDealsCount, forkDealsList, forkDealsPreview, forkDealsSuggest } from "./fork-deals";
 
 // The app checks `"__TAURI_INTERNALS__" in window` to decide whether to boot
 // (vs. show onboarding). Presence is enough — our aliased invoke does the work.
@@ -212,6 +212,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok({ locale: "en", theme, images_policy: "ask", group_threads: "on", fork_deals: DEMO_DEALS_TEXT, ...fork });
     }
     case "set_setting":
+      if (String(args.key).startsWith("fork_")) globalThis.localStorage?.setItem(`skimdemo.${args.key}`, String(args.value));
       return ok(undefined);
 
     // mail
@@ -300,7 +301,15 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(undefined);
     // ---- v1.1.3 deals ----
     case "fork_deals_list":
-      return ok(forkDealsList(args.offset ?? 0));
+      return ok(forkDealsList(args.offset ?? 0, args.company));
+    case "fork_mail_queue_status":
+      return ok({pending:0, scheduled:0, failed:0, failures:[]});
+    case "fork_mail_retry_flag":
+      return ok(null);
+    case "fork_reading_recipients":
+      return ok((args.rows ?? []).map((r: any) => ({ key: r.key, label: "Alex Morgan" })));
+    case "fork_deals_context":
+      return ok(forkDealsContext(args.company));
     case "fork_deals_count":
       return ok(forkDealsCount());
     case "fork_deals_suggest":

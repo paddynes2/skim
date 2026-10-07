@@ -17,6 +17,7 @@ import { guestsPrompt } from "./prompt.svelte";
 import { calPrefs } from "./settings.svelte";
 import type {
   CalStatus,
+  CalendarSyncState,
   CalView,
   CalendarOpsFailed,
   CalendarRow,
@@ -31,6 +32,7 @@ export interface Draft {
   start: Date;
   end: Date;
   allDay: boolean;
+  seed?: EventRow;
 }
 
 const MEET_NEW = "https://meet.new";
@@ -45,6 +47,8 @@ const state = $state({
   calendars: [] as CalendarRow[],
   statuses: {} as Record<string, CalStatus>,
   selectedId: null as number | null,
+  editing: false,
+  syncStates: {} as Record<string, CalendarSyncState>,
   draft: null as Draft | null,
   loading: false,
   error: null as string | null,
@@ -55,6 +59,7 @@ const state = $state({
 });
 
 let range: { from: number; to: number } | null = null;
+let rangeRequest = 0;
 let started = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unlisten: (() => void)[] = [];
@@ -96,7 +101,8 @@ async function refreshStatus(): Promise<void> {
     try {
       next[a.id] = await calendarApi.status(a.id);
     } catch {
-      // the command is not wired yet, or the box has no client: not connected
+      // Keep the cached connection state after a temporary read failure.
+      if (state.statuses[a.id]) next[a.id] = state.statuses[a.id];
     }
   }
   // Read the local map, not `state.statuses`: with no accounts nothing above
@@ -112,7 +118,7 @@ async function refreshStatus(): Promise<void> {
     try {
       cals.push(...(await calendarApi.listCalendars(id)));
     } catch {
-      // stays empty; the view shows the setup text
+      cals.push(...state.calendars.filter((c) => c.account_id === id));
     }
   }
   state.calendars = cals;
@@ -123,6 +129,7 @@ async function refreshStatus(): Promise<void> {
 
 async function loadRange(from: number, to: number): Promise<void> {
   range = { from, to };
+  const request = ++rangeRequest;
   if (connectedIds().length === 0) {
     state.events = [];
     return;
@@ -130,12 +137,11 @@ async function loadRange(from: number, to: number): Promise<void> {
   state.loading = true;
   try {
     const rows = await calendarApi.events(from, to);
-    if (range.from === from && range.to === to) state.events = rows;
-    state.error = null;
+    if (request === rangeRequest) { state.events = rows; state.error = null; }
   } catch (e: unknown) {
-    state.error = calendarErrorText(e);
+    if (request === rangeRequest) state.error = calendarErrorText(e);
   } finally {
-    state.loading = false;
+    if (request === rangeRequest) state.loading = false;
   }
 }
 
@@ -171,6 +177,40 @@ async function refreshUpcoming(): Promise<void> {
 
 export const calendar = {
   // ---- read side ----
+  get editing() { return state.editing; },
+  get failedEvents() { return Object.values(state.syncStates).flatMap((s) => s.events.filter((e) => e.status === "failed")); },
+  syncKnown(row: EventRow) { const account = this.calendarOf(row)?.account_id; return !!account && account in state.syncStates && !state.syncStates[account].last_sync_error; },
+  syncState(id: number) { return Object.values(state.syncStates).flatMap((s) => s.events).find((e) => e.event_id === id); },
+  async refreshSync() {
+    for (const id of connectedIds()) {
+      try { state.syncStates[id] = await calendarApi.syncState(id); } catch { /* Retain the last known state until the next refresh. */ }
+    }
+  },
+  async discardSplit(row: EventRow) {
+    const su = await askGuests("delete", otherGuests(row, ownEmails()).length);
+    if (su === null) return;
+    const owner = this.calendarOf(row)?.account_id;
+    if (!owner) throw new Error(t("fork.cal.sync_unknown"));
+    await calendarApi.discardSplit(owner, row.id, su);
+    await this.refreshSync();
+    await this.reload();
+  },
+  async retry(id: number | null = null) {
+    for (const account of connectedIds()) await calendarApi.retry(account, id);
+    await this.refreshSync();
+    await this.reload();
+  },
+  async setVisible(id: number, selected: boolean) {
+    await calendarApi.setSelected(id, selected);
+    await this.invalidate();
+  },
+  edit(id: number) { this.open(id); state.editing = true; },
+  duplicate(row: EventRow) {
+    const seed = JSON.parse(JSON.stringify(row)) as EventRow;
+    seed.options = { ...seed.options, recurrence: [] };
+    seed.hangout_link = null; seed.html_link = null; seed.recurring_event_id = null;
+    this.openDraft({ start: new Date(row.start_ts * 1000), end: new Date(row.end_ts * 1000), allDay: row.all_day, seed });
+  },
   get view() {
     return state.view;
   },
@@ -246,10 +286,11 @@ export const calendar = {
     navHooks.meetNow = () => void calendar.meetNow();
     void listen(CALENDAR_UPDATED, () => void calendar.reload()).then((u) => unlisten.push(u));
     void listen<CalendarOpsFailed>(CALENDAR_OPS_FAILED, (e) => {
+      void calendar.refreshSync();
       toast.show({ text: `${t("fork.cal.ops_failed")} ${e.payload?.message ?? ""}`.trim(), ms: 10_000 });
     }).then((u) => unlisten.push(u));
     void calPrefs.load();
-    void refreshStatus().then(refreshUpcoming);
+    void refreshStatus().then(() => { void calendar.refreshSync(); return refreshUpcoming(); });
     pollTimer = setInterval(() => void refreshUpcoming(), UPCOMING_POLL_MS);
     return () => {
       if (pollTimer) clearInterval(pollTimer);
@@ -264,6 +305,7 @@ export const calendar = {
   refreshStatus,
   /** Re-read the window on screen and the chip after a backend `calendar:updated`. */
   async reload(): Promise<void> {
+    await this.refreshSync();
     if (Object.keys(state.statuses).length === 0) await refreshStatus();
     if (range) await loadRange(range.from, range.to);
     await refreshUpcoming();
@@ -308,10 +350,12 @@ export const calendar = {
   open(id: number) {
     state.draft = null;
     state.selectedId = id;
+    state.editing = false;
   },
   openDraft(d: Draft) {
     state.selectedId = null;
     state.draft = d;
+    state.editing = true;
   },
   /** `n`: a draft starting at the next half hour, default length. */
   newEvent() {
@@ -336,12 +380,13 @@ export const calendar = {
     if (su === null) return null;
     const row = await calendarApi.create(acc, calendarId, input, su);
     upsert(row);
+    void this.refreshSync();
     void refreshUpcoming();
     return row;
   },
   /** False when cancelled at the guests prompt. Throws on a backend error. */
   async patch(id: number, input: EventInput): Promise<boolean> {
-    const row = input.series ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
+    const row = (input.series || input.following) ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
     const own = ownEmails();
     const reach = new Set<string>();
     if (row) for (const a of otherGuests(row, own)) reach.add(a.email.toLowerCase());
@@ -350,6 +395,7 @@ export const calendar = {
     if (su === null) return false;
     const updated = await calendarApi.patch(id, input, su);
     upsert(updated);
+    void this.refreshSync();
     void refreshUpcoming();
     return true;
   },
@@ -369,6 +415,7 @@ export const calendar = {
     if (su === null) return false;
     const updated = await calendarApi.rsvp(id, response, su);
     upsert(updated);
+    void this.refreshSync();
     void refreshUpcoming();
     return true;
   },

@@ -63,6 +63,8 @@ pub struct EventInput {
     pub options: super::options::EventOptions,
     #[serde(default)]
     pub series: bool,
+    #[serde(default)]
+    pub following: bool,
     pub optional_attendees: Option<Vec<String>>,
 }
 
@@ -120,6 +122,7 @@ pub fn events_insert_url(calendar_google_id: &str, send: SendUpdates) -> url::Ur
     let mut u = events_url(calendar_google_id);
     u.query_pairs_mut()
         .append_pair("conferenceDataVersion", "1")
+        .append_pair("supportsAttachments", "true")
         .append_pair("sendUpdates", send.as_str());
     u
 }
@@ -132,6 +135,7 @@ pub fn events_patch_url(
     let mut u = event_url(calendar_google_id, event_google_id);
     u.query_pairs_mut()
         .append_pair("conferenceDataVersion", "1")
+        .append_pair("supportsAttachments", "true")
         .append_pair("sendUpdates", send.as_str());
     u
 }
@@ -294,6 +298,30 @@ pub async fn fetch_event(account_id: &str, calendar_id: &str, event_id: &str) ->
     get_json(account_id, event_url(calendar_id, event_id)).await
 }
 
+pub async fn fetch_event_optional(
+    account_id: &str,
+    calendar_id: &str,
+    event_id: &str,
+) -> Result<Option<Value>> {
+    let token = google::access_token(account_id).await?;
+    let resp = google::http()
+        .get(event_url(calendar_id, event_id))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| SkimError::other("network", e.to_string()))?;
+    if matches!(resp.status().as_u16(), 404 | 410) {
+        return Ok(None);
+    }
+    if !resp.status().is_success() {
+        return Err(google::api_error(account_id, resp).await);
+    }
+    resp.json()
+        .await
+        .map(Some)
+        .map_err(|e| SkimError::other("gcal_api", e.to_string()))
+}
+
 async fn get_json(account_id: &str, url: url::Url) -> Result<Value> {
     let token = google::access_token(account_id).await?;
     let resp = google::http()
@@ -328,10 +356,34 @@ async fn paged(
             .filter(|t| !t.is_empty())
             .map(str::to_string);
         if token.is_none() {
-            break;
+            return Ok(items);
         }
     }
-    Ok(items)
+    Err(SkimError::other(
+        "gcal_api",
+        "Calendar results exceed the page limit. Narrow the date range.",
+    ))
+}
+
+pub async fn fetch_instances(
+    account_id: &str,
+    calendar_id: &str,
+    series_id: &str,
+) -> Result<Vec<Value>> {
+    paged(account_id, |page| {
+        let mut url = event_url(calendar_id, series_id);
+        url.path_segments_mut()
+            .expect("event URL")
+            .push("instances");
+        url.query_pairs_mut()
+            .append_pair("maxResults", "2500")
+            .append_pair("showDeleted", "true");
+        if let Some(p) = page {
+            url.query_pairs_mut().append_pair("pageToken", p);
+        }
+        url
+    })
+    .await
 }
 
 pub async fn fetch_calendar_list(account_id: &str) -> Result<Vec<Value>> {
@@ -387,6 +439,25 @@ pub async fn patch_event(
     send_json(account_id, google::http().patch(url), body).await
 }
 
+pub async fn patch_event_if_match(
+    account_id: &str,
+    calendar_id: &str,
+    event_id: &str,
+    send: SendUpdates,
+    body: &Value,
+    etag: &str,
+) -> Result<Value> {
+    let url = events_patch_url(calendar_id, event_id, send);
+    send_json(
+        account_id,
+        google::http()
+            .patch(url)
+            .header(reqwest::header::IF_MATCH, etag),
+        body,
+    )
+    .await
+}
+
 /// `events.delete`. An event Google already dropped (404 / 410) counts as done.
 pub async fn delete_event(
     account_id: &str,
@@ -405,6 +476,27 @@ pub async fn delete_event(
         return Ok(());
     }
     Err(google::api_error(account_id, resp).await)
+}
+
+pub async fn delete_event_if_match(
+    account_id: &str,
+    calendar_id: &str,
+    event_id: &str,
+    send: SendUpdates,
+    etag: &str,
+) -> Result<()> {
+    let token = google::access_token(account_id).await?;
+    let response = google::http()
+        .delete(events_delete_url(calendar_id, event_id, send))
+        .header(reqwest::header::IF_MATCH, etag)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| SkimError::other("network", error.to_string()))?;
+    if response.status().is_success() || matches!(response.status().as_u16(), 404 | 410) {
+        return Ok(());
+    }
+    Err(google::api_error(account_id, response).await)
 }
 
 #[cfg(test)]

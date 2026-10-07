@@ -7,12 +7,16 @@
 //! Engines register themselves in a process-wide map so the commands can find
 //! them without depending on `ForkState`'s shape.
 
+pub mod availability;
 pub mod commands;
 pub mod gapi;
 pub mod model;
 pub mod options;
 #[cfg(test)]
 mod options_tests;
+#[cfg(test)]
+mod scheduling_tests;
+mod split;
 pub mod store;
 
 use crate::db::Db;
@@ -67,6 +71,26 @@ fn registry() -> &'static Mutex<HashMap<String, CalHandle>> {
     R.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+#[derive(Clone, Default)]
+pub struct SyncHealth {
+    pub syncing: bool,
+    pub last_synced_at: Option<i64>,
+    pub last_sync_error: Option<String>,
+}
+
+fn health_registry() -> &'static Mutex<HashMap<String, SyncHealth>> {
+    static HEALTH: OnceLock<Mutex<HashMap<String, SyncHealth>>> = OnceLock::new();
+    HEALTH.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub fn sync_health(account_id: &str) -> SyncHealth {
+    health_registry()
+        .lock()
+        .ok()
+        .and_then(|health| health.get(account_id).cloned())
+        .unwrap_or_default()
+}
+
 /// The running engine for an account, if any.
 pub fn handle(account_id: &str) -> Option<CalHandle> {
     registry()
@@ -85,6 +109,9 @@ pub fn on_window_focus() {
 }
 
 pub fn stop(account_id: &str) {
+    if let Ok(mut health) = health_registry().lock() {
+        health.remove(account_id);
+    }
     if let Some(h) = registry()
         .lock()
         .ok()
@@ -132,6 +159,11 @@ pub fn spawn(app: AppHandle, db: Db, account_id: String, account_email: String) 
         account_email,
     };
     tauri::async_runtime::spawn(async move {
+        let aid = engine.account_id.clone();
+        let _ = engine
+            .db
+            .call(move |conn| store::recover_interrupted_discards(conn, &aid))
+            .await;
         let mut poll = tokio::time::interval(POLL_INTERVAL);
         poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -191,9 +223,23 @@ impl Engine {
     }
 
     async fn run_sync(&mut self) {
-        if let Err(e) = self.sync_inner().await {
+        if let Ok(mut health) = health_registry().lock() {
+            health.entry(self.account_id.clone()).or_default().syncing = true;
+        }
+        self.emit_updated();
+        let result = self.sync_inner().await;
+        if let Err(e) = &result {
             tracing::warn!(account = %self.account_id, error = %e, "calendar sync failed");
         }
+        if let Ok(mut health) = health_registry().lock() {
+            let health = health.entry(self.account_id.clone()).or_default();
+            health.syncing = false;
+            health.last_sync_error = result.as_ref().err().map(ToString::to_string);
+            if result.is_ok() {
+                health.last_synced_at = Some(now_unix());
+            }
+        }
+        self.emit_updated();
     }
 
     async fn sync_inner(&mut self) -> Result<()> {
@@ -244,7 +290,7 @@ impl Engine {
             let Some((op_id, kind, payload, attempts)) = next else {
                 break;
             };
-            let parsed: Value = match serde_json::from_str(&payload) {
+            let mut parsed: Value = match serde_json::from_str(&payload) {
                 Ok(v) => v,
                 Err(_) => {
                     let _ = self
@@ -254,6 +300,23 @@ impl Engine {
                     continue;
                 }
             };
+            if parsed["_operation_token"].as_str().is_none() {
+                parsed["_operation_token"] = json!(uuid::Uuid::new_v4().simple().to_string());
+                let payload = parsed.to_string();
+                if self
+                    .db
+                    .call(move |conn| {
+                        conn.execute(
+                            "UPDATE fork_cal_ops SET payload = ?2 WHERE id = ?1",
+                            rusqlite::params![op_id, payload],
+                        )
+                    })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
             match self.execute_op(&kind, &parsed).await {
                 Ok(()) => {
                     landed = true;
@@ -264,24 +327,23 @@ impl Engine {
                 }
                 Err(e) => {
                     tracing::warn!(op = %kind, error = %e, "calendar op failed");
+                    let message = e.to_string();
+                    let _ = self
+                        .db
+                        .call(move |conn| store::record_op_error(conn, op_id, &message))
+                        .await;
+                    self.emit_updated();
                     if is_transient(e.code()) {
                         break;
                     }
-                    if attempts + 1 >= MAX_ATTEMPTS {
+                    if attempts + 1 >= MAX_ATTEMPTS
+                        || matches!(e.code(), "gcal_conflict" | "gcal_input")
+                    {
                         let _ = self
                             .db
                             .call(move |conn| store::finish_op(conn, op_id, false))
                             .await;
-                        // A create that never landed must not keep showing as
-                        // an event: drop the optimistic row.
-                        if kind == "create" {
-                            if let Some(id) = parsed.get("event_id").and_then(Value::as_i64) {
-                                let _ = self
-                                    .db
-                                    .call(move |conn| store::delete_event_row(conn, id))
-                                    .await;
-                            }
-                        }
+                        // Keep the local event so the user can inspect and retry the failed write.
                         let _ = self.app.emit(
                             EVT_OPS_FAILED,
                             json!({ "account_id": self.account_id, "kind": kind, "message": e.to_string() }),
@@ -321,6 +383,9 @@ impl Engine {
             gapi::SendUpdates::parse(p["send_updates"].as_str().ok_or_else(|| {
                 SkimError::other("gcal_input", "calendar op without send_updates")
             })?)?;
+        let token = p["_operation_token"]
+            .as_str()
+            .ok_or_else(|| SkimError::other("gcal_op", "The operation token is missing."))?;
         match kind {
             "create" => {
                 let event_id = p["event_id"]
@@ -331,8 +396,31 @@ impl Engine {
                     // Already landed (a crash between the POST and finish_op).
                     return Ok(());
                 }
+                let mut body = p["body"].clone();
+                let token = p["_operation_token"]
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| row.google_id.replace("local-", "").replace('-', ""));
+                body["id"] = json!(token);
+                body["extendedProperties"] = json!({"private":{"skimCreateOp":token}});
                 let resp =
-                    gapi::insert_event(&self.account_id, &cal.google_id, send, &p["body"]).await?;
+                    match gapi::fetch_event_optional(&self.account_id, &cal.google_id, &token)
+                        .await?
+                    {
+                        Some(value) => value,
+                        None => {
+                            gapi::insert_event(&self.account_id, &cal.google_id, send, &body)
+                                .await?
+                        }
+                    };
+                if resp["extendedProperties"]["private"]["skimCreateOp"] != token
+                    || resp["status"] == "cancelled"
+                {
+                    return Err(SkimError::other(
+                        "gcal_conflict",
+                        "The created event changed in Google Calendar. Review it before retrying.",
+                    ));
+                }
                 let server = event_from_json(row.calendar_id, &resp)
                     .ok_or_else(|| SkimError::other("gcal_api", "insert returned no event"))?;
                 self.db
@@ -350,8 +438,8 @@ impl Engine {
                         "the event's create has not reached Google yet",
                     ));
                 }
-                gapi::patch_event(
-                    &self.account_id,
+                self.patch_once(
+                    token,
                     &cal.google_id,
                     p.get("google_id")
                         .and_then(Value::as_str)
@@ -360,7 +448,6 @@ impl Engine {
                     &p["body"],
                 )
                 .await
-                .map(|_| ())
             }
             "delete" => {
                 let cal = p["calendar_google_id"]
@@ -385,21 +472,52 @@ impl Engine {
                 }
                 let body =
                     gapi::rsvp_body(row.attendees_json.as_deref(), &self.account_email, response);
-                gapi::patch_event(
-                    &self.account_id,
-                    &cal.google_id,
-                    &row.google_id,
-                    send,
-                    &body,
-                )
-                .await
-                .map(|_| ())
+                self.patch_once(token, &cal.google_id, &row.google_id, send, &body)
+                    .await
+            }
+            "split" => {
+                let plan: split::SplitPlan = serde_json::from_value(p["plan"].clone())
+                    .map_err(|_| SkimError::other("gcal_op", "The series split is invalid."))?;
+                let mut transport = split::GoogleTransport {
+                    account_id: &self.account_id,
+                    calendar_id: &plan.calendar_google_id,
+                };
+                split::execute(&mut transport, &plan, send).await
             }
             other => Err(SkimError::other(
                 "gcal_op",
                 format!("unknown calendar op {other}"),
             )),
         }
+    }
+
+    async fn patch_once(
+        &self,
+        token: &str,
+        calendar_id: &str,
+        event_id: &str,
+        send: gapi::SendUpdates,
+        body: &Value,
+    ) -> Result<()> {
+        let current = gapi::fetch_event(&self.account_id, calendar_id, event_id).await?;
+        if current["extendedProperties"]["private"]["skimOperation"] == token {
+            return Ok(());
+        }
+        let etag = current["etag"]
+            .as_str()
+            .ok_or_else(|| SkimError::other("gcal_api", "The event version is unavailable."))?;
+        let mut body = body.clone();
+        body["extendedProperties"] = current
+            .get("extendedProperties")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        if !body["extendedProperties"]["private"].is_object() {
+            body["extendedProperties"]["private"] = json!({});
+        }
+        body["extendedProperties"]["private"]["skimOperation"] = json!(token);
+        gapi::patch_event_if_match(&self.account_id, calendar_id, event_id, send, &body, etag)
+            .await?;
+        Ok(())
     }
 }
 

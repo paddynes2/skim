@@ -64,6 +64,7 @@ export interface EventInput {
   add_meet?: boolean;
   options?: EventOptions;
   series?: boolean;
+  following?: boolean;
   optional_attendees?: string[];
 }
 
@@ -146,7 +147,21 @@ export interface Attendee {
 }
 
 /** The four calendar views (keys d w m a). */
-export type CalView = "day" | "week" | "month" | "agenda";
+export type CalView = "day" | "week" | "workweek" | "month" | "agenda";
 
 /** What the guests prompt is about; the wording differs per kind. */
 export type GuestsPromptKind = "create" | "update" | "delete" | "rsvp";
+
+export interface AvailabilityResult {
+  from_ts: number;
+  to_ts: number;
+  calendars: { email: string; status: "available" | "unknown"; reason: string | null; busy: { start_ts: number; end_ts: number; summary: string | null }[] }[];
+}
+export interface CalendarSyncState {
+  syncing?: boolean;
+  last_synced_at?: number | null;
+  last_sync_error?: string | null;
+  pending_ops: number;
+  failed_ops: number;
+  events: { event_id: number; can_discard?: boolean; status: "pending" | "failed"; message: string | null }[];
+}

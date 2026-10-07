@@ -484,12 +484,28 @@ pub fn list(
     offset: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<DealRow>> {
+    list_filtered(conn, cache, offset, limit, None)
+}
+
+pub fn list_filtered(
+    conn: &mut Connection,
+    cache: &Cache,
+    offset: i64,
+    limit: i64,
+    company: Option<&str>,
+) -> rusqlite::Result<Vec<DealRow>> {
     let m = cache.membership(conn)?;
     let (deals, map) = (&m.0, &m.1);
     if map.is_empty() {
         return Ok(Vec::new());
     }
-    let ids = serde_json::to_string(&map.keys().collect::<Vec<_>>()).unwrap_or_default();
+    let ids = serde_json::to_string(
+        &map.iter()
+            .filter(|(_, i)| company.is_none_or(|name| deals[**i].name == name))
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_default();
     let sql = format!(
         "SELECT t.id,
                 m.from_name, m.from_addr, m.subject, m.snippet, t.last_date,
@@ -689,12 +705,163 @@ pub async fn fork_deals_list(
     state: State<'_, AppState>,
     offset: i64,
     limit: i64,
+    company: Option<String>,
 ) -> Result<Vec<DealRow>> {
     let cache = state.fork.deals.clone();
     state
         .db
         .read("fork_deals_list", move |conn| {
-            list(conn, &cache, offset, limit)
+            list_filtered(
+                conn,
+                &cache,
+                offset.max(0),
+                limit.clamp(1, 200),
+                company.as_deref(),
+            )
+        })
+        .await
+}
+
+/// A local overview. No mail bodies or remote services are fetched.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DealContext {
+    pub conversation_count: usize,
+    pub conversations: Vec<DealRow>,
+    pub people: Vec<Address>,
+    pub attachments: Vec<DealAttachment>,
+    pub meetings: Vec<DealMeeting>,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DealAttachment {
+    pub thread_id: i64,
+    pub filename: String,
+    pub date: i64,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DealMeeting {
+    pub id: i64,
+    pub summary: String,
+    pub start_ts: i64,
+    pub all_day: bool,
+}
+
+pub fn context(
+    conn: &mut Connection,
+    cache: &Cache,
+    company: &str,
+    now: i64,
+) -> rusqlite::Result<DealContext> {
+    let membership = cache.membership(conn)?;
+    let deal = membership.0.iter().position(|d| d.name == company);
+    let ids: Vec<i64> = membership
+        .1
+        .iter()
+        .filter(|(_, i)| Some(**i) == deal)
+        .map(|(id, _)| *id)
+        .collect();
+    let ids_json = serde_json::to_string(&ids).unwrap_or_default();
+    let mut context = DealContext {
+        conversation_count: ids.len(),
+        conversations: list_filtered(conn, cache, 0, 12, Some(company))?,
+        people: vec![],
+        attachments: vec![],
+        meetings: vec![],
+    };
+    let Some(index) = deal else {
+        return Ok(context);
+    };
+    let selected = std::slice::from_ref(&membership.0[index]);
+    let mut people = HashMap::<String, Option<String>>::new();
+    {
+        let mut stmt = conn.prepare(&format!("SELECT m.from_addr, m.from_name, m.to_addrs, m.cc_addrs FROM messages m JOIN folders f ON f.id=m.folder_id WHERE m.thread_id IN (SELECT value FROM json_each(?1)) AND {LIVE_FOLDER} ORDER BY m.date DESC"))?;
+        let mut rows = stmt.query([&ids_json])?;
+        while let Some(r) = rows.next()? {
+            let mut addresses = Vec::new();
+            if let Some(addr) = r.get::<_, Option<String>>(0)? {
+                addresses.push(Address {
+                    addr,
+                    name: r.get(1)?,
+                });
+            }
+            for col in [2, 3] {
+                addresses.extend(
+                    r.get::<_, Option<String>>(col)?
+                        .and_then(|j| serde_json::from_str::<Vec<Address>>(&j).ok())
+                        .unwrap_or_default(),
+                );
+            }
+            for a in addresses {
+                if deal_for(selected, &a.addr).is_some() {
+                    people.entry(a.addr.to_ascii_lowercase()).or_insert(a.name);
+                }
+            }
+        }
+    }
+    context.people = people
+        .into_iter()
+        .map(|(addr, name)| Address { addr, name })
+        .collect();
+    context.people.sort_by(|a, b| a.addr.cmp(&b.addr));
+    context.people.truncate(30);
+    {
+        // Group folder copies of the same attachment by message identity and part.
+        let mut stmt = conn.prepare(&format!("SELECT m.thread_id, COALESCE(a.filename, 'Attachment'), max(m.date) FROM attachments a JOIN messages m ON m.id=a.message_id JOIN folders f ON f.id=m.folder_id WHERE a.is_inline=0 AND m.thread_id IN (SELECT value FROM json_each(?1)) AND {LIVE_FOLDER} GROUP BY m.thread_id, COALESCE(m.message_id, CAST(m.id AS TEXT)), a.part_id, a.filename ORDER BY max(m.date) DESC LIMIT 30"))?;
+        context.attachments = stmt
+            .query_map([&ids_json], |r| {
+                Ok(DealAttachment {
+                    thread_id: r.get(0)?,
+                    filename: r.get(1)?,
+                    date: r.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+    }
+    {
+        let mut stmt = conn.prepare("SELECT id, summary, start_ts, all_day, organizer_email, attendees_json FROM fork_cal_events WHERE end_ts > ?1 AND status != 'cancelled' ORDER BY start_ts, id")?;
+        let mut rows = stmt.query([now])?;
+        while let Some(r) = rows.next()? {
+            let mut addresses = vec![];
+            if let Some(a) = r.get::<_, Option<String>>(4)? {
+                addresses.push(a);
+            }
+            if let Some(a) = r
+                .get::<_, Option<String>>(5)?
+                .and_then(|j| serde_json::from_str::<Vec<serde_json::Value>>(&j).ok())
+            {
+                addresses.extend(a.iter().filter_map(|v| {
+                    v.get("email")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                }));
+            }
+            if addresses.iter().any(|a| deal_for(selected, a).is_some()) {
+                context.meetings.push(DealMeeting {
+                    id: r.get(0)?,
+                    summary: r.get(1)?,
+                    start_ts: r.get(2)?,
+                    all_day: r.get(3)?,
+                });
+                if context.meetings.len() == 20 {
+                    break;
+                }
+            }
+        }
+    }
+    Ok(context)
+}
+#[tauri::command]
+pub async fn fork_deals_context(
+    state: State<'_, AppState>,
+    company: String,
+) -> Result<DealContext> {
+    let cache = state.fork.deals.clone();
+    state
+        .db
+        .read("fork_deals_context", move |conn| {
+            context(conn, &cache, &company, chrono::Utc::now().timestamp())
         })
         .await
 }
@@ -1087,5 +1254,32 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+    #[test]
+    fn company_filter_precedes_paging_and_context_excludes_other_companies() {
+        let db = Db::open_in_memory().unwrap();
+        let cache = Cache::default();
+        db.with(|conn| {
+            seed(conn);
+            let rows = list_filtered(conn, &cache, 0, 1, Some("Acme"))?;
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].deal, "Acme");
+            assert!(list_filtered(conn, &cache, 1, 1, Some("Acme"))?.is_empty());
+            assert!(list_filtered(conn, &cache, 0, 10, Some("Missing"))?.is_empty());
+            conn.execute_batch("INSERT INTO fork_cal_calendars(id,account_id,google_id) VALUES(1,'a1','primary');
+              INSERT INTO fork_cal_events(calendar_id,google_id,summary,start_ts,end_ts,attendees_json,status)
+              VALUES(1,'match','Planning',1000,2000,'[{\"email\":\"ceo@acme.co.za\"}]','confirmed'),
+                    (1,'lookalike','Wrong company',1000,2000,'[{\"email\":\"ceo@notacme.co.za\"}]','confirmed'),
+                    (1,'cancelled','Cancelled',1000,2000,'[{\"email\":\"ceo@acme.co.za\"}]','cancelled');")?;
+            let c = context(conn, &cache, "Acme", 900)?;
+            assert_eq!(c.conversation_count, 1);
+            assert_eq!(c.people.len(), 1);
+            assert_eq!(c.people[0].addr, "ceo@mail.acme.co.za");
+            assert_eq!(c.meetings.len(), 1);
+            assert_eq!(c.meetings[0].summary, "Planning");
+            assert!(context(conn, &cache, "Missing", 900)?.people.is_empty());
+            assert!(context(conn, &cache, "Acme", 3000)?.meetings.is_empty());
+            Ok(())
+        }).unwrap();
     }
 }

@@ -225,6 +225,14 @@ export function forkCalendarInvoke(cmd: string, args: any = {}): { ok: unknown }
       return { ok: { configured: false, source: null, client_id: null, secret_masked: null } };
     case "fork_meet_create":
       return status(args.accountId).connected ? { ok: "https://meet.google.com/abc-defg-hij" } : { err: notConnected() };
+    case "fork_cal_availability": {
+      const emails = [...new Set([SELF, ...(args.attendees ?? [])])];
+      return { ok: { from_ts: args.fromTs, to_ts: args.toTs, calendars: emails.map((email: string) => ({ email, status: email.includes("acme-partners") ? "unknown" : "available", reason: email.includes("acme-partners") ? "Calendar is not shared" : null, busy: email === SELF ? EVENTS.filter((e) => e.id !== args.excludeEventId && e.transparency !== "transparent" && e.self_response !== "declined" && e.start_ts < args.toTs && e.end_ts > args.fromTs).map((e) => ({ start_ts: e.start_ts, end_ts: e.end_ts, summary: e.summary })) : [] })) } };
+    }
+    case "fork_cal_sync_state":
+      return { ok: { pending_ops: EVENTS.filter((e) => e.local_only).length, failed_ops: 0, events: EVENTS.filter((e) => e.local_only).map((e) => ({ event_id: e.id, status: "pending", message: null })) } };
+    case "fork_cal_retry":
+      return { ok: 0 };
     case "fork_cal_status":
       return { ok: status(args.accountId) };
     case "fork_cal_connect":

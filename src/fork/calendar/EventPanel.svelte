@@ -27,13 +27,15 @@
   } from "./guests";
   import type { EventInput, EventRow, RsvpResponse } from "./types";
   // Fork (v1.1.1): typed time field, answer bar on top, propose a new time.
+  import FindTime from "./FindTime.svelte";
+  import { overlappingEvents } from "./planning";
   import ProposeTime from "./ProposeTime.svelte";
   import TimeInput from "./TimeInput.svelte";
   import { shiftEnd } from "./time";
   import { calendarApi } from "./api";
   import OptionsEditor from "./OptionsEditor.svelte";
   import RepeatEditor from "./RepeatEditor.svelte";
-  import { changedOptions, eventOptions, zonedParts, eventTimestamp } from "./editor";
+  import { changedOptions, eventOptions, zonedParts, eventTimestamp, zonedTimestamp } from "./editor";
 
   interface Props {
     row: EventRow | null;
@@ -47,8 +49,10 @@
   const originalRow = untrack(() => rowProp);
   let row = $state(originalRow);
   let seriesMode = $state(false);
+  let followingMode = $state(false);
   let loadingSeries = $state(false);
   const draft = untrack(() => draftProp);
+  const seed = originalRow ?? draft?.seed ?? null;
   const own = calendar.ownEmails;
   const isNew = originalRow === null;
   const editable = $derived(row ? calendar.canEdit(row) : calendar.connected);
@@ -56,26 +60,26 @@
   const iAmGuest = $derived(row ? selfIsGuest(row, own) : false);
 
   // ---- fields ----
-  const start0 = originalRow ? new Date(originalRow.start_ts * 1000) : (draft?.start ?? new Date());
-  const end0 = originalRow ? new Date(originalRow.end_ts * 1000) : (draft?.end ?? new Date(start0.getTime() + 30 * 60_000));
-  const allDay0 = originalRow ? originalRow.all_day : (draft?.allDay ?? false);
-  let title = $state(originalRow?.summary ?? "");
+  const start0 = seed ? new Date(seed.start_ts * 1000) : (draft?.start ?? new Date());
+  const end0 = seed ? new Date(seed.end_ts * 1000) : (draft?.end ?? new Date(start0.getTime() + 30 * 60_000));
+  const allDay0 = seed ? seed.all_day : (draft?.allDay ?? false);
+  let title = $state(seed?.summary ?? "");
   let allDay = $state(allDay0);
-  let startDate = $state(originalRow?.all_day && originalRow.start_date ? originalRow.start_date : localDate(start0));
+  let startDate = $state(seed?.all_day && seed.start_date ? seed.start_date : localDate(start0));
   let startTime = $state(localTime(start0));
   // The UI shows an inclusive end date; the API's end_date is exclusive.
   let endDate = $state(
-    originalRow?.all_day && originalRow.end_date ? shiftDate(originalRow.end_date, -1) : localDate(allDay0 ? new Date(end0.getTime() - 1) : end0),
+    seed?.all_day && seed.end_date ? shiftDate(seed.end_date, -1) : localDate(allDay0 ? new Date(end0.getTime() - 1) : end0),
   );
   let endTime = $state(localTime(end0));
-  let calendarId = $state<number>(originalRow?.calendar_id ?? calendar.writableCalendars.find((c) => c.is_primary)?.id ?? calendar.writableCalendars[0]?.id ?? 0);
-  let guests = $state(originalRow ? guestsValue(originalRow, own) : "");
-  let location = $state(originalRow?.location ?? "");
-  let description = $state(originalRow?.description ?? "");
+  let calendarId = $state<number>(seed?.calendar_id ?? calendar.writableCalendars.find((c) => c.is_primary)?.id ?? calendar.writableCalendars[0]?.id ?? 0);
+  let guests = $state(seed ? guestsValue(seed, own) : "");
+  let location = $state(seed?.location ?? "");
+  let description = $state(seed?.description ?? "");
   let addMeet = $state(false);
-  let zone = $state(originalRow?.time_zone ?? localZone());
-  let options = $state(eventOptions(originalRow?.options, originalRow?.transparency));
-  let optionalGuests = $state<string[]>(originalRow ? parseAttendees(originalRow).filter((a) => a.optional).map((a) => a.email.toLowerCase()) : []);
+  let zone = $state(seed?.time_zone ?? localZone());
+  let options = $state(eventOptions(seed?.options, seed?.transparency));
+  let optionalGuests = $state<string[]>(seed ? parseAttendees(seed).filter((a) => a.optional).map((a) => a.email.toLowerCase()) : []);
   let repeatInvalid = $state(false);
   const zones = Intl.supportedValuesOf("timeZone");
   let previousZone = untrack(() => zone);
@@ -86,13 +90,17 @@
   }
   const guestAddresses = $derived(splitAddresses(guests));
   const remindersInvalid = $derived(options.reminders?.overrides?.some((r) => !Number.isInteger(r.minutes) || r.minutes < 0 || r.minutes > 40320) ?? false);
-  async function changeScope() {
+  async function changeScope(nextScope: "occurrence" | "following" | "series") {
     if (!originalRow || loadingSeries) return;
     if (Object.keys(buildInput()).length > 0) { error = t("fork.cal.scope_unsaved"); return; }
     loadingSeries = true; error = null;
     try {
-      const next = seriesMode ? originalRow : await calendarApi.series(originalRow.id);
-      seriesMode = !seriesMode; row = next;
+      let next = nextScope === "series" ? await calendarApi.series(originalRow.id) : originalRow;
+      if (nextScope === "following") {
+        const master = await calendarApi.series(originalRow.id);
+        next = { ...originalRow, options: { ...originalRow.options, recurrence: master.options?.recurrence } };
+      }
+      seriesMode = nextScope === "series"; followingMode = nextScope === "following"; row = next;
       title = next.summary; allDay = next.all_day;
       zone = next.time_zone ?? localZone(); previousZone = zone;
       const s = zonedParts(next.start_ts, zone), e = zonedParts(next.end_ts, zone);
@@ -140,6 +148,20 @@
     if (allDay) return endDate < startDate;
     const s = eventTimestamp(startDate, startTime, zone, row?.start_ts), e = eventTimestamp(endDate, endTime, zone, row?.end_ts);
     return s === null || e === null || e <= s;
+  });
+
+  const proposedStart = $derived(allDay ? zonedTimestamp(startDate, "00:00", zone) : eventTimestamp(startDate, startTime, zone, row?.start_ts));
+  const proposedEnd = $derived(allDay ? zonedTimestamp(shiftDate(endDate, 1), "00:00", zone) : eventTimestamp(endDate, endTime, zone, row?.end_ts));
+  let conflictRows = $state<EventRow[]>([]);
+  const conflicts = $derived(overlappingEvents(conflictRows, proposedStart ?? NaN, proposedEnd ?? NaN, originalRow?.id, (date) => zonedTimestamp(date, "00:00", zone)));
+  $effect(() => {
+    const start = proposedStart, end = proposedEnd;
+    let active = true;
+    if (start !== null && end !== null && end > start) {
+      const timer = setTimeout(() => { void calendarApi.events(start - 86400, end + 86400).then((rows) => { if (active) conflictRows = rows; }).catch(() => { if (active) conflictRows = []; }); }, 250);
+      return () => { active = false; clearTimeout(timer); };
+    }
+    conflictRows = [];
   });
 
   function buildInput(): EventInput {
@@ -193,6 +215,7 @@
           return;
         }
         if (seriesMode) input.series = true;
+        if (followingMode) input.following = true;
         if (await calendar.patch(row.id, input)) onclose();
       } else {
         if (!calendarId) throw { code: "gcal_input", message: t("fork.cal.err.no_calendar") };
@@ -207,7 +230,7 @@
   }
 
   async function remove() {
-    if (!row || saving) return;
+    if (!row || saving || followingMode) return;
     if (deleteStep === 0) {
       deleteStep = 1;
       return;
@@ -261,7 +284,7 @@
       <div class="when-line">{fmtWhen(row)}</div>
     {/if}
 
-    {#if row && iAmGuest && !seriesMode}
+    {#if row && iAmGuest && !seriesMode && !followingMode}
       <div class="rsvp">
         <span class="label">{t("fork.cal.going")}</span>
         {#each ["accepted", "tentative", "declined"] as const as r (r)}
@@ -290,8 +313,11 @@
 
     {#if originalRow?.recurring_event_id}
       <div class="series-scope">
-        <span>{t(seriesMode ? "fork.cal.editing_series" : "fork.cal.editing_occurrence")}</span>
-        <button type="button" disabled={loadingSeries || saving} onclick={changeScope}>{t(seriesMode ? "fork.cal.edit_occurrence" : "fork.cal.edit_series")}</button>
+        <label for="event-scope">{t("fork.cal.apply_changes")}</label>
+        <select id="event-scope" value={seriesMode ? "series" : followingMode ? "following" : "occurrence"} disabled={loadingSeries || saving} onchange={(e) => { const next = e.currentTarget.value as "occurrence" | "following" | "series"; e.currentTarget.value = seriesMode ? "series" : followingMode ? "following" : "occurrence"; void changeScope(next); }}>
+          <option value="occurrence">{t("fork.cal.editing_occurrence")}</option><option value="following">{t("fork.cal.edit_following")}</option><option value="series">{t("fork.cal.editing_series")}</option>
+        </select>
+        {#if followingMode}<span>{t("fork.cal.following_note")}</span>{/if}
       </div>
     {/if}
     <h3>{t("fork.cal.date_time")}</h3>
@@ -315,11 +341,12 @@
       <label class="row"><span class="label">{t("fork.cal.time_zone")}</span><input list="event-time-zones" aria-label={t("fork.cal.time_zone")} bind:value={zone} onchange={zoneChanged} readonly={!editable} /></label>
       <datalist id="event-time-zones">{#each zones as z}<option value={z}></option>{/each}</datalist>
     {/if}
-    {#key seriesMode}
-      {#if !originalRow?.recurring_event_id || seriesMode}
+    {#key `${seriesMode}-${followingMode}`}
+      {#if !originalRow?.recurring_event_id || seriesMode || followingMode}
         <RepeatEditor bind:value={options.recurrence} {startDate} {allDay} {zone} disabled={!editable || loadingSeries} bind:invalid={repeatInvalid} />
       {/if}
     {/key}
+    {#if conflicts.length}<div class="conflicts" role="status"><strong>{t("fork.cal.conflicts", { count: conflicts.length })}</strong>{#each conflicts as conflict}<span>{conflict.summary || t("fork.cal.untitled")} &middot; {fmtWhen(conflict)}</span>{/each}<small>{t("fork.cal.conflicts_scope")}</small></div>{/if}
     <h3 class="section-heading">{t("fork.cal.people_place")}</h3>
 
     {#if isNew}
@@ -359,6 +386,9 @@
           <label><span title={email}>{email}</span><input type="checkbox" checked={optionalGuests.includes(email)} onchange={(e) => { optionalGuests = e.currentTarget.checked ? [...optionalGuests, email] : optionalGuests.filter((v) => v !== email); }} />{t("fork.cal.optional_guest")}</label>
         {/each}
       </div>
+    {/if}
+    {#if editable && !allDay && !timeInvalid && !seriesMode}
+      <FindTime accountId={calRow?.account_id ?? calendar.accountId} attendees={guestAddresses} date={startDate} {zone} duration={(proposedEnd ?? 0) - (proposedStart ?? 0)} eventId={originalRow?.id ?? null} onchoose={(start, end) => { const s = zonedParts(start, zone), e = zonedParts(end, zone); startDate = s.date; startTime = s.time; endDate = e.date; endTime = e.time; prevStart = { date: startDate, time: startTime }; }} />
     {/if}
     <div class="row">
       <span class="label">{t("fork.cal.location")}</span>
@@ -407,7 +437,7 @@
     {#if row?.html_link}
       <button class="btn ghost" onclick={() => openUrl(row!.html_link!)} title={row.html_link}>{t("fork.cal.open_in_google")}</button>
     {/if}
-    {#if row && editable}
+    {#if row && editable && !followingMode}
       <button class="btn danger" class:armed={deleteStep === 1} onclick={remove} disabled={saving}>
         {deleteStep === 0 ? t("fork.cal.delete") : t("fork.cal.delete_confirm")}
       </button>
@@ -419,10 +449,13 @@
 </aside>
 
 <style>
+  .conflicts { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--hairline-strong); border-left: 3px solid var(--danger); border-radius: var(--radius-s); font-size: 12px; line-height: 1.4; }
+  .conflicts small { color: var(--text-dim); font-size: 11px; }
+  .series-scope select { padding: 7px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-s); background: var(--surface); font-size: 12px; }
+
   h3 { margin: 0; font-size: 13px; font-weight: 600; }
   .section-heading { margin-top: 8px; padding-top: 20px; border-top: 1px solid var(--hairline); }
   .series-scope { display: grid; gap: 7px; padding: 12px; background: var(--selected); border-radius: var(--radius-s); font-size: 12px; }
-  .series-scope button { width: fit-content; text-decoration: underline; text-underline-offset: 3px; }
   .guest-options { display: grid; gap: 8px; }
   .guest-options label { display: flex; gap: 6px; align-items: center; color: var(--text-dim); font-size: 11px; }
   .guest-options label span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
