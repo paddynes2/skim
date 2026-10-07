@@ -191,3 +191,6 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/lib/stores/mail.svelte.ts` | page loading | company filter, view identity and stale response guards | daily-use pass 1.1.5 |
 | `src/lib/i18n/locales/en.json` | fork strings | daily-use control labels | daily-use pass 1.1.5 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.5 | daily-use pass |
+
+| `src/components/ReadingPane.svelte`, `src/lib/stores/mail.svelte.ts` | loading state | Cached background refresh does not insert rows that move content | flicker fix 1.1.6 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.6 | flicker fix |

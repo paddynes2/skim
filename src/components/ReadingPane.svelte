@@ -276,7 +276,8 @@
   async function loadThread(threadId: number) {
     const seq = ++threadSeq;
     const sameThread = untrack(() => detail?.id === threadId);
-    detailLoading = true; detailError = "";
+    // Keep the cached email in place while sync refreshes its thread metadata.
+    detailLoading = !sameThread; detailError = "";
     if (!sameThread) {
       bulkToken++; bulkLoading = false;
       detail = null; bodies = {}; bodyErrors = {}; bodyReq.clear(); viewOpts = {}; expanded = {}; bodyRefreshing = {};

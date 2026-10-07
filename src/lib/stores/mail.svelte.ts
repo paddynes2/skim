@@ -433,7 +433,8 @@ async function refreshThreads() {
   );
   const request = ++listRequest;
   const identity = listIdentity();
-  state.threadsLoading = true;
+  // Cached refreshes must not insert a loading row and move the message list.
+  state.threadsLoading = state.threads.length === 0;
   const rows = await guard(() => fetchPage(folderId, 0, depth));
   if (request !== listRequest || identity !== listIdentity()) return;
   state.threadsLoading = false;

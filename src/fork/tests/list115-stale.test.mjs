@@ -82,3 +82,22 @@ test("boot initializes request identity before the first folder read",async()=>{
   for(let i=0;i<8 && mail.threadsLoading;i++)await new Promise(resolve=>setImmediate(resolve));
   assert.equal(mail.booted,true);assert.equal(mail.account.id,"a");assert.deepEqual(mail.threads.map(r=>r.id),[1]);assert.equal(control.errors.length,0);
 });
+
+test("background refresh keeps cached rows steady while an empty view shows loading",async()=>{
+  const {mail,control}=await store();
+  control.read=async()=>[row(1)];await mail.selectFolder(1);
+  const refresh=deferred();control.read=()=>refresh.promise;
+  const pending=mail.refreshThreads();
+  assert.equal(mail.threadsLoading,false);
+  assert.deepEqual(mail.threads.map(r=>r.id),[1]);
+  refresh.resolve([row(2)]);await pending;
+  assert.equal(mail.threadsLoading,false);
+  assert.deepEqual(mail.threads.map(r=>r.id),[2]);
+  control.read=async()=>[];await mail.selectFolder(2);
+  const initial=deferred();control.read=()=>initial.promise;
+  const loading=mail.refreshThreads();
+  assert.equal(mail.threadsLoading,true);
+  initial.resolve([row(3)]);await loading;
+  assert.equal(mail.threadsLoading,false);
+  assert.deepEqual(mail.threads.map(r=>r.id),[3]);
+});
