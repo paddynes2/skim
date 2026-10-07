@@ -160,3 +160,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | upstream components with a filled primary button (18 files) | v1.1.1: `var(--text)` fill to `var(--primary)` | D52 |
 | `src-tauri/src/lib.rs` | v1.1.1: register seven `fork_reminder_*` commands | D54 |
 
+| `src-tauri/src/mail/sync.rs` | `sync_folder` | v1.1.2: one call `fork::flags::reconcile_whole_folder(self, folder_id)` after `reconcile_flags` | read/starred beyond the newest-500 window (D55) |
+| `src-tauri/src/db/queries.rs` | `recompute_folder_unread` | v1.1.2: `count(DISTINCT COALESCE(thread_id, -id))` instead of `count(*)` | unread conversations, as Gmail counts (D55) |
+| `src-tauri/src/commands/mail.rs` | `mark_read`, `apply_read`, `set_starred` local closures | v1.1.2: ids pass through `fork::flags::with_shared_copies` first | Gmail label copies share one flag (D55) |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | `version` | 1.1.2 | updater moves (D55) |

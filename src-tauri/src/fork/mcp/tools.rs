@@ -630,10 +630,12 @@ async fn thread_op(server: &Server, a: &Args<'_>, which: &'static str) -> ToolRe
                     queue_op_local(conn, &ids, kind, &extra, bodies::remove_messages_local)?
                 }
                 "star" => queue_op_local(conn, &ids, kind, &extra, move |c, i| {
-                    bodies::set_flag_local(c, i, "flagged", on)
+                    let i = crate::fork::flags::with_shared_copies(c, i)?;
+                    bodies::set_flag_local(c, &i, "flagged", on)
                 })?,
                 _ => queue_op_local(conn, &ids, kind, &extra, move |c, i| {
-                    bodies::set_flag_local(c, i, "seen", on)
+                    let i = crate::fork::flags::with_shared_copies(c, i)?;
+                    bodies::set_flag_local(c, &i, "seen", on)
                 })?,
             };
             Ok((ids.len(), accounts))

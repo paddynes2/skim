@@ -451,7 +451,10 @@ pub async fn apply_read(
         message_ids,
         "set_flag",
         json!({ "flag": "seen", "on": read }),
-        move |conn, ids| bodies::set_flag_local(conn, ids, "seen", read),
+        move |conn, ids| {
+            let ids = crate::fork::flags::with_shared_copies(conn, ids)?;
+            bodies::set_flag_local(conn, &ids, "seen", read)
+        },
     )
     .await
 }
@@ -576,7 +579,10 @@ pub async fn mark_read(
         message_ids,
         "set_flag",
         json!({ "flag": "seen", "on": read }),
-        move |conn, ids| bodies::set_flag_local(conn, ids, "seen", read),
+        move |conn, ids| {
+            let ids = crate::fork::flags::with_shared_copies(conn, ids)?;
+            bodies::set_flag_local(conn, &ids, "seen", read)
+        },
     )
     .await
 }
@@ -594,7 +600,10 @@ pub async fn set_starred(
         message_ids,
         "set_flag",
         json!({ "flag": "flagged", "on": starred }),
-        move |conn, ids| bodies::set_flag_local(conn, ids, "flagged", starred),
+        move |conn, ids| {
+            let ids = crate::fork::flags::with_shared_copies(conn, ids)?;
+            bodies::set_flag_local(conn, &ids, "flagged", starred)
+        },
     )
     .await
 }

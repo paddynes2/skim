@@ -1233,6 +1233,8 @@ impl Engine {
                 }
             }
             changed |= self.reconcile_flags(folder_id).await?;
+            // Fork: read/starred for the whole folder, not only the window.
+            changed |= crate::fork::flags::reconcile_whole_folder(self, folder_id).await?;
         }
 
         let max_uid: Option<i64> = db

@@ -176,10 +176,13 @@ pub fn fts_index_body(conn: &Connection, message_pk: i64, body_text: &str) -> ru
     Ok(())
 }
 
+/// Fork: unread conversations, as Gmail counts them, not unread messages.
+/// One long thread read elsewhere used to add 19 to the Inbox badge.
 pub fn recompute_folder_unread(conn: &Connection, folder_id: i64) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE folders SET unread_count =
-            (SELECT count(*) FROM messages WHERE folder_id = ?1 AND is_read = 0)
+            (SELECT count(DISTINCT COALESCE(thread_id, -id)) FROM messages
+              WHERE folder_id = ?1 AND is_read = 0)
          WHERE id = ?1",
         params![folder_id],
     )?;
