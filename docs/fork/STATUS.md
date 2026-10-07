@@ -4,7 +4,34 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-09-29.**
+**As of 2026-10-07.**
+
+## Version 1.1.2 (installed October 7)
+
+Patrick reported the Inbox showing 38 unread, which was wrong (D55).
+
+- Read and starred state now follows the server for the whole folder. Before,
+  Skim re-read flags only for the newest 500 messages of a folder, so mail read
+  in Gmail on the web or phone after it had aged out stayed unread in Skim.
+- Folder counts are unread conversations, as Gmail counts them, not unread
+  messages.
+- Reading or starring a message on a Gmail account applies to every copy of
+  it under other labels straight away.
+
+Verified: 511 Rust tests (3 new), clippy, fmt, svelte-check, build, contrast
+and all node tests green when `gates.sh` is run directly; inside the
+PowerShell wrapper clippy exited 1 with no diagnostic, so the install ran with
+`-SkipGates` after the direct run. Signed installer built from `dad10ab`,
+installed 07:45 SAST; installed SHA256
+`e2dc75a470cfb902f5cf89b021413a90b2ad9c88ec3e04fa06900f0edc223154`. Backup:
+`C:/Users/Patrick/.skim-fork/backups/20261007-074524/`. Live on his mailbox:
+fork schema 8 applied; the first Inbox sync flipped 17 of the 19 unread IQ-EQ
+messages to read from the server's answer; Inbox went from 38 (messages) to
+8 (conversations, 21 messages the server still holds unread).
+
+Not exercised live: a read or star propagating to label copies (unit tests
+cover it; testing it live would change his mail). Snooze and Follow-ups had
+zero uses in eight days; what replaces them is open (his call).
 
 ## Version 1.1.1 (installed September 29)
 
