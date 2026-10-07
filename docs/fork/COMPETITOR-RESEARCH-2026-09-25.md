@@ -29,6 +29,8 @@ live deals, from a list he keeps (DECISIONS D56).
 Patrick declined further AI features in the same release. Prepared replies with
 evidence and the Finish session remain proposals.
 
+**Implementation update, 7 October (1.1.7):** subsequent work delivered scoped Deals membership, company notes/files, saved search controls, matching passages, snippets and draft recovery. Calendar editing and view controls also expanded. These features do not implement the proposed evidence-backed prepared replies or Finish sessions. See [the current guide](README.md#current-daily-workflows-117) and [verified status](STATUS.md).
+
 ## Method and limits
 
 Reviewed official product documentation across twelve current competitors and a retired adjacent product, then compared their mechanisms with Skim's source. Vendor descriptions establish advertised behavior, not measured speed, accuracy, adoption or ROI. No paid accounts or trials were created. BrowserOS was unavailable locally, so this is documentation and source research, not a hands-on usability benchmark. Availability and packaging can change after this date.

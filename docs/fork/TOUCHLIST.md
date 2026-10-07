@@ -209,3 +209,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/lib.rs` | IPC | Register Deals details, file and search-coverage commands | Expose bounded local features |
 | `src/lib/i18n/locales/en.json`, `src/styles/tokens.css` | labels/tokens | Feature copy and semantic meeting/company colours | Accessible, consistent accents |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.7 | Signed local release |
+| `README.md` | opening notice | Link to fork guide and status | Separate the fork from the upstream product description |
+| `demo/README.md` | fork regression checks | Document current harnesses, ports, capture flags and fixture controls | Reproduce the release checks |

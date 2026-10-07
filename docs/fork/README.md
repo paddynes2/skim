@@ -20,7 +20,34 @@ Where to read next:
 
 ## What the fork adds
 
-### Version 1.1.5 daily-use controls
+### Current daily workflows (1.1.7)
+
+The installed build, backup, test results and remaining limits are in [STATUS.md](STATUS.md#version-117-installed-october-7).
+
+**Add an email to Deals:**
+
+1. Open the email and select **Add to Deals** in the reading toolbar. You can also use the message row's right-click menu.
+2. Choose **Conversation**, **Person**, or **Company**. Review the company name, address/domain and matching conversation count.
+3. Confirm the addition. For an existing match, the toolbar button says **Deals** and also offers exclusion or restoration.
+
+Conversation scope assigns that thread. Person scope matches an email address. Company scope matches a domain. These are local rules, not automatic Rebound synchronization. Settings, Deals edits the company rules. The sidebar count remains unread deal conversations in Inbox.
+
+Logos share one fixed column and a consistent canvas. Initials replace unavailable logos. Select a logo, or select a company and **Overview**, for its conversations, people, files and meetings. Notes require **Save**. The Files section can pin a current document. Original-email links open the message that owns the file.
+
+The inbox groups date-ordered mail into Today, Yesterday and Earlier. Recent views remember their selection and scroll during the session. Eight view snapshots are retained. Background refresh keeps cached content in place. Initial failures and retry controls remain visible.
+
+**Search & filters** includes attachment filename. The command palette and list retain the query and show matching passages. Search opens the matching message. Coverage labels distinguish cached mail from messages not yet downloaded.
+
+**Files** provides image previews and PDF text previews. Use **Open original** for the original document. **Save all** avoids filename collisions. Equal content hashes group identical cached files. Same-name files with different contents remain separate. Preview size is limited to 25 MB. Hash checks cover at most 200 files and 128 MB.
+
+**Snippets** in compose stores reusable text. The composer warns when the text mentions an attachment but no file is present. Local-save feedback and Retry expose failures. Popout waits for the latest draft save, including rich text and staged attachments. A local save is not confirmation that the mail server has the draft.
+
+Calendar includes recurrence, reminders, guests and permissions, availability, visibility, colours and event time zones. A second time-zone column is optional. Short and overlapping events retain readable labels. Crowded all-day rows scroll. Event files and meeting notes are HTTPS links. Existing remote attachments are preserved. Room booking, appointment schedules and complex exceptions still require Google Calendar.
+
+The footer reports queued and failed mail actions. Resolvable failures offer their source email or draft. Missing sources are identified explicitly. Retry from this surface is limited to read/star flags.
+
+### Earlier daily-use controls (1.1.5)
+
 
 Drag the divider beside the message list, or focus it and press Left/Right, to resize it. Double-click restores the default. Conversations open the newest message; earlier rows expand in place. Expand all and Collapse all, Find in conversation and Files are above the messages. Search and files report how much of the conversation is loaded, with an explicit action to load the rest. The primary reply button chooses Reply all when other recipients exist.
 
@@ -81,6 +108,8 @@ What changed on screen, and how to use it. Decisions are D50 to D54.
   me and Waiting views. The court classifier still runs because the MCP
   `list_court` tool reads it.
 
+The following table records historical additions. Later decisions supersede retired features.
+
 One line per phase. The phase numbers match `PLAN.md` section 2 and the
 `fork(<phase>):` commit prefixes.
 
@@ -106,8 +135,8 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 | 1.1.2 | Read and starred state follow the server for the whole folder; unread counts are conversations (D55). |
 | 1.1.3 | Deals replaces Snooze and Follow-ups (D56). |
 
-Not in this fork by decision (D12): split inbox, screener, bundles,
-templates. Snooze was reopened in 1.1.1 (D54) and removed again in 1.1.3 (D56).
+D12 still excludes split inbox, screener and bundles. Version 1.1.7 adds
+explicitly requested reusable text snippets (D61). Snooze was reopened in 1.1.1 (D54) and removed again in 1.1.3 (D56).
 
 Two rules bind every phase and are worth repeating here: nothing sends mail on
 its own (no feature, timer or MCP tool submits an email or an external invite
@@ -130,7 +159,10 @@ Manager under `fork:` keys, never in the database, settings, logs or repo.
 | Share availability | `availability.rs` | `slots/` |
 | CRM drawer | `crm.rs` | `crm/` |
 | Ball in my court | `court.rs` | `court/` |
-| Deals | `deals.rs` | `deals/` |
+| Deals and company context | `deals.rs`, `deals_details.rs` | `deals/` |
+| Attachment preview, hashes and bulk save | `attachments.rs` | `attachments/`, shared `AttachmentChips.svelte` |
+| Queue status and source links | `mail_status.rs` | `sync/` |
+| Message list layout and view memory | | `layout/`, shared `mail.svelte.ts` store |
 | Snooze and Follow-ups (dormant since 1.1.3) | `reminders.rs` | (removed) |
 | Meeting prep | `prep.rs` | `prep/` |
 | MCP server | `mcp/` | `mcp/` |
@@ -180,6 +212,15 @@ from `PATH` first: with `/mingw64/bin` ahead of the system, the test binaries di
 with `STATUS_ENTRYPOINT_NOT_FOUND` (D25). If you run `cargo test` by hand, run it
 from PowerShell or cmd.
 
+After installation, inspect the executable itself. An NSIS exit code of zero or an updated uninstall registry entry does not prove replacement. The first 1.1.7 pass left the old executable in place.
+
+```powershell
+(Get-Item "$env:LOCALAPPDATA/Skim/skim.exe").VersionInfo.ProductVersion
+Get-FileHash "$env:LOCALAPPDATA/Skim/skim.exe" -Algorithm SHA256
+```
+
+If the version is old, close Skim and confirm the process has exited. Retry the same signed installer. Check the version before restarting. Retain the database, WAL and SHM backup together. Tauri adds a bundle marker to the installed binary, so its hash can differ from the raw build executable.
+
 Several agents building at once serialise on the cargo target-dir lock. Wait for
 it; do not kill it.
 
@@ -205,6 +246,8 @@ and a newer reply filed in Sent.
 It starts its own Vite server on port 1421; if another run holds the port, wait
 and retry. Look at the PNGs and fix what is visibly wrong: one defect (the rich
 editor rebuilding on every keystroke) was found this way.
+
+For the current regression commands and server setup, see [the demo guide](../../demo/README.md#fork-regression-checks).
 
 The static mocks are separate: `docs/fork/mocks/list-states.html` (the A/B/C
 list variants, shot to `mock-list-states.png`) and `smell-states.html`.
@@ -249,11 +292,11 @@ Which of these is done on Patrick's machine is in `STATUS.md`.
 
 ## Smoke test after an install
 
-Read-only except where marked. Check that:
+Use fictional data for mutation checks such as archive/undo and draft transitions. For the installed mailbox, use already-read messages and cancel editors without saving. Check that:
 
 - the inbox renders, with the unread dot, blue subject and amber star
 - the filter chips work, and J / K open threads
-- E then Z restores the thread
+- E then Z restores the thread in the fictional demo
 - a palette `from:` search works
 - a thread with quotes folds
 - the inline reply opens, shows Ctrl+Enter, and Esc discards it when untouched
@@ -266,9 +309,16 @@ Read-only except where marked. Check that:
   Archive button; an open deal thread shows "Deal · name" under the subject
 - (1.1.1) the new-event time field opens its list without scrolling the panel
   sideways; close the panel without saving
-- Meet opens meet.new when Google is not connected; when it is, it creates a
-  Meet, copies the link and opens it
+- the fictional Meet path opens its link and reports its result
 - `search_mail` answers from Claude Code
+
+For 1.1.7, also check the following:
+
+- Meeting time and Join fit inside the titlebar.
+- Deals logos align and company context opens.
+- Escape closes a popup without clearing the email.
+- Calendar exposes the second time-zone column and linked-file fields.
+- Repeated local refresh events preserve the open iframe, document, scroll and position.
 
 No email is sent. No event with guests is created or changed.
 

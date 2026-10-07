@@ -129,3 +129,59 @@ DEMO_PREBUILT=1 node demo/record.mjs
 ```
 
 ~2 MB and far crisper than a GIF at the same size.
+
+## Fork regression checks
+
+These checks use real Svelte components with fictional data. They do not contact a mailbox or send messages. Run commands from the repository root.
+
+Build the demo and start a static server in a separate terminal:
+
+```powershell
+npm run demo:build
+python -m http.server 1431 --bind 127.0.0.1 --directory demo/dist-demo
+```
+
+Confirm that port 1431 serves this checkout. In the test terminal:
+
+```powershell
+$env:SKIM_DEMO_URL = 'http://127.0.0.1:1431/'
+$env:SKIM_SKIP_BUILD = '1'
+node demo/v117-shell-check.mjs
+node demo/v117-deals-check.mjs
+node demo/v117-reading-calendar.mjs
+node demo/v117-search-files-check.mjs
+node demo/v116-compose-check.mjs
+```
+
+| Harness | Coverage | Server and capture behavior |
+|---|---|---|
+| `v117-shell-check.mjs` | Header at 700/900/1200/1600 pixels, logo column, menu target and Escape | Uses SKIM_DEMO_URL, otherwise dev port 1426. Writes inbox/Deals captures. Long-title fixture injection requires the dev server. |
+| `v117-deals-check.mjs` | Scope preview/apply, logo failure, notes/pin, exclusion/restore and exact file source | Uses SKIM_DEMO_URL, otherwise port 1426. Writes company captures. |
+| `v117-reading-calendar.mjs` | Reading width, tables, recipients, RSVP, time zones, all-day crowding, linked notes and move feedback | Builds the demo. Uses SKIM_DEMO_URL, otherwise port 1427. SKIM_CAPTURE=1 replaces captures. |
+| `v117-search-files-check.mjs` | Passages, exact message, query retention, filename coverage, preview, Save all, source links and modal errors | Uses SKIM_DEMO_URL, otherwise port 1431. SKIM_SKIP_BUILD=1 suppresses its build. |
+| `v116-compose-check.mjs` | Snippets, attachment warning, failed/delayed saves, popout, rich/plain content and attachments | The filename is historical. This is a 1.1.7 test. Uses the same server variables as search/files. |
+| `v117-navigation-check.mjs` | Scroll restoration across Deals, Inbox and search | Starts and stops its own dev server on port 1428. |
+| `refresh-check.mjs` | Iframe/document identity, scroll and geometry during refresh | Starts and stops its own dev server on port 1424. |
+| `v114-check.mjs`, `v115-check.mjs` | Earlier editor, thread, search and navigation regressions | Each builds the demo. Uses SKIM_DEMO_URL, otherwise static port 1421. SKIM_CAPTURE=1 replaces historical captures. |
+
+Run the self-contained continuity checks separately:
+
+```powershell
+node demo/v117-navigation-check.mjs
+node demo/refresh-check.mjs
+```
+
+The colour check reads the shared OS palette auditor. It asserts the two new accent pairs across six themes:
+
+```powershell
+$env:SKIM_PALETTE_HELPER = 'C:/Users/Patrick/OS/tools/design-corpus/palette.mjs'
+node demo/v117-colour-check.mjs
+```
+
+It writes `docs/fork/shots/1.1.7/colour-evidence.json`. The report retains computed paint and the helper hash. Other visible text is recorded for inspection. This is not a claim of full accessibility conformance.
+
+For the long-title dev case, start `npm run demo:dev -- --host 127.0.0.1 --port 1426`. Set SKIM_DEMO_URL accordingly. Use a fresh server after source replacement or mutation tests. A shared node_modules junction can make Vite refuse font paths outside its serving root. Use the built demo for final visual evidence.
+
+Fixture controls include `skimdemo.fork_thread_multi=1`, `skimdemo.fork_calendar_dense=1`, `skimdemo.search_match=older`, and `skimdemo.fork_body=wide`. Compose tests also inject failed saves, delayed saves and failed window opening. See `docs/fork/pending/117-search-compose.md` for exact keys.
+
+Only fictional renders belong in the repository. Keep installed-app screenshots of real mail in local scratch storage. Current evidence and limits are in [the fork status](../docs/fork/STATUS.md). The [fork guide](../docs/fork/README.md#smoke-test-after-an-install) describes native verification.

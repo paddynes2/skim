@@ -1,3 +1,5 @@
+> **Patrick's fork (`paddy`):** Start with the [fork guide](docs/fork/README.md) and [installed release status](docs/fork/STATUS.md). The upstream product description below does not describe the fork's Calendar and Deals features.
+
 <div align="center">
 
 <img src="src-tauri/icons/128x128.png" alt="Skim logo" width="88">

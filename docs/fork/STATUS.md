@@ -19,7 +19,8 @@ Patrick requested all ten daily-use improvements in one pass, with parallel buil
 - Calendar improves short/overlapping/all-day events, RSVP states, a second time zone and move feedback. The event editor adds HTTPS attachment and meeting-note links while preserving existing remote attachments.
 - Failed queued mail actions link to cached source messages or existing drafts where resolvable. Missing sources are explicit. Automatic retry remains restricted to read/star flags.
 
-Validation: 544 Rust tests passed, one existing ignored; 67 frontend tests passed; all-target Clippy, Rust formatting, production build and 192 token contrast ratios passed. Svelte check reports zero errors and the existing ComposeForm warning. Browser suites cover both Base themes, 700/900/1200/1600 header widths, reading/calendar views, Deals, exact file sources, save failures and delayed compose transitions. Refresh regression preserves the iframe, document, scroll and geometry. Ten semantic mutations across Deals, calendar, search, attachment grouping and draft transfer failed assertions and were restored byte-for-byte. 
+Validation: 544 Rust tests passed, one existing ignored; 67 frontend tests passed; all-target Clippy, Rust formatting, production build and 192 token contrast ratios passed. Svelte check reports zero errors and the existing ComposeForm warning. Browser suites cover both Base themes, 700/900/1200/1600 header widths, reading/calendar views, Deals, exact file sources, save failures and delayed compose transitions. Refresh regression preserves the iframe, document, scroll and geometry. Ten semantic mutations across Deals, calendar, search, attachment grouping and draft transfer failed assertions and were restored byte-for-byte.
+
 `PROVE_TEST: status=PROVEN base=b0276d725541 reverted=111 tests=1 exit_without_fix=1`
 
 The actual-store test and the browser navigation test each produced that verdict in separate runs. With the implementation removed, selection restoration failed and browser scroll changed from 600 to 0. The helper tests have separate semantic mutation evidence; missing-module failures alone are not treated as behavioral proof.
@@ -35,7 +36,7 @@ Review evidence: review-1.1.7.json, shots/1.1.7, and pending/117-*.md. A second 
 
 Limits: PDF preview extracts text, not page layout or scanned pages. Calendar files are links, not uploads. Search/company context use cached mail; grouping is bounded to 200 files and 128 MB. Complex calendar exceptions, room booking and appointment schedules still use Google Calendar. No authenticated calendar writes or mail sends were used for verification. No new migration, dependency, OAuth scope or CSP change.
 
-Context: project_skim_fork.md, checked against current source and D50-D60. Proposed memory update for Claude Code after install: record 1.1.7 and link this status file.
+Context: project_skim_fork.md, checked against current source and D50-D61. Proposed memory update for Claude Code: record 1.1.7 and link this status file.
 
 ## Version 1.1.6 (installed October 7)
 
@@ -379,7 +380,19 @@ The OS graph accepted
 verification receipt `verif:359907031586102e57bf`, but reports `no_view` because
 this external worktree is outside its enrolled source views.
 
-## Where it is
+## Current remaining work
+
+- PDF previews extract text. Rendered pages and scanned-page OCR are not implemented.
+- Calendar files are links. File uploads, resource-room booking, appointment schedules and special event types remain outside this editor.
+- Complex recurrence exceptions use Google Calendar. Series splits are not atomic, and inaccessible guest availability remains unknown.
+- Search and company context use cached mail. Source links can be unavailable after the source leaves the cache.
+- Real calendar writes and invitations were not part of this verification. Older CRM and AI verification notes below are historical, not a new live-state check.
+- Publishing the signed 1.1.7 installer as a GitHub release is separate from pushing the source branch. This task does not create a release tag.
+
+## Historical release snapshot (September 29)
+
+The sections below preserve the earlier record. Current installation facts and remaining work appear above.
+
 
 - Branch `paddy` on `paddynes2/skim`. The last code commit is `ea28b10` (1.1.1).
 - Installed on Patrick's machine: version 1.1.1, built from `ea28b10` on September 29.
@@ -390,7 +403,7 @@ this external worktree is outside its enrolled source views.
   1.1.0. The next release should be 1.1.1.
 - Gates green at `75c57e0`: `bash scripts/fork/gates.sh`, including 96 contrast ratios.
 
-## Done
+## Original build completion record
 
 All of `PLAN.md` phases 0 to 13. The phase table in `README.md` says what each
 phase added. The build and the live smoke test also changed these:
@@ -418,9 +431,9 @@ phase added. The build and the live smoke test also changed these:
 - Patrick picked list variant C (blue unread subject). It now ships, with the
   light-theme blue darkened to clear 4.5:1 (D46).
 
-## Open, itemised
+## Historical open-item register
 
-Nothing below is built unless it says so.
+These items describe the earlier snapshot. Later release sections supersede them. Item numbers are preserved for existing references.
 
 Needs Patrick:
 
@@ -455,9 +468,7 @@ Not built:
     `has_fold` but not hidden (D-5e).
 14. `htmlToText` in the rich editor has no node test; it is exercised only in the browser.
 
-18. Google Calendar parity beyond this editor: this-and-following series splits,
-    attachments, room availability, appointment schedules and special event types.
-    Use Open in Google Calendar for these functions.
+18. Calendar parity: following-series splits arrived in 1.1.5. HTTPS file links arrived in 1.1.7. Uploads, rooms, appointment schedules and special event types remain outside this editor.
 
 Upstream:
 
