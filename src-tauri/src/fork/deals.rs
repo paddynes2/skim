@@ -690,12 +690,29 @@ pub async fn fork_deals_list(
         .await
 }
 
+/// Every deal conversation, for the list header (the list itself pages).
+pub fn total(conn: &mut Connection, cache: &Cache) -> rusqlite::Result<i64> {
+    Ok(cache.membership(conn)?.1.len() as i64)
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DealCounts {
+    pub unread: i64,
+    pub total: i64,
+}
+
 #[tauri::command]
-pub async fn fork_deals_count(state: State<'_, AppState>) -> Result<i64> {
+pub async fn fork_deals_count(state: State<'_, AppState>) -> Result<DealCounts> {
     let cache = state.fork.deals.clone();
     state
         .db
-        .read("fork_deals_count", move |conn| unread_count(conn, &cache))
+        .read("fork_deals_count", move |conn| {
+            Ok(DealCounts {
+                unread: unread_count(conn, &cache)?,
+                total: total(conn, &cache)?,
+            })
+        })
         .await
 }
 
@@ -988,6 +1005,9 @@ mod tests {
             );
             // Delta is bold in the list but not counted: it is not in the Inbox.
             assert_eq!(unread_count(conn, &cache)?, 1);
+            // The header total is every deal conversation, not one page.
+            assert_eq!(total(conn, &cache)?, 3);
+            assert_eq!(list(conn, &cache, 0, 2)?.len(), 2);
 
             // Reading the Acme mail leaves only his unread Sent copy: not unread.
             conn.execute(

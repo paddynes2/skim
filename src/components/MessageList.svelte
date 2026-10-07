@@ -15,6 +15,7 @@
   // Fork (v1.1.3): Deals header and per-row deal name.
   import DealBadge from "../fork/deals/DealBadge.svelte";
   import { dealsStore } from "../fork/deals/store.svelte";
+  import { dealsCount } from "../fork/deals/count.svelte";
 
   // "now" for the row ages, refreshed each minute so a row that crosses a
   // day boundary recolours without a reload.
@@ -144,7 +145,7 @@
       <!-- Fork (v1.1.3): Deals. Newest first, every folder but Trash and Spam. -->
       <div class="court-head">
         <h1>{t("fork.nav.deals")}</h1>
-        <span class="court-sub">{t("fork.deals.sub", { n: mail.threads.length })}</span>
+        <span class="court-sub">{t("fork.deals.sub", { n: dealsCount.total })}</span>
       </div>
     {:else if mail.courtView}
       <!-- Fork (10): a court view. The title names it; the sub-line says the

@@ -3,13 +3,17 @@
 // imports mail).
 import { dealsApi } from "./api";
 
-const state = $state({ unread: 0 });
+const state = $state({ unread: 0, total: 0 });
 let inflight: Promise<void> | null = null;
 let again = false;
 
 export const dealsCount = {
   get unread() {
     return state.unread;
+  },
+  /** Every deal conversation, for the list header (the list pages). */
+  get total() {
+    return state.total;
   },
   /** One read at a time; a call during a read schedules one more after it,
    *  so a list edit made mid-read is never answered with the older count. */
@@ -20,8 +24,9 @@ export const dealsCount = {
     }
     inflight = dealsApi
       .count()
-      .then((n) => {
-        state.unread = n ?? 0;
+      .then((c) => {
+        state.unread = c?.unread ?? 0;
+        state.total = c?.total ?? 0;
       })
       .catch(() => {})
       .finally(() => {

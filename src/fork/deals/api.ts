@@ -30,7 +30,7 @@ export interface DealSuggestion {
 
 export const dealsApi = {
   list: (offset: number, limit: number) => invoke<DealRow[]>("fork_deals_list", { offset, limit }),
-  count: () => invoke<number>("fork_deals_count"),
+  count: () => invoke<{ unread: number; total: number }>("fork_deals_count"),
   suggest: (threadId: number) => invoke<DealSuggestion | null>("fork_deals_suggest", { threadId }),
   preview: (text: string) => invoke<ParsedDeals>("fork_deals_preview", { text }),
   /** Adds `entry` under `name`; returns the new list text. */

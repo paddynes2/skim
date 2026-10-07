@@ -23,7 +23,8 @@ export function forkDealsList(offset: number) {
 }
 
 export function forkDealsCount() {
-  return forkDealsList(0).filter((r) => !r.isRead).length;
+  const rows = forkDealsList(0);
+  return { unread: rows.filter((r) => !r.isRead).length, total: rows.length };
 }
 
 export function forkDealsSuggest(threadId: number) {
