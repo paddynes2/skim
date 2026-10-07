@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "project": "C:\\Users\\Patrick\\Projects\\skim-daily-use-20261007",
+  "project": "C:\\Users\\Patrick\\Projects\\skim",
   "task": "skim-115-daily-use",
   "inputs": {
     "src/components/MessageList.svelte": "bfd133a4fe784dca0e270865c4b961948a225175c3f4918fcdd10bfad2e47a2b",
@@ -31,7 +31,7 @@
     "component": "Verified resizer keyboard and persistence, saved search, company context, conversation search/files and expand controls, draft target preservation, event preview/editor/scope, unknown availability and cache labels.",
     "screen": "Inspected settled fictional renders in Base light and dark at 1600, 1200 and 900 pixels. At narrow widths the event editor uses the full calendar region and Save remains visible.",
     "journey": "demo/v115-check.mjs exercises reading, search, company overview and calendar paths. Updated v114 regression retains earlier event option assertions. No live mail sends or calendar invitations.",
-    "product": "Uses existing Base semantic colors, borders and density. New controls disclose secondary panels. Root inspected inbox, preview and narrow editor. This records implementation evidence, not human visual acceptance."
+    "product": "Uses existing Base semantic colors, borders and density. New controls disclose secondary panels. Root inspected inbox, preview and narrow editor. This records implementation evidence, not human visual acceptance. Final source is canonical paddy checkout at 30bc9d1; input hashes reflect its Git checkout line endings. Installed 1.1.5 readback passed with zero page errors. Native screenshots remain private in Temp; the app is back on Inbox without a debug port."
   },
   "evidence": [
     {

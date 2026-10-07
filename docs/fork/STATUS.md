@@ -6,7 +6,7 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
-## Version 1.1.5 (verification complete, installation pending)
+## Version 1.1.5 (installed October 7)
 
 Patrick asked to implement all eight daily-use improvements in one pass and explicitly requested parallel builders. The changes use the existing Base design and local tables. No additional migration, dependency or Google permission was added.
 
@@ -17,11 +17,23 @@ Patrick asked to implement all eight daily-use improvements in one pass and expl
 - This-and-following recurring edits, durable retries and guarded failed-split discard. Local edits survive sync refresh. Persistent mail queue status offers read/star retries without replaying sends.
 - Inbox requests reject stale folder, filter, search, company and paging responses. Load failures retain cached content and expose Retry.
 
-Full gates: 536 Rust tests passed, one existing ignored; all frontend tests, contrast, format and all-target Clippy passed. Production build passed. Svelte check has zero errors and the existing ComposeForm warning. Browser v114 and v115 checks pass in both Base themes, with 1600/1200/900px coverage. Evidence: review-1.1.5.json and shots/1.1.5. Test proof and installed readback will be recorded below before this version is marked installed.
+Full gates: 536 Rust tests passed, one existing ignored; all frontend tests, contrast, format and all-target Clippy passed. Production build passed. Svelte check has zero errors and the existing ComposeForm warning. Browser v114 and v115 checks pass in both Base themes, with 1600/1200/900px coverage. Evidence: review-1.1.5.json and shots/1.1.5. Installed readback passed.
+
+`PROVE_TEST: status=PROVEN base=9351b1f078ac reverted=83 tests=7 exit_without_fix=1`
+
+Both the browser and frontend-store aggregate proof commands fail with the implementation removed. The browser fails on the missing resize control; the actual-store tests catch stale responses. Seven separate semantic mutations of new helper and Rust behavior also fail assertions, covering unknown availability, company text preservation, duplicate saved-search names, recurrence COUNT, foreign discard guards, pending-edit preservation and completed-write replay. Source bytes were restored; calendar tests pass again (38/38). See pending/115-frontend-mutation.md and pending/115-calendar-mutation.md.
+
+Packaging uses the unchanged dependency lock; all 19 direct package versions passed the configured vet malware check. No dependency version was changed.
+
+Signed updater installer built from source `30bc9d1` and installed at 13:06 SAST. Installed executable version is 1.1.5, SHA256 `17e47a35600a542f411cd1968acb0ec4f943c9a88dd9b11e3cd8239bdcc0f9a7`. Pre-install DB/WAL/SHM backup: `C:/Users/Patrick/.skim-fork/backups/20261007-130642/`.
+
+Native installed-app readback passed: Inbox/Calendar/Deals order, list resizer, conversation search and primary reply, company selector, outgoing Sent recipient labels, workweek/hours, recurrence and Find a time controls, and persistent queue status. Zero page errors. The empty event draft was closed without saving. No live event writes or invitations were sent. Skim was returned to Inbox and restarted without its temporary debug port. Private native screenshots remain in local Temp, outside the repository.
+
+Rollback: the previous 1.1.4 installer remains under src-tauri/target/release/bundle/nsis. This pass adds no schema migration. Stop Skim before any DB restore; use the three-file pre-install backup together if a data rollback is required.
 
 Limits: company context uses cached data; conversation search/files offer explicit loading of remaining bodies. Inaccessible guest calendars remain unknown. Google series splitting is not atomic: a partial failure may temporarily show both series until Retry or guarded Discard. Complex recurrence exceptions, room resources, calendar attachments, appointment schedules and special event types still use Google Calendar. Future individual occurrence customizations reset on a following split. Failed mail actions show kind/account/date; exact-message links are not yet included. No live calendar writes or invitations are used for verification.
 
-Context: project_skim_fork.md, checked against current checkout and installed 1.1.4 facts below. Proposed memory update for Claude Code: record 1.1.5 and link this status file after installed readback.
+Context: project_skim_fork.md, checked against current checkout and installed 1.1.4 facts below. Proposed memory update for Claude Code: record installed 1.1.5 and link this status file.
 
 ## Version 1.1.4 (installed October 7)
 
