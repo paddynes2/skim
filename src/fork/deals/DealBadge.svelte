@@ -38,7 +38,7 @@
     object-fit: contain;
     border-radius: 4px;
   }
-  img.loaded { opacity: 1; }
+  img.loaded { opacity: 1; background: #fff; }
   .initials {
     display: grid;
     place-items: center;

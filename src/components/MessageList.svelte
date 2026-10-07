@@ -458,7 +458,8 @@
     width: 24px;
     bottom: auto;
   }
-  .court-wrap.deal :global(.snippet) {
+  .court-wrap.deal :global(.snippet),
+  .court-wrap.deal :global(.subject) {
     padding-right: 32px;
   }
   /* One line has room for the age only; the reason stays in the tooltip. */
