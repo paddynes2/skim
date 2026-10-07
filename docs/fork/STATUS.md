@@ -6,6 +6,36 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
+## Version 1.1.3 (installed October 7)
+
+Deals replaces Snooze and Follow-ups, which had zero uses (D56). One sidebar
+row, Deals, lists every conversation with someone at a live deal, newest
+first, each row tagged with its deal; the badge counts deal conversations
+unread in the Inbox. The list is kept in Settings, Deals (local only; this
+repository is public); Add to Deals on an open thread fills in the sender's
+domain. Archive is not offered inside Deals. `g e` opens it.
+
+Verified: all gates green (519 Rust tests, node tests, contrast, svelte-check
+with the one existing warning, clippy, build). Seven hand mutants on
+`fork::deals` each turned the tests red; the sentinel proved the cargo channel
+fails red. A design critique and a code review ran before install; their
+findings are fixed (D56). Demo shots in both Base themes under
+`docs/fork/shots/1.1.3/`. Signed installer built from `2753c38`, installed
+08:59 SAST; installed SHA256
+`d513e9f798f834526096abecb9ca8e28040b54f891e0581d92bc23d1fde1322d`. Backup:
+`C:/Users/Patrick/.skim-fork/backups/20261007-085933/`. Live on his mailbox
+over CDP: the list of 11 deals seeded through the app's own `set_setting`,
+read back with nothing ignored; 107 deal conversations, header 107, badge 3
+(matches the backend), list read in about 20 ms, the open thread shows its
+deal under the subject, no Archive button in Deals, `g e` in the go hint, no
+page errors. Skim relaunched without the debug port. Nothing was sent; no
+mail was moved or flagged.
+
+Not exercised live: Add to Deals saving a new line (unit tests and the demo
+cover it; doing it live would change his list), the Settings box saving an
+edit. Rollback: run `Skim_1.1.2_x64-setup.exe /S` from the bundle folder;
+1.1.2 ignores the newer fork schema rows and the `fork_deals` setting.
+
 ## Version 1.1.2 (installed October 7)
 
 Patrick reported the Inbox showing 38 unread, which was wrong (D55).
