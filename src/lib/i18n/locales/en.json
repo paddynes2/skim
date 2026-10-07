@@ -352,6 +352,8 @@
   "fork.deals.settings": "Deals",
   "fork.deals.settings_note": "One deal per line: a name, a colon, then domains or addresses. A domain also matches its subdomains. Gmail and other personal domains match only by full address.",
   "fork.deals.settings_saved": "Saved",
+  "fork.deals.settings_not_saved": "Not saved: {error}",
+  "fork.deals.settings_not_loaded": "Could not read the list. Close and reopen Settings.",
   "fork.deals.read_as": "{n} deals: {names}",
   "fork.deals.ignored_personal": "Not used: {entry} is personal mail. Use the full address.",
   "fork.deals.ignored_own": "Not used: {entry} is your own domain.",

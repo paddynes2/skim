@@ -9,9 +9,11 @@
   let text = $state("");
   let saved = $state(false);
   let ready = $state(false);
+  let error = $state("");
 
   $effect(() => {
     void dealsStore.load().then(() => {
+      if (!dealsStore.loaded) return;
       text = dealsStore.text;
       ready = true;
     });
@@ -19,9 +21,14 @@
 
   async function save() {
     if (!ready || text === dealsStore.text) return;
-    await dealsStore.save(text);
-    saved = true;
-    setTimeout(() => (saved = false), 1500);
+    try {
+      await dealsStore.save(text);
+      error = "";
+      saved = true;
+      setTimeout(() => (saved = false), 1500);
+    } catch (e: unknown) {
+      error = String((e as { message?: string })?.message ?? e);
+    }
   }
 
   // How the box reads, as he types: the deals it found and any entry it
@@ -46,6 +53,8 @@
   <div class="head">
     <span class="microlabel">{t("fork.deals.settings")}</span>
     {#if saved}<span class="saved">{t("fork.deals.settings_saved")}</span>{/if}
+    {#if error}<span class="saved error">{t("fork.deals.settings_not_saved", { error })}</span>{/if}
+    {#if dealsStore.failed}<span class="saved error">{t("fork.deals.settings_not_loaded")}</span>{/if}
   </div>
   <p class="note">{t("fork.deals.settings_note")}</p>
   <textarea
@@ -62,7 +71,7 @@
       {#if parsed.deals.length > 0}
         <p>{t("fork.deals.read_as", { n: parsed.deals.length, names: parsed.deals.map((d) => d.name).join(", ") })}</p>
       {/if}
-      {#each parsed.ignored as i (i.entry)}
+      {#each parsed.ignored as i, n (n)}
         <p class="ignored">{t(`fork.deals.ignored_${i.why}`, { entry: i.entry })}</p>
       {/each}
     </div>
@@ -83,6 +92,9 @@
   .saved {
     font-size: 11.5px;
     color: var(--text-faint);
+  }
+  .saved.error {
+    color: var(--danger);
   }
   .note {
     font-size: 12px;

@@ -22,8 +22,8 @@
 //! keeps his mail in the Inbox, so that is rare.
 //!
 //! Working out membership reads every cached message (tens of milliseconds on
-//! his 30,000), so [`Cache`] keeps the answer until the list text or the
-//! database changes.
+//! his 30,000), so [`Cache`] keeps the answer until the list or the cached
+//! mail changes (read and starred flags excepted).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -94,20 +94,33 @@ pub fn is_personal(domain: &str) -> bool {
     PERSONAL.contains(&domain)
 }
 
-/// Two-label public suffixes common in his mail; the organisation's domain is
-/// one label to the left of them.
-const TWO_LABEL_SUFFIXES: &[&str] = &[
-    "co.za", "org.za", "ac.za", "gov.za", "net.za", "co.uk", "org.uk", "ac.uk", "com.au", "net.au",
-    "org.au", "co.nz", "com.br", "co.in", "com.sg", "co.ke", "com.ng",
+/// Second-level labels that registries sell under a country code (`co.za`,
+/// `gov.uk`, `com.mx`, `ne.jp`): with a two-letter country after them they are
+/// a public suffix, not an organisation.
+const GENERIC_SECOND_LEVEL: &[&str] = &[
+    "co", "com", "org", "net", "ac", "gov", "edu", "or", "ne", "go", "mil", "ltd", "plc", "sch",
+    "nic", "gob", "gv", "nom", "web", "info", "biz",
 ];
 
+/// `co.za`, `gov.uk`, `com.mx`: a suffix anyone can register under.
+pub fn is_two_label_suffix(domain: &str) -> bool {
+    match domain.split_once('.') {
+        Some((sld, cc)) => {
+            !cc.contains('.')
+                && cc.len() == 2
+                && cc.chars().all(|c| c.is_ascii_alphabetic())
+                && GENERIC_SECOND_LEVEL.contains(&sld)
+        }
+        None => false,
+    }
+}
+
 /// The organisation's domain for a suggestion: `mail.acme.co.za` -> `acme.co.za`,
-/// `eu.mail.acme.com` -> `acme.com`. Only a suggestion; he can edit it.
+/// `eu.mail.acme.com` -> `acme.com`, `hmrc.gov.uk` stays. Only a suggestion; he
+/// can edit it.
 pub fn base_domain(domain: &str) -> String {
     let labels: Vec<&str> = domain.split('.').filter(|l| !l.is_empty()).collect();
-    let keep = if labels.len() >= 3
-        && TWO_LABEL_SUFFIXES.contains(&labels[labels.len() - 2..].join(".").as_str())
-    {
+    let keep = if labels.len() >= 3 && is_two_label_suffix(&labels[labels.len() - 2..].join(".")) {
         3
     } else {
         2
@@ -121,6 +134,17 @@ pub struct Deal {
     pub name: String,
     pub domains: Vec<String>,
     pub addresses: Vec<String>,
+    /// `.domain` for each domain, built once so matching allocates nothing.
+    #[serde(skip)]
+    dotted: Vec<String>,
+}
+
+/// Whether `domain` is a mailbox's own domain, a subdomain of one, or a parent
+/// of one. `own` never holds personal-mail domains (see [`own_domains`]).
+fn is_own(domain: &str, own: &HashSet<String>) -> bool {
+    own.iter().any(|o| {
+        domain == o || o.ends_with(&format!(".{domain}")) || domain.ends_with(&format!(".{o}"))
+    })
 }
 
 /// An entry the parser could not use, and why. Settings shows these.
@@ -141,17 +165,34 @@ pub struct Parsed {
     pub ignored: Vec<Ignored>,
 }
 
-/// One entry as typed: lower-case, without a scheme, `www.`, a leading `@` or a
-/// trailing slash.
+/// One entry as typed or pasted, reduced to a bare domain or address:
+/// lower-case, the address inside `<...>`, without a scheme, a path, `www.`, a
+/// leading `@` or a trailing dot.
 fn clean_entry(raw: &str) -> String {
     let mut s = raw.trim().to_ascii_lowercase();
+    if let (Some(a), Some(b)) = (s.find('<'), s.rfind('>')) {
+        if a < b {
+            s = s[a + 1..b].to_string();
+        }
+    }
     for prefix in ["https://", "http://", "mailto:"] {
         if let Some(rest) = s.strip_prefix(prefix) {
             s = rest.to_string();
         }
     }
-    let s = s.trim_start_matches('@').trim_end_matches('/');
+    let s = s.split(['/', '?', '#']).next().unwrap_or_default();
+    let s = s.trim_start_matches('@').trim_end_matches('.');
     s.strip_prefix("www.").unwrap_or(s).to_string()
+}
+
+/// Characters a domain or an address can hold here.
+fn well_formed(e: &str) -> bool {
+    !e.is_empty()
+        && e.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+' | '@'))
+        && e.matches('@').count() <= 1
+        && !e.starts_with('.')
+        && !e.contains("..")
 }
 
 fn split_entries(rest: &str) -> impl Iterator<Item = &str> {
@@ -183,28 +224,28 @@ pub fn parse(text: &str, own: &HashSet<String>) -> Parsed {
             name,
             domains: Vec::new(),
             addresses: Vec::new(),
+            dotted: Vec::new(),
         };
         for raw in split_entries(rest) {
-            let e = clean_entry(raw);
-            if e.is_empty() {
+            if raw.trim().is_empty() {
                 continue;
             }
-            let why = if e.contains('@') {
+            let e = clean_entry(raw);
+            let why = if !well_formed(&e) {
+                "not_an_address"
+            } else if e.contains('@') {
                 if !deal.addresses.contains(&e) {
                     deal.addresses.push(e);
                 }
                 continue;
             } else if !e.contains('.') {
                 "not_an_address"
-            } else if TWO_LABEL_SUFFIXES.contains(&e.as_str()) {
+            } else if is_two_label_suffix(&e) {
                 // `co.za` would match every South African company.
                 "too_broad"
             } else if is_personal(&e) {
                 "personal"
-            } else if own
-                .iter()
-                .any(|o| e == *o || o.ends_with(&format!(".{e}")) || e.ends_with(&format!(".{o}")))
-            {
+            } else if is_own(&e, own) {
                 "own"
             } else {
                 if !deal.domains.contains(&e) {
@@ -212,14 +253,24 @@ pub fn parse(text: &str, own: &HashSet<String>) -> Parsed {
                 }
                 continue;
             };
-            out.ignored.push(Ignored {
-                entry: e,
+            let entry = if e.is_empty() {
+                raw.trim().to_string()
+            } else {
+                e
+            };
+            let ignored = Ignored {
+                entry,
                 why: why.into(),
-            });
+            };
+            // Reported once: Settings lists these, and a repeat says nothing new.
+            if !out.ignored.contains(&ignored) {
+                out.ignored.push(ignored);
+            }
         }
         if deal.domains.is_empty() && deal.addresses.is_empty() {
             continue;
         }
+        deal.dotted = deal.domains.iter().map(|d| format!(".{d}")).collect();
         if deal.name.is_empty() {
             deal.name = deal
                 .domains
@@ -241,7 +292,8 @@ pub fn deal_for(deals: &[Deal], addr: &str) -> Option<usize> {
         d.addresses.contains(&addr)
             || d.domains
                 .iter()
-                .any(|dom| domain == dom || domain.ends_with(&format!(".{dom}")))
+                .zip(&d.dotted)
+                .any(|(dom, dotted)| domain == dom || domain.ends_with(dotted.as_str()))
     })
 }
 
@@ -251,18 +303,25 @@ fn addrs_of(json: Option<String>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The domains of every configured mailbox, lower-case.
-fn own_domains(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
+/// Every configured mailbox address, lower-case.
+fn own_addresses(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
     let mut stmt = conn.prepare_cached("SELECT email FROM accounts")?;
     let emails = stmt
         .query_map([], |r| r.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(emails
         .iter()
-        .filter_map(|e| {
-            e.rsplit_once('@')
-                .map(|(_, d)| d.trim().to_ascii_lowercase())
-        })
+        .map(|e| e.trim().to_ascii_lowercase())
+        .collect())
+}
+
+/// The domains of the configured mailboxes, without personal-mail ones: a
+/// gmail.com mailbox does not make every Gmail correspondent "own".
+fn own_domains(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
+    Ok(own_addresses(conn)?
+        .iter()
+        .filter_map(|e| e.rsplit_once('@').map(|(_, d)| d.to_string()))
+        .filter(|d| !is_personal(d))
         .collect())
 }
 
@@ -329,23 +388,43 @@ fn deal_of_thread(
 
 pub type Membership = Arc<(Vec<Deal>, HashMap<i64, usize>)>;
 
-/// The last membership answer, keyed by the list text and SQLite's
-/// `data_version` (which moves whenever another connection commits) plus the
-/// message and thread table shape (which moves on this connection's own
-/// writes, the only kind tests make). One per app, on `ForkState`.
+/// The last membership answer. One per app, on `ForkState`.
+///
+/// Keyed by the list text, the mailbox addresses and the shape of the message
+/// and thread tables: row counts, highest ids, and the sums of every message's
+/// thread and folder. Read and starred changes leave the key alone, so the
+/// syncs that only move flags never rescan; a message arriving, leaving,
+/// moving folder or changing thread moves it. (SQLite's `data_version` was
+/// tried first: it moves on every commit, flags included, which made each
+/// sync event a full rescan.)
 #[derive(Default)]
 pub struct Cache {
     slot: Mutex<Option<(CacheKey, Membership)>>,
 }
 
-type CacheKey = (String, i64, (i64, i64, i64, i64));
+type CacheKey = (String, String, [i64; 6]);
 
-fn shape(conn: &Connection) -> rusqlite::Result<(i64, i64, i64, i64)> {
+fn shape(conn: &Connection) -> rusqlite::Result<(String, [i64; 6])> {
     conn.query_row(
-        "SELECT (SELECT count(*) FROM messages), (SELECT COALESCE(max(id), 0) FROM messages),
+        "SELECT (SELECT COALESCE(group_concat(email, ','), '') FROM accounts),
+                (SELECT count(*) FROM messages), (SELECT COALESCE(max(id), 0) FROM messages),
+                (SELECT COALESCE(sum(thread_id), 0) FROM messages),
+                (SELECT COALESCE(sum(folder_id), 0) FROM messages),
                 (SELECT count(*) FROM threads), (SELECT COALESCE(max(id), 0) FROM threads)",
         [],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        |r| {
+            Ok((
+                r.get(0)?,
+                [
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                ],
+            ))
+        },
     )
 }
 
@@ -355,8 +434,8 @@ impl Cache {
     pub fn membership(&self, conn: &mut Connection) -> rusqlite::Result<Membership> {
         let tx = conn.transaction()?;
         let text = queries::get_setting(&tx, SETTING)?.unwrap_or_default();
-        let version: i64 = tx.query_row("PRAGMA data_version", [], |r| r.get(0))?;
-        let key = (text, version, shape(&tx)?);
+        let (accounts, table) = shape(&tx)?;
+        let key = (text, accounts, table);
         if let Ok(guard) = self.slot.lock() {
             if let Some((k, m)) = guard.as_ref() {
                 if *k == key {
@@ -493,6 +572,7 @@ pub struct Suggestion {
 pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Suggestion>> {
     let parsed = read_list(conn)?;
     let own = own_domains(conn)?;
+    let own_addrs = own_addresses(conn)?;
     let deal = deal_of_thread(conn, &parsed.deals, thread_id)?
         .and_then(|i| parsed.deals.get(i))
         .map(|d| d.name.clone());
@@ -515,10 +595,14 @@ pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Sug
                 people.extend(list.into_iter().map(|a| (a.addr, a.name)));
             }
         }
+        // Not him: not a mailbox address, not on a mailbox's own domain (the
+        // same rule the parser applies, subdomains included).
         pick = people.into_iter().find(|(addr, _)| {
-            addr.rsplit_once('@')
-                .map(|(_, d)| d.trim().to_ascii_lowercase())
-                .is_some_and(|d| !d.is_empty() && !own.contains(&d))
+            let addr = addr.trim().to_ascii_lowercase();
+            !own_addrs.contains(&addr)
+                && addr
+                    .rsplit_once('@')
+                    .is_some_and(|(_, d)| !d.is_empty() && !is_own(d, &own))
         });
         if pick.is_some() {
             break;
@@ -554,7 +638,14 @@ pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Sug
 /// the name exists (any case), else a new line at the end. An entry already on
 /// the line is not added twice.
 pub fn add_to(text: &str, name: &str, entry: &str) -> String {
-    let name = name.trim();
+    // A `:` in the name would split the line and a leading `#` would comment it
+    // out, so both are dropped.
+    let name = name
+        .replace(':', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let name = name.trim_start_matches('#').trim();
     let entry = clean_entry(entry);
     if name.is_empty() || entry.is_empty() {
         return text.to_string();
@@ -715,6 +806,52 @@ mod tests {
         assert_eq!(base_domain("eu.mail.acme.com"), "acme.com");
         assert_eq!(base_domain("acme.com"), "acme.com");
         assert_eq!(base_domain("verdantdata.ch"), "verdantdata.ch");
+        // Suffixes outside any fixed list: never suggest a whole country.
+        assert_eq!(base_domain("hmrc.gov.uk"), "hmrc.gov.uk");
+        assert_eq!(base_domain("ventas.acme.com.mx"), "acme.com.mx");
+        assert_eq!(base_domain("x.acme.ne.jp"), "acme.ne.jp");
+    }
+
+    #[test]
+    fn pasted_entries_are_cleaned_or_reported_once() {
+        let p = parse(
+            "A: https://acme.com/about, <jo@beta.io>, gamma.io., gov.uk, com.mx\nB: gmail.com\nC: gmail.com, d.io, ex@mple@x",
+            &own(),
+        );
+        assert_eq!(p.deals[0].domains, ["acme.com", "gamma.io"]);
+        assert_eq!(p.deals[0].addresses, ["jo@beta.io"]);
+        let ignored: Vec<_> = p
+            .ignored
+            .iter()
+            .map(|i| (i.entry.as_str(), i.why.as_str()))
+            .collect();
+        // gmail.com twice is reported once (Settings lists these).
+        assert_eq!(
+            ignored,
+            [
+                ("gov.uk", "too_broad"),
+                ("com.mx", "too_broad"),
+                ("gmail.com", "personal"),
+                ("ex@mple@x", "not_an_address")
+            ]
+        );
+    }
+
+    #[test]
+    fn a_gmail_mailbox_does_not_make_gmail_people_own() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            conn.execute_batch(
+                "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
+                   VALUES ('a1', 'me@mine.ai', 'gmail', 'imap.gmail.com', 'smtp.gmail.com', 0),
+                          ('a2', 'Me.Too@gmail.com', 'gmail', 'imap.gmail.com', 'smtp.gmail.com', 0);",
+            )?;
+            let own = own_domains(conn)?;
+            assert_eq!(own, ["mine.ai".to_string()].into());
+            assert!(own_addresses(conn)?.contains("me.too@gmail.com"));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -734,6 +871,19 @@ mod tests {
         );
         assert_eq!(add_to("", "Jo", "jo@gmail.com"), "Jo: jo@gmail.com");
         assert_eq!(add_to(text, " ", "x.com"), text);
+        // A colon or a leading # in a display name cannot break the line.
+        assert_eq!(
+            add_to("", "Jo: CFO", "jo@gmail.com"),
+            "Jo CFO: jo@gmail.com"
+        );
+        assert_eq!(
+            add_to("", "#1 Fan", "fan@gmail.com"),
+            "1 Fan: fan@gmail.com"
+        );
+        assert_eq!(
+            parse(&add_to("", "Jo: CFO", "jo@gmail.com"), &own()).deals[0].name,
+            "Jo CFO"
+        );
     }
 
     fn folder(conn: &Connection, imap: &str, role: Option<&str>) -> i64 {

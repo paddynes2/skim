@@ -51,8 +51,8 @@ pub fn start(app: AppHandle) {
     // 12: the local MCP server (127.0.0.1:8342), off when `fork_mcp` = off.
     mcp::start(app.clone());
     // v1.1.3: the Snooze / Follow-ups sweep no longer starts. Nothing can set
-    // a reminder since Deals replaced their UI (D56); `reminders` stays only
-    // for its table and the list clauses, which match no rows.
+    // a reminder since Deals replaced their UI (D56), and f0009 emptied the
+    // table; `reminders` stays only for the table and the list clauses.
     // 10: full ball-in-court pass at startup, then a pass per `mail:updated`.
     let db = app.state::<crate::state::AppState>().db.clone();
     court::full_pass(app.clone(), db.clone());

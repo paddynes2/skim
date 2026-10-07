@@ -8,7 +8,7 @@ import { navHooks } from "../nav";
 import { DEALS_SETTING, dealsApi } from "./api";
 import { dealsCount } from "./count.svelte";
 
-const state = $state({ text: "", loaded: false });
+const state = $state({ text: "", loaded: false, failed: false });
 let started = false;
 
 /** The list changed: the open Deals view and the badge follow at once. */
@@ -24,18 +24,31 @@ export const dealsStore = {
   get loaded() {
     return state.loaded;
   },
+  /** The last load failed: the text shown is not the stored list. */
+  get failed() {
+    return state.failed;
+  },
   open() {
     ui.showMail();
     void mail.selectDeals();
   },
+  /** A failed read leaves `loaded` false, so nothing can save an empty box
+   *  over the stored list. */
   async load() {
-    const s = await api.getSettings().catch(() => null);
-    state.text = s?.[DEALS_SETTING] ?? "";
-    state.loaded = true;
+    try {
+      const s = await api.getSettings();
+      state.text = s?.[DEALS_SETTING] ?? "";
+      state.loaded = true;
+      state.failed = false;
+    } catch {
+      state.failed = true;
+    }
   },
+  /** Throws when the write fails; the stored text is only updated after it lands. */
   async save(text: string) {
-    state.text = text;
+    if (!state.loaded) throw new Error("the Deals list was not loaded");
     await api.setSetting(DEALS_SETTING, text);
+    state.text = text;
     changed();
   },
   async add(name: string, entry: string) {
