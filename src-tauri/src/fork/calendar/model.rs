@@ -52,6 +52,8 @@ pub struct EventRow {
     pub html_link: Option<String>,
     pub updated: Option<String>,
     pub local_only: bool,
+    #[serde(default)]
+    pub options: super::options::EventOptions,
 }
 
 /// Prefix of the placeholder `google_id` a local create carries until its op
@@ -182,6 +184,7 @@ pub fn event_from_json(calendar_id: i64, v: &Value) -> Option<EventRow> {
         html_link: str_field(v, "htmlLink"),
         updated: str_field(v, "updated"),
         local_only: false,
+        options: serde_json::from_value(v.clone()).unwrap_or_default(),
     })
 }
 

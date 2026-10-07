@@ -185,6 +185,8 @@
        what the document still counts and the frame would come up exactly
        that margin short, which is a scrollbar on the message. */
     display: flow-root;
+    box-sizing: border-box;
+    padding: ${ownColors ? "20px 24px" : "0"};
     font-family: 'Hanken Grotesk', 'Segoe UI', sans-serif;
     font-size: 14px; line-height: 1.6; color: ${colors.text};
     word-wrap: break-word; overflow-wrap: break-word;

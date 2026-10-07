@@ -57,6 +57,29 @@
   const collapsed = $derived(ui.sidebarCollapsed);
 </script>
 
+{#snippet folderRow(folder: (typeof mainFolders)[number])}
+  {@const name = folderLabel(folder)}
+  <button
+    class="item"
+    class:selected={ui.view === "mail" && mail.selectedFolderId === folder.id}
+    onclick={() => {
+      ui.showMail();
+      void mail.selectFolder(folder.id);
+    }}
+    title={collapsed ? name : undefined}
+  >
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+      <path d={folderIcon(folder.role)} />
+    </svg>
+    <span class="name">{name}</span>
+    {#if folder.role === "starred"}
+      {#if starredTotal > 0}<span class="count total">{starredTotal}</span>{/if}
+    {:else if folder.unreadCount > 0 && showsUnread(folder.role)}
+      <span class="count">{folder.unreadCount}</span>
+    {/if}
+  </button>
+{/snippet}
+
 <nav class="sidebar" class:collapsed={ui.sidebarCollapsed}>
   <div class="scroll">
     <button class="compose" onclick={compose} title={collapsed ? t("nav.compose") : undefined}>
@@ -73,8 +96,11 @@
       <kbd>Ctrl K</kbd>
     </button>
 
-    <!-- Fork (7.5): Calendar above the folders; `g c` and the palette go the same way. -->
+    <!-- Fork: Inbox, Calendar and Deals precede the remaining folders. -->
     <div class="section">
+      {#each mainFolders.filter((f) => f.role === "inbox") as folder (folder.id)}
+        {@render folderRow(folder)}
+      {/each}
       <button
         class="item calendar"
         class:selected={ui.view === "calendar"}
@@ -105,27 +131,8 @@
     </div>
 
     <div class="section">
-      {#each mainFolders as folder (folder.id)}
-        {@const name = folderLabel(folder)}
-        <button
-          class="item"
-          class:selected={ui.view === "mail" && mail.selectedFolderId === folder.id}
-          onclick={() => {
-            ui.showMail();
-            void mail.selectFolder(folder.id);
-          }}
-          title={collapsed ? name : undefined}
-        >
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
-            <path d={folderIcon(folder.role)} />
-          </svg>
-          <span class="name">{name}</span>
-          {#if folder.role === "starred"}
-            {#if starredTotal > 0}<span class="count total">{starredTotal}</span>{/if}
-          {:else if folder.unreadCount > 0 && showsUnread(folder.role)}
-            <span class="count">{folder.unreadCount}</span>
-          {/if}
-        </button>
+      {#each mainFolders.filter((f) => f.role !== "inbox") as folder (folder.id)}
+        {@render folderRow(folder)}
       {/each}
       <!-- Fork (6.4): scheduled sends, a list of its own (id -910). -->
       <button

@@ -426,6 +426,7 @@ pub fn run() {
             fork::calendar::commands::fork_cal_events,
             fork::calendar::commands::fork_cal_create,
             fork::calendar::commands::fork_cal_patch,
+            fork::calendar::commands::fork_cal_series,
             fork::calendar::commands::fork_cal_delete,
             fork::calendar::commands::fork_cal_rsvp,
             fork::calendar::commands::fork_cal_sync_now,

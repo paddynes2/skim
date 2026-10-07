@@ -474,6 +474,7 @@ pub struct DealRow {
     #[serde(flatten)]
     pub row: ThreadRow,
     pub deal: String,
+    pub deal_domain: Option<String>,
 }
 
 /// Deal conversations, newest first, shaped like the ordinary thread list.
@@ -526,6 +527,14 @@ pub fn list(
                     has_attachments: r.get::<_, i64>(8)? != 0,
                     message_count: r.get(9)?,
                 },
+                deal_domain: map.get(&id).and_then(|i| deals.get(*i)).and_then(|d| {
+                    d.domains.first().cloned().or_else(|| {
+                        d.addresses.iter().find_map(|a| {
+                            let (_, domain) = a.rsplit_once('@')?;
+                            (!is_personal(domain)).then(|| base_domain(domain))
+                        })
+                    })
+                }),
                 deal: map
                     .get(&id)
                     .and_then(|i| deals.get(*i))

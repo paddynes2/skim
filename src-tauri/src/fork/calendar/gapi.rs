@@ -59,6 +59,11 @@ pub struct EventInput {
     pub attendees: Option<Vec<String>>,
     /// Ask Google to attach a Meet link.
     pub add_meet: Option<bool>,
+    #[serde(default)]
+    pub options: super::options::EventOptions,
+    #[serde(default)]
+    pub series: bool,
+    pub optional_attendees: Option<Vec<String>>,
 }
 
 fn events_url(calendar_google_id: &str) -> url::Url {
@@ -173,7 +178,21 @@ pub fn attendees_body(emails: &[String], existing: Option<&Value>) -> Value {
 /// The JSON body of an `events.insert` / `events.patch`: only the keys the
 /// input names. `existing_attendees` is the stored array, for [`attendees_body`].
 pub fn event_body(input: &EventInput, existing_attendees: Option<&Value>) -> Value {
-    let mut body = serde_json::Map::new();
+    let mut body = serde_json::to_value(&input.options)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    if input.options.color_id.as_deref() == Some("") {
+        body.insert("colorId".into(), Value::Null);
+    }
+    if input
+        .options
+        .reminders
+        .as_ref()
+        .is_some_and(|r| r.use_default)
+    {
+        body.insert("reminders".into(), json!({"useDefault": true}));
+    }
     if let Some(s) = &input.summary {
         body.insert("summary".into(), json!(s));
     }
@@ -213,6 +232,17 @@ pub fn event_body(input: &EventInput, existing_attendees: Option<&Value>) -> Val
             "attendees".into(),
             attendees_body(emails, existing_attendees),
         );
+    }
+    if let Some(optional) = &input.optional_attendees {
+        let attendees = body
+            .entry("attendees")
+            .or_insert_with(|| existing_attendees.cloned().unwrap_or_else(|| json!([])));
+        if let Some(list) = attendees.as_array_mut() {
+            for a in list {
+                let email = a["email"].as_str().unwrap_or_default();
+                a["optional"] = json!(optional.iter().any(|e| e.eq_ignore_ascii_case(email)));
+            }
+        }
     }
     if input.add_meet == Some(true) {
         body.insert(
@@ -259,6 +289,10 @@ pub fn valid_response(s: &str) -> bool {
 }
 
 // ---- calls ------------------------------------------------------------------
+
+pub async fn fetch_event(account_id: &str, calendar_id: &str, event_id: &str) -> Result<Value> {
+    get_json(account_id, event_url(calendar_id, event_id)).await
+}
 
 async fn get_json(account_id: &str, url: url::Url) -> Result<Value> {
     let token = google::access_token(account_id).await?;

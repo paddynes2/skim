@@ -314,3 +314,21 @@ Screenshots of real mail go to a scratch folder, never into the repo.
   Scheduled view says so.
 - Freshness (3.4) and the Gmail archive path (1.1, 1.2) are tested at the
   predicate, not against a scripted IMAP server (D15).
+
+## Version 1.1.4 interface
+
+Inbox is first in the navigation. Deals shows each company's website icon, with
+initials when it cannot load. Hover a row to read the company name. Earlier emails
+fold under the latest message in a conversation.
+
+The event editor includes repeat schedules, reminders, optional guests and guest
+permissions, busy/free, visibility, colour and time zones. For a recurring event,
+choose Edit the whole series before changing its schedule. That view uses the
+series master dates. Otherwise changes affect only the selected occurrence.
+Existing repeat rules are preserved until explicitly replaced. Time-zone changes
+keep the instant; invalid daylight-saving times prevent Save.
+
+Verification: `node demo/v114-check.mjs` builds the browser demo and exercises the
+changed journeys against a static server serving `demo/dist-demo` on port 1421.
+Set SKIM_CAPTURE=1 to refresh the render evidence. Fictional screenshots are under `shots/1.1.4`. Never store live mailbox screenshots
+there. Full check results and install identity belong in STATUS.md.

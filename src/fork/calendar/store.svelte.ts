@@ -341,7 +341,7 @@ export const calendar = {
   },
   /** False when cancelled at the guests prompt. Throws on a backend error. */
   async patch(id: number, input: EventInput): Promise<boolean> {
-    const row = state.events.find((e) => e.id === id);
+    const row = input.series ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
     const own = ownEmails();
     const reach = new Set<string>();
     if (row) for (const a of otherGuests(row, own)) reach.add(a.email.toLowerCase());
@@ -353,12 +353,12 @@ export const calendar = {
     void refreshUpcoming();
     return true;
   },
-  async remove(id: number): Promise<boolean> {
-    const row = state.events.find((e) => e.id === id);
+  async remove(id: number, series = false): Promise<boolean> {
+    const row = series ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
     const n = row ? otherGuests(row, ownEmails()).length : 0;
     const su = await askGuests("delete", n);
     if (su === null) return false;
-    await calendarApi.delete(id, su);
+    await calendarApi.delete(id, su, series);
     drop(id);
     if (state.selectedId === id) state.selectedId = null;
     return true;

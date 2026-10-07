@@ -43,6 +43,7 @@ export interface EventRow {
   html_link: string | null;
   updated: string | null;
   local_only: boolean;
+  options?: EventOptions;
 }
 
 /** What create / patch take. Every field optional; a patch names only what changed. */
@@ -61,6 +62,20 @@ export interface EventInput {
   /** Guest addresses; [] clears the list. */
   attendees?: string[];
   add_meet?: boolean;
+  options?: EventOptions;
+  series?: boolean;
+  optional_attendees?: string[];
+}
+
+export interface EventOptions {
+  recurrence?: string[];
+  reminders?: { useDefault: boolean; overrides?: { method: "popup" | "email"; minutes: number }[] };
+  visibility?: "default" | "public" | "private" | "confidential";
+  colorId?: string;
+  transparency?: "opaque" | "transparent";
+  guestsCanModify?: boolean;
+  guestsCanInviteOthers?: boolean;
+  guestsCanSeeOtherGuests?: boolean;
 }
 
 /** Never implicit: the editor asks when the event has guests. */

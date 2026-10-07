@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "project": "C:\\Users\\Patrick\\Projects\\skim-deal-logos-20261007",
+  "task": "Improve Skim Deals, thread history and calendar event editing",
+  "inputs": {
+    "demo/mock/fork-calendar.ts": "689f505a7ea50f036337660fb7728dfb3f0a4071d7d71cd46ce4418acf7a0108",
+    "demo/mock/fork-deals.ts": "3423eb8a0dcf2ca4752ba5bb1f249f3b4baacc51f212414bd8331409870022b0",
+    "src-tauri/src/fork/calendar/commands.rs": "a84451bf9fc1a0524f621446ad6e09bbcee55f83514ce98355f47ebd5791e39d",
+    "src-tauri/src/fork/calendar/gapi.rs": "a3121b60f2ab346df25b2bd6ece4b10264b99071d61b6ab5e040bff733735a15",
+    "src-tauri/src/fork/calendar/mod.rs": "2784b4912984c9f8873e73d39eb1508feb3dfc399482f9ee6cf698e5bbbbe7c9",
+    "src-tauri/src/fork/calendar/model.rs": "c0873ec94da6c2740d9a50d1e8f93790c7d04079c853ce52918a96bdc0f945dc",
+    "src-tauri/src/fork/calendar/store.rs": "43a2a58a1c4e5aa911c77e0e877e561c5c93b8d81cd5643ae18376f6dbc15ca4",
+    "src-tauri/src/fork/db.rs": "724d42e599a4e86596f8981d9625a995e418420ef8f1e770bab49206968b56cf",
+    "src-tauri/src/fork/deals.rs": "ca3ea46a5e0b6e261dfcf173e1060940c21aa00ec5362ae8b73aff0693a0a226",
+    "src-tauri/src/lib.rs": "53c7aacbd523d2b0a7cdd65fbb3c1282e1a184ce7ac80ac41a3d4a006c135de2",
+    "src/components/HtmlViewer.svelte": "c4ecc546cac7a97c913a6d0f60b3c24a81cf67ecb0e0cd015959650bbe9f0930",
+    "src/components/MessageList.svelte": "cf4737c990b18730de528b30db6205655390a95b890ae3019d8d3dcdb3268d32",
+    "src/components/ReadingPane.svelte": "bdbd3dff9de7c8eab19aaa4e422fa87ca8096bbbf06693cf16e4569a9073e3c5",
+    "src/components/Sidebar.svelte": "f87a590e0706f7b0876f49f852e4224bc2bfef23b3bff3137a9710cb613058a1",
+    "src/fork/calendar/CalendarView.svelte": "e6fc9ee75db8b68e1e6e9f2d528650b05a0486781130312d367484d5c40611e1",
+    "src/fork/calendar/EventPanel.svelte": "5b910d3dc8acd40afc77365ec6c6107a506887a74db45e696c21a53b80bfbd96",
+    "src/fork/calendar/api.ts": "46863cc5a07d8ce9d353297a6454340e57e5c00b59df27884e4e205ad82934c9",
+    "src/fork/calendar/ec-theme.css": "0a3b3f8ea5a0a824c0eddbaefd46b4ab4ffb756958684656e24b52e61e909621",
+    "src/fork/calendar/store.svelte.ts": "33837f7bd165978d4230e6b015182b602f722fecbff12033b2f232b2cadb5c9b",
+    "src/fork/calendar/types.ts": "a590107cef9388d5017a444e8cef8fed12f884751df27f710cf7ae00b46e7624",
+    "src/fork/deals/DealBadge.svelte": "50f85704da331952a6a595e022c05748a42aa055964bf386841782f00891ad7e",
+    "src/fork/deals/api.ts": "f80072dac048714f4f4912e44b1169c2ffa563d1c8bf378cb377527a09c71407",
+    "src/lib/i18n/locales/en.json": "b511e1885039a069bfc88ace19954a6514704ded73fae63a9c8e5df74a8b0144",
+    "src/fork/calendar/OptionsEditor.svelte": "7727378f76ebab79c8418856f5f49d4d0f34c06a44e32608291468b87c16d327",
+    "src/fork/calendar/RepeatEditor.svelte": "12da50ad77677ecd6458d7f37752f26a49d696b5c3db541f72f6be6f699feb42",
+    "src/fork/calendar/editor.ts": "5b4aaece6bd9fe8588be4158d13795992ab3e3ea290799b714d16b2f7d44f1c6",
+    "src-tauri/src/fork/calendar/options.rs": "54171544982a61ff74d9c6b0fc47e9bff87341812a2af141a3da8fc15050e956",
+    "src-tauri/src/fork/migrations/f0010_calendar_options.sql": "9c1115523123be2c6e9ce49c59606c0a06710f877b68fe552a9655c833c1cc89",
+    "demo/v114-check.mjs": "972f914ab44d85c637e7042e83a1ca71056672f6ef588998071e1dd76f3df47e",
+    "docs/fork/DECISIONS.md": "00939b9e7d474f8d3e2a525c5b3e8c5d2db8bba493cbe8805beb769e7e7d413d"
+  },
+  "reference_files": [
+    "docs/fork/DECISIONS.md"
+  ],
+  "intended_improvement": "Put Inbox first, identify deal companies visually, reduce thread history clutter and support full event settings in a readable panel.",
+  "selection": {
+    "outcome": "adapt",
+    "reason": "Reuse Skim Base tokens, fields, address input and existing event panel. Corpus search produced no compatible Svelte logo component. No external component code was installed.",
+    "sources": []
+  },
+  "inspection": {
+    "component": "Inspected logo load and fallback, history toggle, recurrence fields, reminders and colour selection.",
+    "screen": "Captured Base dark and light at 1600x1000; event panel at 1200x800. Inspected settled fonts and message iframe.",
+    "journey": "Playwright verifies navigation, loaded and failed logos, older-message focus, create/save/reopen and series-master scope. All fixtures are fictional.",
+    "product": "Retains Base visual language and current Calendar views. Earlier 1.1.3 renders are unchanged; new states do not establish measured before/after gains."
+  },
+  "evidence": [
+    {
+      "path": "docs/fork/shots/1.1.4/deals-base-dark.png",
+      "sha256": "575e3ffde40242643e3b2d708f7fdc80a5649bf480fa5aa4630d954fb8e21797",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; deals-base-dark; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/deals-base-light.png",
+      "sha256": "522e12d6bf70ed93754a25f7b951dddca1dc6ab933ff88b6d74aeef12676f15d",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; deals-base-light; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/editor-1200-base-dark.png",
+      "sha256": "8659946513377767171efac63f179f1ca7fe4e39c030c25b68cc1c5eacffe50e",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; editor-1200-base-dark; 1200x800"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/editor-1200-base-light.png",
+      "sha256": "4292e074605b550c2f8a47a1ab3dc5cf0a965b04c02242e528330fe553820acf",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; editor-1200-base-light; 1200x800"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/editor-base-dark.png",
+      "sha256": "6089d35dfa204ecc61bc57c4d472b96b883738a482346be4fa2462019a024e9e",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; editor-base-dark; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/editor-base-light.png",
+      "sha256": "e4a58179c2180f4c87d57b37e05ebb265cc7a54413d4a1bd7c0d76447872e36e",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; editor-base-light; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/editor-options-base-dark.png",
+      "sha256": "88a60b89f4e1eb3819ff6c3886bb7e1e48e44a7ad2b7cc6bc98f2cdf49b6a7f8",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; editor-options-base-dark; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/editor-options-base-light.png",
+      "sha256": "f890c2bc071a58c0d9a1d697bfd1a59287d8f81d190e66e6283d2bc04af0cdfc",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; editor-options-base-light; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/series-base-dark.png",
+      "sha256": "4ffac06231e567626268cc34dc297a73ee97177ee29449061269be8cdbf3a9f9",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; series-base-dark; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/series-base-light.png",
+      "sha256": "1fcd379587c426ed8214832fe29fed21226c56b1737f7c1342d80a62240fed1f",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; series-base-light; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/thread-base-dark.png",
+      "sha256": "640bfc229bf39d887f9d444c61958e2f8f7d14accfc425152c283fcfdf5802d1",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; thread-base-dark; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/thread-base-light.png",
+      "sha256": "4c51ba0f87eb54143a6784f96f6a465645f03d634b5ad57877eec47465fb8ae8",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; thread-base-light; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/thread-history-base-dark.png",
+      "sha256": "8bd7b7820ed059b72ef4ae3816ca6f002b045d8a4f528bf7cd2cd9f981b2a272",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; thread-history-base-dark; 1600x1000"
+    },
+    {
+      "path": "docs/fork/shots/1.1.4/thread-history-base-light.png",
+      "sha256": "109c033ae0ffbf97e8cd7200291f31f25a3bfd350e4b64367598dc7c70b174bf",
+      "description": "Workspace implementation on fix/deal-logos-20261007 based on 146ed4a; fictional demo; thread-history-base-light; 1600x1000"
+    }
+  ],
+  "limitations": [
+    "This record covers fixture renders, not authenticated calendar writes.",
+    "Whole-series editing needs a connection. This-and-following splits and specialist event types remain in Google Calendar."
+  ],
+  "human_feedback": null
+}

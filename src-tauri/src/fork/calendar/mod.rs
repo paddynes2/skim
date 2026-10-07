@@ -10,6 +10,9 @@
 pub mod commands;
 pub mod gapi;
 pub mod model;
+pub mod options;
+#[cfg(test)]
+mod options_tests;
 pub mod store;
 
 use crate::db::Db;
@@ -350,7 +353,9 @@ impl Engine {
                 gapi::patch_event(
                     &self.account_id,
                     &cal.google_id,
-                    &row.google_id,
+                    p.get("google_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or(&row.google_id),
                     send,
                     &p["body"],
                 )

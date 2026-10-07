@@ -19,6 +19,7 @@
   import { ui } from "../../lib/stores/ui.svelte";
   import { toast } from "../stores/toast.svelte";
   import EventPanel from "./EventPanel.svelte";
+  import { EVENT_COLORS } from "./editor";
   import GuestsPrompt from "./GuestsPrompt.svelte";
   import { calendarErrorText, localDate, localZone } from "./guests";
   import { calPrefs } from "./settings.svelte";
@@ -41,10 +42,11 @@
 
   function toEc(row: EventRow): EC.EventInput {
     const cal = calendar.calendarOf(row);
-    const color = cal?.color || "var(--acct-1)";
+    const color = EVENT_COLORS[Number(row.options?.colorId)] || cal?.color || "var(--acct-1)";
     const declined = row.self_response === "declined";
     const tentative = row.status === "tentative" || row.self_response === "tentative";
     const classNames = ["cal-ev"];
+    if (!row.all_day && row.end_ts - row.start_ts <= 1800) classNames.push("cal-short");
     if (declined) classNames.push("cal-declined");
     if (tentative) classNames.push("cal-tentative");
     if (row.local_only) classNames.push("cal-local");

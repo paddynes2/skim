@@ -162,6 +162,7 @@ pub async fn fork_cal_events(
 /// A local row for a new event. Timed events need both stamps; all-day ones
 /// both dates (end exclusive, defaulting to the day after start).
 pub fn local_row_from_input(calendar_id: i64, input: &EventInput) -> Result<EventRow> {
+    input.options.validate()?;
     let all_day = input
         .all_day
         .unwrap_or(input.start_date.is_some() && input.start_ts.is_none());
@@ -195,11 +196,9 @@ pub fn local_row_from_input(calendar_id: i64, input: &EventInput) -> Result<Even
         }
         (s, e, None, None)
     };
-    let attendees_json = input
-        .attendees
-        .as_ref()
-        .filter(|a| !a.is_empty())
-        .map(|a| gapi::attendees_body(a, None).to_string());
+    let attendees_json = gapi::event_body(input, None)
+        .get("attendees")
+        .map(Value::to_string);
     Ok(EventRow {
         id: 0,
         calendar_id,
@@ -219,16 +218,22 @@ pub fn local_row_from_input(calendar_id: i64, input: &EventInput) -> Result<Even
         organizer_email: None,
         attendees_json,
         self_response: None,
-        transparency: None,
+        transparency: input.options.transparency.clone(),
         hangout_link: None,
         html_link: None,
         updated: None,
         local_only: true,
+        options: input.options.clone(),
     })
 }
 
 /// Apply an edit to a stored row (optimistic copy of what the patch will do).
 pub fn apply_input(row: &mut EventRow, input: &EventInput) -> Result<()> {
+    input.options.validate()?;
+    row.options.merge(&input.options);
+    if let Some(v) = &input.options.transparency {
+        row.transparency = Some(v.clone());
+    }
     if let Some(s) = &input.summary {
         row.summary = s.clone();
     }
@@ -296,6 +301,14 @@ pub fn apply_input(row: &mut EventRow, input: &EventInput) -> Result<()> {
                 .as_ref(),
         );
     }
+    if input.optional_attendees.is_some() {
+        let existing = row
+            .attendees_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<Value>(s).ok());
+        let body = gapi::event_body(input, existing.as_ref());
+        row.attendees_json = body.get("attendees").map(Value::to_string);
+    }
     Ok(())
 }
 
@@ -340,6 +353,29 @@ pub async fn fork_cal_create(
     Ok(created)
 }
 
+/// Read the series master without adding it to the instance cache.
+#[tauri::command]
+pub async fn fork_cal_series(state: State<'_, AppState>, event_id: i64) -> Result<EventRow> {
+    let (row, cal) = state
+        .db
+        .read("fork_cal_series", move |conn| {
+            let Some(row) = store::get_event(conn, event_id)? else {
+                return Ok(None);
+            };
+            Ok(store::get_calendar(conn, row.calendar_id)?.map(|c| (row, c)))
+        })
+        .await?
+        .ok_or_else(|| SkimError::other("gcal_input", "Unknown event"))?;
+    require_connected(&cal.account_id)?;
+    let series_id = row.recurring_event_id.as_deref().unwrap_or(&row.google_id);
+    let value = gapi::fetch_event(&cal.account_id, &cal.google_id, series_id).await?;
+    let mut master = model::event_from_json(cal.id, &value)
+        .ok_or_else(|| SkimError::other("gcal_api", "The series could not be loaded"))?;
+    master.id = row.id;
+    master.recurring_event_id = Some(series_id.to_string());
+    Ok(master)
+}
+
 /// Edit an event: local row updated at once, `patch` op queued.
 #[tauri::command]
 pub async fn fork_cal_patch(
@@ -350,6 +386,43 @@ pub async fn fork_cal_patch(
     send_updates: String,
 ) -> Result<EventRow> {
     let send = SendUpdates::parse(&send_updates)?;
+    if input.series {
+        let master = fork_cal_series(state.clone(), event_id).await?;
+        let mut validated = master.clone();
+        apply_input(&mut validated, &input)?;
+        let existing = master
+            .attendees_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<Value>(s).ok());
+        let body = gapi::event_body(&input, existing.as_ref());
+        let (account_id, row) = state
+            .db
+            .call(move |conn| {
+                let Some(row) = store::get_event(conn, event_id)? else {
+                    return Ok(None);
+                };
+                let Some(cal) = store::get_calendar(conn, row.calendar_id)? else {
+                    return Ok(None);
+                };
+                store::queue_op(
+                    conn,
+                    &cal.account_id,
+                    "patch",
+                    &json!({
+                        "event_id": event_id, "google_id": master.google_id,
+                        "send_updates": send.as_str(), "body": body
+                    }),
+                )?;
+                Ok(Some((cal.account_id, row)))
+            })
+            .await?
+            .ok_or_else(|| SkimError::other("gcal_input", "Unknown event"))?;
+        emit_updated(&app, &account_id);
+        if let Some(h) = super::handle(&account_id) {
+            h.run_ops();
+        }
+        return Ok(row);
+    }
     let (account_id, row) = state
         .db
         .call(move |conn| {
@@ -359,6 +432,12 @@ pub async fn fork_cal_patch(
             let Some(cal) = store::get_calendar(conn, row.calendar_id)? else {
                 return Ok(None);
             };
+            if row.recurring_event_id.is_some() && input.options.recurrence.is_some() {
+                return Ok(Some(Err(SkimError::other(
+                    "gcal_input",
+                    "Edit the series to change recurrence",
+                ))));
+            }
             let existing: Option<Value> = row
                 .attendees_json
                 .as_deref()
@@ -397,6 +476,7 @@ pub async fn fork_cal_delete(
     state: State<'_, AppState>,
     event_id: i64,
     send_updates: String,
+    series: Option<bool>,
 ) -> Result<()> {
     let send = SendUpdates::parse(&send_updates)?;
     let account_id = state
@@ -418,7 +498,7 @@ pub async fn fork_cal_delete(
                     "delete",
                     &json!({
                         "calendar_google_id": cal.google_id,
-                        "google_id": row.google_id,
+                        "google_id": if series == Some(true) { row.recurring_event_id.as_ref().unwrap_or(&row.google_id) } else { &row.google_id },
                         "send_updates": send.as_str()
                     }),
                 )?;

@@ -26,6 +26,7 @@ pub const FORK_MIGRATIONS: &[&str] = &[
     include_str!("migrations/f0007_reminders.sql"),
     include_str!("migrations/f0008_unread_by_conversation.sql"),
     include_str!("migrations/f0009_clear_reminders.sql"),
+    include_str!("migrations/f0010_calendar_options.sql"),
 ];
 
 pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {
@@ -174,6 +175,8 @@ mod repair_tests {
     fn f0001_and_f0002_repair_live_rows() {
         let db = crate::db::Db::open_in_memory().unwrap();
         db.with(|conn| {
+            // Reconstruct the schema before f0010 before replaying all migrations.
+            conn.execute_batch("ALTER TABLE fork_cal_events DROP COLUMN options_json;")?;
             conn.execute_batch(
                 "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
                    VALUES ('a1','p@autospark.ai','custom','imap.gmail.com','smtp.gmail.com',0),

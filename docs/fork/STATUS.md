@@ -6,6 +6,40 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
+## Version 1.1.4 (implementation, installation pending)
+
+Patrick requested company logos in Deals, Inbox above Calendar, clearer email
+threads, and the full event editor before any broader calendar redesign. He
+approved the additive local calendar migration in this session.
+
+- Deals uses the configured company domain for a 24px website icon. Names remain
+  in tooltips and accessible labels. Missing, loading and failed icons use
+  initials. Personal-mail addresses do not acquire their provider's logo.
+- Inbox precedes Calendar and Deals. Existing folder counts and actions remain.
+- Earlier messages sit in a collapsed history section. Their rows align instead
+  of alternating chat bubbles. Closing history returns the reply target to the
+  latest message. HTML emails with their own colours retain a padded white canvas.
+- The wider event editor groups date/time, recurrence, guests, location, Meet,
+  description, reminders, availability, visibility, colour and guest permissions.
+  Guests can be optional. Repeat schedules support daily, weekdays, weekly,
+  monthly, yearly and custom intervals/days/end dates/counts. Existing rules stay
+  unchanged unless edited. Existing series offer occurrence or whole-series edit
+  and delete. Whole-series fields load from the actual master before editing.
+- Migration f0010 adds options_json to fork_cal_events. Google payloads, the local
+  cache and optimistic edits retain these settings. Patches contain only changed
+  settings and preserve guest responses. Existing invitation prompts remain.
+
+Scope limits: this pass is the agreed event-editor scope, not complete Google
+Calendar web parity. This-and-following series splits, attachments, resource-room
+availability, appointment schedules and special event types remain in Google
+Calendar through the existing link. No live event writes or invitations are used
+for verification. Whole-series editing needs a connection to load the master.
+
+Verification in progress: focused calendar Rust tests and frontend date/recurrence
+checks pass. The demo exercises save/reopen, both Base themes, 1600px and 1200px,
+logo load/failure, navigation and thread-history focus. Final gates, regression
+proof, installation and installed-app readback are recorded after they run.
+
 ## Version 1.1.3 (installed October 7)
 
 Deals replaces Snooze and Follow-ups, which had zero uses (D56). One sidebar

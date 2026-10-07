@@ -574,19 +574,37 @@
       {/if}
 
       {#if conversation}
-        <!-- Fork (v1.1.1): the whole conversation newest first, like Outlook.
-             The open message expands in place; the rest are one-line rows. -->
+        {@const latest = ordered[0]}
         <div class="convo">
-          {#each ordered as m, i (m.id)}
-            {#if m.id === focused?.id}
-              <div bind:this={focusedEl} class="focused-msg" class:not-first={i > 0}>
-                {@render messageBlock(m, bodies[m.id])}
+          {#if latest}
+            {#if latest.id === focused?.id}
+              <div bind:this={focusedEl} class="focused-msg">
+                {@render messageBlock(latest, bodies[latest.id])}
                 {@render inlineReplySlot()}
               </div>
             {:else}
-              {@render chatRow(m)}
+              {@render chatRow(latest)}
             {/if}
-          {/each}
+          {/if}
+          {#if ordered.length > 1}
+            {#key detail?.id}
+              <details class="thread-history" ontoggle={(e) => { if (!e.currentTarget.open && latest && focused?.id !== latest.id) void setFocus(latest.id); }}>
+                <summary>{t("fork.reading.history", { n: ordered.length - 1 })}</summary>
+                <div class="history-messages">
+                  {#each ordered.slice(1) as m (m.id)}
+                    {#if m.id === focused?.id}
+                      <div bind:this={focusedEl} class="focused-msg not-first">
+                        {@render messageBlock(m, bodies[m.id])}
+                        {@render inlineReplySlot()}
+                      </div>
+                    {:else}
+                      {@render chatRow(m)}
+                    {/if}
+                  {/each}
+                </div>
+              </details>
+            {/key}
+          {/if}
         </div>
       {:else if shown}
         {@render messageBlock(shown, bodies[shown.id])}
@@ -1029,6 +1047,19 @@
     padding-top: 10px;
     border-top: 1px solid var(--hairline);
   }
+  .thread-history {
+    margin-top: 20px;
+    border-top: 1px solid var(--hairline);
+  }
+  .thread-history > summary {
+    cursor: pointer;
+    padding: 16px 0;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .thread-history > summary:hover { color: var(--text); }
+  .history-messages { display: grid; gap: 6px; }
   .convo {
     display: flex;
     flex-direction: column;
@@ -1052,10 +1083,8 @@
   .chat-bubble {
     flex: 1;
     min-width: 0;
-    background: var(--hover);
-    border: 1px solid var(--hairline);
-    border-radius: 12px;
-    padding: 7px 11px;
+    border-bottom: 1px solid var(--hairline);
+    padding: 6px 0 12px;
     transition: border-color 0.08s;
   }
   .chat-row:hover .chat-bubble {
@@ -1091,12 +1120,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Outgoing (your own replies): mirrored to the right, tinted. */
+  /* Keep outgoing replies aligned with the conversation. */
   .chat-row.outgoing {
-    flex-direction: row-reverse;
+    flex-direction: row;
   }
-  .chat-row.outgoing .chat-bubble {
-    background: var(--selected);
+  .chat-row.outgoing .chat-name {
+    color: var(--text-dim);
   }
 
   .meta {

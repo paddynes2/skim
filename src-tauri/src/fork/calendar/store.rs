@@ -115,7 +115,7 @@ pub fn delete_account_data(conn: &Connection, account_id: &str) -> rusqlite::Res
 const EV_COLS: &str = "id, calendar_id, google_id, etag, status, summary, description, location, \
      start_ts, end_ts, all_day, start_date, end_date, time_zone, recurring_event_id, \
      organizer_email, attendees_json, self_response, transparency, hangout_link, html_link, \
-     updated, local_only";
+     updated, local_only, options_json";
 
 fn event_row(r: &Row) -> rusqlite::Result<EventRow> {
     Ok(EventRow {
@@ -142,6 +142,7 @@ fn event_row(r: &Row) -> rusqlite::Result<EventRow> {
         html_link: r.get(20)?,
         updated: r.get(21)?,
         local_only: r.get::<_, Option<i64>>(22)?.unwrap_or(0) != 0,
+        options: serde_json::from_str(&r.get::<_, String>(23)?).unwrap_or_default(),
     })
 }
 
@@ -151,9 +152,9 @@ fn upsert_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<i64> {
             (calendar_id, google_id, etag, status, summary, description, location,
              start_ts, end_ts, all_day, start_date, end_date, time_zone, recurring_event_id,
              organizer_email, attendees_json, self_response, transparency, hangout_link,
-             html_link, updated, local_only)
+             html_link, updated, local_only, options_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                 ?18, ?19, ?20, ?21, ?22)
+                 ?18, ?19, ?20, ?21, ?22, ?23)
          ON CONFLICT(calendar_id, google_id) DO UPDATE SET
             etag = excluded.etag, status = excluded.status, summary = excluded.summary,
             description = excluded.description, location = excluded.location,
@@ -163,7 +164,8 @@ fn upsert_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<i64> {
             organizer_email = excluded.organizer_email, attendees_json = excluded.attendees_json,
             self_response = excluded.self_response, transparency = excluded.transparency,
             hangout_link = excluded.hangout_link, html_link = excluded.html_link,
-            updated = excluded.updated, local_only = excluded.local_only",
+            updated = excluded.updated, local_only = excluded.local_only,
+            options_json = excluded.options_json",
         params![
             e.calendar_id,
             e.google_id,
@@ -187,6 +189,7 @@ fn upsert_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<i64> {
             e.html_link,
             e.updated,
             e.local_only as i64,
+            serde_json::to_string(&e.options).unwrap_or_else(|_| "{}".into()),
         ],
     )?;
     conn.query_row(
@@ -281,7 +284,7 @@ pub fn update_local_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<(
         "UPDATE fork_cal_events SET
             summary = ?2, description = ?3, location = ?4, start_ts = ?5, end_ts = ?6,
             all_day = ?7, start_date = ?8, end_date = ?9, time_zone = ?10,
-            attendees_json = ?11, self_response = ?12
+            attendees_json = ?11, self_response = ?12, transparency = ?13, options_json = ?14
          WHERE id = ?1",
         params![
             e.id,
@@ -296,6 +299,8 @@ pub fn update_local_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<(
             e.time_zone,
             e.attendees_json,
             e.self_response,
+            e.transparency,
+            serde_json::to_string(&e.options).unwrap_or_else(|_| "{}".into()),
         ],
     )
     .map(|_| ())
@@ -307,7 +312,7 @@ pub fn mark_synced(conn: &Connection, row_id: i64, server: &EventRow) -> rusqlit
         "UPDATE fork_cal_events SET
             google_id = ?2, etag = ?3, status = ?4, hangout_link = ?5, html_link = ?6,
             updated = ?7, organizer_email = ?8, attendees_json = ?9, self_response = ?10,
-            local_only = 0
+            local_only = 0, options_json = ?11, transparency = ?12
          WHERE id = ?1",
         params![
             row_id,
@@ -320,6 +325,8 @@ pub fn mark_synced(conn: &Connection, row_id: i64, server: &EventRow) -> rusqlit
             server.organizer_email,
             server.attendees_json,
             server.self_response,
+            serde_json::to_string(&server.options).unwrap_or_else(|_| "{}".into()),
+            server.transparency,
         ],
     )
     .map(|_| ())

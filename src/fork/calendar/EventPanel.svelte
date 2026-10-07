@@ -15,7 +15,6 @@
   import {
     calendarErrorText,
     fmtWhen,
-    fromDateTime,
     guestsValue,
     localDate,
     localTime,
@@ -31,6 +30,10 @@
   import ProposeTime from "./ProposeTime.svelte";
   import TimeInput from "./TimeInput.svelte";
   import { shiftEnd } from "./time";
+  import { calendarApi } from "./api";
+  import OptionsEditor from "./OptionsEditor.svelte";
+  import RepeatEditor from "./RepeatEditor.svelte";
+  import { changedOptions, eventOptions, zonedParts, eventTimestamp } from "./editor";
 
   interface Props {
     row: EventRow | null;
@@ -41,40 +44,87 @@
 
   // The parent re-keys this component per event, so the fields are read once
   // from the props at creation; `untrack` says so to the compiler.
-  const row = untrack(() => rowProp);
+  const originalRow = untrack(() => rowProp);
+  let row = $state(originalRow);
+  let seriesMode = $state(false);
+  let loadingSeries = $state(false);
   const draft = untrack(() => draftProp);
   const own = calendar.ownEmails;
-  const isNew = row === null;
-  const editable = row ? calendar.canEdit(row) : calendar.connected;
-  const others = row ? otherGuests(row, own) : [];
-  const iAmGuest = row ? selfIsGuest(row, own) : false;
+  const isNew = originalRow === null;
+  const editable = $derived(row ? calendar.canEdit(row) : calendar.connected);
+  const others = $derived(row ? otherGuests(row, own) : []);
+  const iAmGuest = $derived(row ? selfIsGuest(row, own) : false);
 
   // ---- fields ----
-  const start0 = row ? new Date(row.start_ts * 1000) : (draft?.start ?? new Date());
-  const end0 = row ? new Date(row.end_ts * 1000) : (draft?.end ?? new Date(start0.getTime() + 30 * 60_000));
-  const allDay0 = row ? row.all_day : (draft?.allDay ?? false);
-  let title = $state(row?.summary ?? "");
+  const start0 = originalRow ? new Date(originalRow.start_ts * 1000) : (draft?.start ?? new Date());
+  const end0 = originalRow ? new Date(originalRow.end_ts * 1000) : (draft?.end ?? new Date(start0.getTime() + 30 * 60_000));
+  const allDay0 = originalRow ? originalRow.all_day : (draft?.allDay ?? false);
+  let title = $state(originalRow?.summary ?? "");
   let allDay = $state(allDay0);
-  let startDate = $state(row?.all_day && row.start_date ? row.start_date : localDate(start0));
+  let startDate = $state(originalRow?.all_day && originalRow.start_date ? originalRow.start_date : localDate(start0));
   let startTime = $state(localTime(start0));
   // The UI shows an inclusive end date; the API's end_date is exclusive.
   let endDate = $state(
-    row?.all_day && row.end_date ? shiftDate(row.end_date, -1) : localDate(allDay0 ? new Date(end0.getTime() - 1) : end0),
+    originalRow?.all_day && originalRow.end_date ? shiftDate(originalRow.end_date, -1) : localDate(allDay0 ? new Date(end0.getTime() - 1) : end0),
   );
   let endTime = $state(localTime(end0));
-  let calendarId = $state<number>(row?.calendar_id ?? calendar.writableCalendars.find((c) => c.is_primary)?.id ?? calendar.writableCalendars[0]?.id ?? 0);
-  let guests = $state(row ? guestsValue(row, own) : "");
-  let location = $state(row?.location ?? "");
-  let description = $state(row?.description ?? "");
+  let calendarId = $state<number>(originalRow?.calendar_id ?? calendar.writableCalendars.find((c) => c.is_primary)?.id ?? calendar.writableCalendars[0]?.id ?? 0);
+  let guests = $state(originalRow ? guestsValue(originalRow, own) : "");
+  let location = $state(originalRow?.location ?? "");
+  let description = $state(originalRow?.description ?? "");
   let addMeet = $state(false);
+  let zone = $state(originalRow?.time_zone ?? localZone());
+  let options = $state(eventOptions(originalRow?.options, originalRow?.transparency));
+  let optionalGuests = $state<string[]>(originalRow ? parseAttendees(originalRow).filter((a) => a.optional).map((a) => a.email.toLowerCase()) : []);
+  let repeatInvalid = $state(false);
+  const zones = Intl.supportedValuesOf("timeZone");
+  let previousZone = untrack(() => zone);
+  if (!allDay0) {
+    const start = zonedParts(start0.getTime() / 1000, previousZone);
+    const end = zonedParts(end0.getTime() / 1000, previousZone);
+    startDate = start.date; startTime = start.time; endDate = end.date; endTime = end.time;
+  }
+  const guestAddresses = $derived(splitAddresses(guests));
+  const remindersInvalid = $derived(options.reminders?.overrides?.some((r) => !Number.isInteger(r.minutes) || r.minutes < 0 || r.minutes > 40320) ?? false);
+  async function changeScope() {
+    if (!originalRow || loadingSeries) return;
+    if (Object.keys(buildInput()).length > 0) { error = t("fork.cal.scope_unsaved"); return; }
+    loadingSeries = true; error = null;
+    try {
+      const next = seriesMode ? originalRow : await calendarApi.series(originalRow.id);
+      seriesMode = !seriesMode; row = next;
+      title = next.summary; allDay = next.all_day;
+      zone = next.time_zone ?? localZone(); previousZone = zone;
+      const s = zonedParts(next.start_ts, zone), e = zonedParts(next.end_ts, zone);
+      startDate = next.all_day ? next.start_date! : s.date;
+      endDate = next.all_day ? shiftDate(next.end_date!, -1) : e.date;
+      startTime = s.time; endTime = e.time;
+      prevStart = { date: startDate, time: startTime };
+      guests = guestsValue(next, own); location = next.location ?? ""; description = next.description ?? "";
+      optionalGuests = parseAttendees(next).filter((a) => a.optional).map((a) => a.email.toLowerCase());
+      options = eventOptions(next.options, next.transparency); repeatInvalid = false;
+    } catch (e) { error = calendarErrorText(e); }
+    finally { loadingSeries = false; }
+  }
+  function zoneChanged() {
+    const s = eventTimestamp(startDate, startTime, previousZone, row?.start_ts), e = eventTimestamp(endDate, endTime, previousZone, row?.end_ts);
+    try {
+      if (s !== null && e !== null && !allDay) {
+        const start = zonedParts(s, zone), end = zonedParts(e, zone);
+        startDate = start.date; startTime = start.time; endDate = end.date; endTime = end.time;
+      }
+      new Intl.DateTimeFormat("en", { timeZone: zone });
+      previousZone = zone; prevStart = { date: startDate, time: startTime };
+    } catch { /* Validation keeps Save disabled until the zone is valid. */ }
+  }
 
   let saving = $state(false);
   let error = $state<string | null>(null);
   let deleteStep = $state<0 | 1>(0);
   let rsvpBusy = $state(false);
   let proposing = $state(false);
-  const organizer = row ? parseAttendees(row).find((a) => a.organizer) : undefined;
-  const organizerEmail = row?.organizer_email ?? organizer?.email ?? null;
+  const organizer = $derived(row ? parseAttendees(row).find((a) => a.organizer) : undefined);
+  const organizerEmail = $derived(row?.organizer_email ?? organizer?.email ?? null);
 
   // Moving the start carries the end with it, keeping the length.
   let prevStart = untrack(() => ({ date: startDate, time: startTime }));
@@ -88,7 +138,8 @@
   const calRow = $derived(row ? calendar.calendarOf(row) : calendar.calendars.find((c) => c.id === calendarId));
   const timeInvalid = $derived.by(() => {
     if (allDay) return endDate < startDate;
-    return fromDateTime(endDate, endTime).getTime() <= fromDateTime(startDate, startTime).getTime();
+    const s = eventTimestamp(startDate, startTime, zone, row?.start_ts), e = eventTimestamp(endDate, endTime, zone, row?.end_ts);
+    return s === null || e === null || e <= s;
   });
 
   function buildInput(): EventInput {
@@ -111,21 +162,27 @@
         input.end_date = e;
       }
     } else {
-      const s = Math.floor(fromDateTime(startDate, startTime).getTime() / 1000);
-      const e = Math.floor(fromDateTime(endDate, endTime).getTime() / 1000);
-      if (isNew || row?.all_day || s !== row?.start_ts || e !== row?.end_ts) {
+      const s = eventTimestamp(startDate, startTime, zone, row?.start_ts)!;
+      const e = eventTimestamp(endDate, endTime, zone, row?.end_ts)!;
+      if (isNew || row?.all_day || s !== row?.start_ts || e !== row?.end_ts || zone !== (row?.time_zone ?? localZone())) {
         input.all_day = false;
         input.start_ts = s;
         input.end_ts = e;
-        input.time_zone = localZone();
+        input.time_zone = zone;
       }
     }
+    if (!allDay && zone !== (row?.time_zone ?? localZone())) input.time_zone = zone;
+    const changed = isNew ? options : changedOptions(options, eventOptions(row?.options, row?.transparency));
+    if (Object.keys(changed).length) input.options = changed;
+    const hadOptional = row ? parseAttendees(row).filter((a) => a.optional).map((a) => a.email.toLowerCase()).sort() : [];
+    const wantOptional = optionalGuests.filter((e) => guestAddresses.includes(e)).sort();
+    if (JSON.stringify(wantOptional) !== JSON.stringify(hadOptional)) input.optional_attendees = wantOptional;
     if (addMeet && !row?.hangout_link) input.add_meet = true;
     return input;
   }
 
   async function save() {
-    if (saving || timeInvalid || !editable) return;
+    if (saving || timeInvalid || repeatInvalid || remindersInvalid || loadingSeries || !editable) return;
     error = null;
     saving = true;
     try {
@@ -135,6 +192,7 @@
           onclose();
           return;
         }
+        if (seriesMode) input.series = true;
         if (await calendar.patch(row.id, input)) onclose();
       } else {
         if (!calendarId) throw { code: "gcal_input", message: t("fork.cal.err.no_calendar") };
@@ -157,7 +215,7 @@
     error = null;
     saving = true;
     try {
-      if (await calendar.remove(row.id)) onclose();
+      if (await calendar.remove(row.id, seriesMode)) onclose();
       else deleteStep = 0;
     } catch (e: unknown) {
       error = calendarErrorText(e);
@@ -197,13 +255,13 @@
 
   <div class="body">
     <!-- svelte-ignore a11y_autofocus -->
-    <input class="title" placeholder={t("fork.cal.title_placeholder")} bind:value={title} readonly={!editable} autofocus={isNew} />
+    <textarea class="title" rows="2" aria-label={t("fork.cal.title_placeholder")} placeholder={t("fork.cal.title_placeholder")} bind:value={title} readonly={!editable} autofocus={isNew}></textarea>
 
     {#if row}
       <div class="when-line">{fmtWhen(row)}</div>
     {/if}
 
-    {#if row && iAmGuest}
+    {#if row && iAmGuest && !seriesMode}
       <div class="rsvp">
         <span class="label">{t("fork.cal.going")}</span>
         {#each ["accepted", "tentative", "declined"] as const as r (r)}
@@ -230,6 +288,13 @@
       {/if}
     {/if}
 
+    {#if originalRow?.recurring_event_id}
+      <div class="series-scope">
+        <span>{t(seriesMode ? "fork.cal.editing_series" : "fork.cal.editing_occurrence")}</span>
+        <button type="button" disabled={loadingSeries || saving} onclick={changeScope}>{t(seriesMode ? "fork.cal.edit_occurrence" : "fork.cal.edit_series")}</button>
+      </div>
+    {/if}
+    <h3>{t("fork.cal.date_time")}</h3>
     <label class="row check">
       <input type="checkbox" bind:checked={allDay} disabled={!editable} />
       <span>{t("fork.cal.all_day")}</span>
@@ -237,15 +302,25 @@
 
     <div class="row times" class:invalid={timeInvalid}>
       <span class="label">{t("fork.cal.starts")}</span>
-      <input type="date" bind:value={startDate} readonly={!editable} onchange={startMoved} />
+      <input type="date" aria-label={t("fork.cal.starts")} bind:value={startDate} readonly={!editable} onchange={startMoved} />
       {#if !allDay}<TimeInput bind:value={startTime} readonly={!editable} label={t("fork.cal.starts")} onchange={startMoved} />{/if}
     </div>
     <div class="row times" class:invalid={timeInvalid}>
       <span class="label">{t("fork.cal.ends")}</span>
-      <input type="date" bind:value={endDate} readonly={!editable} />
+      <input type="date" aria-label={t("fork.cal.ends")} bind:value={endDate} readonly={!editable} />
       {#if !allDay}<TimeInput bind:value={endTime} anchor={endDate === startDate ? startTime : null} readonly={!editable} label={t("fork.cal.ends")} />{/if}
     </div>
-    {#if timeInvalid}<div class="hint danger">{t("fork.cal.ends_before_starts")}</div>{/if}
+    {#if timeInvalid}<div class="hint danger">{t("fork.cal.time_invalid")}</div>{/if}
+    {#if !allDay}
+      <label class="row"><span class="label">{t("fork.cal.time_zone")}</span><input list="event-time-zones" aria-label={t("fork.cal.time_zone")} bind:value={zone} onchange={zoneChanged} readonly={!editable} /></label>
+      <datalist id="event-time-zones">{#each zones as z}<option value={z}></option>{/each}</datalist>
+    {/if}
+    {#key seriesMode}
+      {#if !originalRow?.recurring_event_id || seriesMode}
+        <RepeatEditor bind:value={options.recurrence} {startDate} {allDay} {zone} disabled={!editable || loadingSeries} bind:invalid={repeatInvalid} />
+      {/if}
+    {/key}
+    <h3 class="section-heading">{t("fork.cal.people_place")}</h3>
 
     {#if isNew}
       <div class="row">
@@ -278,6 +353,13 @@
       </ul>
     {/if}
 
+    {#if guestAddresses.length > 0 && editable}
+      <div class="guest-options">
+        {#each guestAddresses as email}
+          <label><span title={email}>{email}</span><input type="checkbox" checked={optionalGuests.includes(email)} onchange={(e) => { optionalGuests = e.currentTarget.checked ? [...optionalGuests, email] : optionalGuests.filter((v) => v !== email); }} />{t("fork.cal.optional_guest")}</label>
+        {/each}
+      </div>
+    {/if}
     <div class="row">
       <span class="label">{t("fork.cal.location")}</span>
       <input bind:value={location} readonly={!editable} placeholder={editable ? t("fork.cal.location_placeholder") : ""} />
@@ -305,14 +387,17 @@
       {/if}
     </div>
 
-    <textarea class="desc" bind:value={description} readonly={!editable} placeholder={editable ? t("fork.cal.description_placeholder") : ""} rows="4"></textarea>
+    <h3 class="section-heading">{t("fork.cal.description")}</h3>
+    <textarea aria-label={t("fork.cal.description")} class="desc" bind:value={description} readonly={!editable} placeholder={editable ? t("fork.cal.description_placeholder") : ""} rows="4"></textarea>
 
+    <OptionsEditor bind:value={options} disabled={!editable || loadingSeries} />
+    {#if remindersInvalid}<div class="hint danger" role="alert">{t("fork.cal.reminders_invalid")}</div>{/if}
     {#if error}<div class="hint danger" role="alert">{error}</div>{/if}
   </div>
 
   <div class="foot">
     {#if editable}
-      <button class="btn primary" onclick={save} disabled={saving || timeInvalid}>
+      <button class="btn primary" onclick={save} disabled={saving || timeInvalid || repeatInvalid || remindersInvalid || loadingSeries}>
         {isNew ? t("fork.cal.create") : t("fork.cal.save")}
       </button>
     {/if}
@@ -334,8 +419,17 @@
 </aside>
 
 <style>
+  h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  .section-heading { margin-top: 8px; padding-top: 20px; border-top: 1px solid var(--hairline); }
+  .series-scope { display: grid; gap: 7px; padding: 12px; background: var(--selected); border-radius: var(--radius-s); font-size: 12px; }
+  .series-scope button { width: fit-content; text-decoration: underline; text-underline-offset: 3px; }
+  .guest-options { display: grid; gap: 8px; }
+  .guest-options label { display: flex; gap: 6px; align-items: center; color: var(--text-dim); font-size: 11px; }
+  .guest-options label span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .guests :global(.wrap) { flex: 1; min-width: 0; }
   .panel {
-    width: 360px;
+    width: clamp(380px, 32vw, 480px);
+    max-width: 100%;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -365,13 +459,16 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px 16px;
+    padding: 20px 24px 28px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
   }
   .title {
-    font-size: 17px;
+    font-size: 21px;
+    line-height: 1.35;
+    resize: vertical;
+    min-height: 62px;
     font-weight: 700;
     letter-spacing: -0.01em;
     padding: 4px 0;
@@ -458,7 +555,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding-left: 72px;
+    padding-left: 0;
     font-size: 12.5px;
   }
   .attendees li {
@@ -470,7 +567,7 @@
   .who {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .status {
     margin-left: auto;

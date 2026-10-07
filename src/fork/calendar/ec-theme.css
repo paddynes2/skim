@@ -177,3 +177,7 @@
 .fork-cal .ec-ghost {
   opacity: 0.6;
 }
+
+/* A short slot has one line. Give its title the available height. */
+.fork-cal .ec-time-grid .cal-short .ec-event-time { display: none; }
+.fork-cal .ec-time-grid .cal-short .ec-event-title { line-height: 18px; }

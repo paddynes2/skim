@@ -175,3 +175,11 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/lib.rs` | `generate_handler!` | v1.1.3: five `fork_deals_*` commands | D56 |
 | `demo/mock/tauri-core.ts` | `invoke` switch, `get_settings` | v1.1.3: `fork_deals_*` fixtures replace `fork_reminder_*`; demo `fork_deals` setting | D56 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | `version` | 1.1.3 | updater moves (D56) |
+
+| `src/components/Sidebar.svelte` | folder row snippet | Inbox precedes Calendar and Deals without duplicate folder buttons | D57 |
+| `src/components/MessageList.svelte` | deal overlay | pass company domain, reserve logo width, keep company tooltip | D57 |
+| `src/components/ReadingPane.svelte` | conversation rendering | collapsible aligned history, return focus to newest when closed | D57 |
+| `src/components/HtmlViewer.svelte` | email document body | pad authored-colour email canvases | D57 |
+| `src/lib/i18n/locales/en.json` | reading and calendar labels | history and event editor controls | D57, D58 |
+| `src-tauri/src/lib.rs` | generate_handler | register fork_cal_series read command | D58 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | app version | 1.1.4 | D57, D58 |

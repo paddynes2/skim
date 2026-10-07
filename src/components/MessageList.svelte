@@ -14,6 +14,7 @@
   import type { CourtRow as CourtRowShape } from "../fork/court/types";
   // Fork (v1.1.3): Deals header and per-row deal name.
   import DealBadge from "../fork/deals/DealBadge.svelte";
+  import type { DealRow } from "../fork/deals/api";
   import { dealsStore } from "../fork/deals/store.svelte";
   import { dealsCount } from "../fork/deals/count.svelte";
 
@@ -243,7 +244,7 @@
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" class:court={court !== null || deal !== null} class:compact={prefs.density === "compact"}>
+        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:compact={prefs.density === "compact"}>
           <MessageRow
             {thread}
             selected={mail.groupThreads
@@ -261,8 +262,8 @@
               <CourtRow since={court.since} reason={court.reason} now={nowSecs} />
             </div>
           {:else if deal}
-            <div class="court-badge-slot">
-              <DealBadge {deal} />
+            <div class="court-badge-slot deal-logo-slot">
+              <DealBadge {deal} domain={(thread as DealRow).dealDomain ?? null} />
             </div>
           {/if}
         </div>
@@ -448,6 +449,17 @@
   }
   .court-wrap.court.compact :global(.snippet) {
     padding-right: 48px;
+  }
+  .court-wrap .deal-logo-slot {
+    width: 24px;
+    bottom: 7px;
+  }
+  .court-wrap.compact .deal-logo-slot {
+    width: 24px;
+    bottom: auto;
+  }
+  .court-wrap.deal :global(.snippet) {
+    padding-right: 32px;
   }
   /* One line has room for the age only; the reason stays in the tooltip. */
   .court-wrap.compact :global(.court-badge .sep),

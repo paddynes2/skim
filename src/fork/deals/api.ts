@@ -12,6 +12,7 @@ export const DEALS_SETTING = "fork_deals";
 /** A Deals row: exactly a `ThreadRow` plus the deal it belongs to. */
 export interface DealRow extends ThreadRow {
   deal: string;
+  dealDomain: string | null;
 }
 
 /** How the list text was read (Settings shows it). */

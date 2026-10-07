@@ -42,10 +42,11 @@ export const calendarApi = {
   /** Local row at once, op queued. Ask about guests before choosing sendUpdates. */
   create: (accountId: string, calendarId: number, input: EventInput, sendUpdates: SendUpdates) =>
     invoke<EventRow>("fork_cal_create", { accountId, calendarId, input, sendUpdates }),
+  series: (eventId: number) => invoke<EventRow>("fork_cal_series", { eventId }),
   patch: (eventId: number, input: EventInput, sendUpdates: SendUpdates) =>
     invoke<EventRow>("fork_cal_patch", { eventId, input, sendUpdates }),
-  delete: (eventId: number, sendUpdates: SendUpdates) =>
-    invoke<void>("fork_cal_delete", { eventId, sendUpdates }),
+  delete: (eventId: number, sendUpdates: SendUpdates, series = false) =>
+    invoke<void>("fork_cal_delete", { eventId, sendUpdates, series }),
   rsvp: (eventId: number, response: RsvpResponse, sendUpdates: SendUpdates) =>
     invoke<EventRow>("fork_cal_rsvp", { eventId, response, sendUpdates }),
   syncNow: (accountId: string) => invoke<void>("fork_cal_sync_now", { accountId }),

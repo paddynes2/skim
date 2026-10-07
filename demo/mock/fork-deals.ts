@@ -19,6 +19,7 @@ export function forkDealsList(offset: number) {
     accountId: "acc-1",
     messageId: null,
     deal: DEALS[t.id],
+    dealDomain: t.id === 103 ? null : t.id === 102 ? "acme-partners.example" : "northwind.example",
   }));
 }
 

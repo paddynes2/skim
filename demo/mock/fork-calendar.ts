@@ -127,7 +127,7 @@ let EVENTS: any[] = [
     attendees_json: JSON.stringify([{ email: "reception@smile.example", organizer: true, responseStatus: "accepted" }, me("declined")]),
     self_response: "declined",
   }),
-  row({ id: 914, summary: "Board prep", start_ts: at(3, 16), end_ts: at(3, 17), status: "tentative" }),
+  row({ id: 914, summary: "Board prep", recurring_event_id: "board-series", start_ts: at(3, 16), end_ts: at(3, 17), status: "tentative" }),
   row({ id: 902, summary: "Intro call", start_ts: at(4, 9), end_ts: at(4, 9, 45), attendees_json: JSON.stringify([me("accepted"), PRIYA]), self_response: "accepted", hangout_link: "https://meet.google.com/pqr-stuv-wxy" }),
   // The next-event chip's candidate: starts in 25 minutes, has a Meet link.
   row({
@@ -173,6 +173,13 @@ function applyInput(e: any, input: any) {
     const keep = e.attendees_json ? JSON.parse(e.attendees_json).filter((a: any) => a.self) : [];
     const list = [...keep, ...input.attendees.map((email: string) => ({ email, responseStatus: "needsAction" }))];
     e.attendees_json = list.length ? JSON.stringify(list) : null;
+  }
+  if (input.options) {
+    e.options = { ...e.options, ...JSON.parse(JSON.stringify(input.options)) };
+    if (input.options.transparency) e.transparency = input.options.transparency;
+  }
+  if (input.optional_attendees && e.attendees_json) {
+    e.attendees_json = JSON.stringify(JSON.parse(e.attendees_json).map((a: any) => ({ ...a, optional: input.optional_attendees.includes(a.email) })));
   }
   if (input.add_meet) e.hangout_link ??= "https://meet.google.com/new-link-xyz";
   e.updated = new Date().toISOString();
@@ -242,6 +249,10 @@ export function forkCalendarInvoke(cmd: string, args: any = {}): { ok: unknown }
       applyInput(e, args.input ?? {});
       EVENTS.push(e);
       return { ok: e };
+    }
+    case "fork_cal_series": {
+      const e = EVENTS.find((e) => e.id === Number(args.eventId));
+      return e ? { ok: { ...e, google_id: e.recurring_event_id, options: { ...e.options, recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=MO"] } } } : { err: { code: "gcal_input", message: "no such event" } };
     }
     case "fork_cal_patch": {
       const e = EVENTS.find((x) => x.id === args.eventId);
