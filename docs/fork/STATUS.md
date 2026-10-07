@@ -35,10 +35,25 @@ availability, appointment schedules and special event types remain in Google
 Calendar through the existing link. No live event writes or invitations are used
 for verification. Whole-series editing needs a connection to load the master.
 
-Verification in progress: focused calendar Rust tests and frontend date/recurrence
-checks pass. The demo exercises save/reopen, both Base themes, 1600px and 1200px,
-logo load/failure, navigation and thread-history focus. Final gates, regression
-proof, installation and installed-app readback are recorded after they run.
+Verification: all gates green: 522 Rust tests passed, one existing ignored test;
+all frontend node tests, contrast, format, clippy and production build passed.
+Svelte check has zero errors and the existing ComposeForm warning. Browser checks
+pass in both Base themes at 1600px and 1200px, with save/reopen, logo load/failure,
+navigation, thread-history focus and series-master loading.
+
+`PROVE_TEST: status=PROVEN base=146ed4a4bb46 reverted=52 tests=3 exit_without_fix=1`
+The command is the browser regression suite; removing the implementation fails
+its Inbox-first assertion. Separate hand mutations of time conversion, recurrence
+count and changed-settings filtering each fail the frontend helper tests.
+Backend mutations of partial-option merge, optional guests and visibility
+validation each fail the new backend tests. Original bytes were restored.
+Installation and installed-app readback are pending.
+
+Rollback: reinstall the retained 1.1.3 signed installer. Migration f0010 is
+additive, so the old app can leave the new column in place. For a full data
+rollback, close Skim and restore the pre-install database, WAL and SHM together
+from the backup reported by build-install.ps1. Verify the app version, mailbox
+counts and calendar view after restoring. Restoration loses changes since backup.
 
 ## Version 1.1.3 (installed October 7)
 
@@ -338,6 +353,10 @@ Not built:
 13. Nested `type="cite"` blockquotes above other markers are counted by
     `has_fold` but not hidden (D-5e).
 14. `htmlToText` in the rich editor has no node test; it is exercised only in the browser.
+
+18. Google Calendar parity beyond this editor: this-and-following series splits,
+    attachments, room availability, appointment schedules and special event types.
+    Use Open in Google Calendar for these functions.
 
 Upstream:
 
