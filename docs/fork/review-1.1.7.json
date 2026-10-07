@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
-  "project": "C:\\Users\\Patrick\\Projects\\skim-header-polish-20261007",
+  "project": "C:\\Users\\Patrick\\Projects\\skim",
   "task": "skim-117-daily-use-polish",
   "inputs": {
-    "src/App.svelte": "a81173cbb1a05cd14a451292ccc925bec6504e394e28ffca634d350ad4a8c925",
+    "src/App.svelte": "954a3d3caf8709ab28540185c2dde59d23396e3c994bde7b86036e14cd9e96b8",
     "src/components/AttachmentChips.svelte": "1484ceefc9463b09335023ee50568f83c61ba77e804e111ab50c4fd1990ca83c",
     "src/components/CommandPalette.svelte": "59b8bbe50a6e3d89e491e36c7d2d64b82eaaa19c0c6d32de8d1e1f3b000fd712",
     "src/components/ComposeForm.svelte": "26aeb1206cff9d57d132e1ee3a147f082275f5c38d33567b5d9944a4f6663219",
     "src/components/HtmlViewer.svelte": "d14fb97264df3b403b9ef62eefb012f843596ee17c0024c424165028f3f14221",
     "src/components/MessageList.svelte": "af5d7bd028e27ae68f40747f63d09e6e7d213e488617fed9ef4aa12a0b1675cc",
-    "src/components/MessageRow.svelte": "d992af8196f1d4b24c811d5350c6099e82ed7d0a19d6531af731f2ef3287fa22",
+    "src/components/MessageRow.svelte": "1ecac8b03b9d20d03d650f8480c18d136e4044b6961ce590da3a6ad94a7f1107",
     "src/components/ReadingPane.svelte": "8d8968acd4781c6b126c98eeef7136a1e255501df635688f553e1d8855178d5e",
-    "src/components/Titlebar.svelte": "f05cc03941c6c7c34e55c87042d1512421cb51e07ec458b458487a2d06ab54a3",
+    "src/components/Titlebar.svelte": "5deaa1df9de478be2859584c672e0a6b5370dde86fc74d9fc39133562448f482",
     "src/fork/calendar/CalendarView.svelte": "555a629d225d4253a54f5dd55ceb158269a121b51ead64d91eb0a1aa792107c7",
     "src/fork/calendar/EventPanel.svelte": "2f651ee755e9f2b19f0c74a1873cf23ee942a026f8f560d9e39036179cb9064d",
     "src/fork/calendar/EventPreview.svelte": "3f0ab2c17aafcdf1724c4e604cf76f0ea85e5f3efdc4b17dbdc80b4634a5cf27",
-    "src/fork/calendar/MeetNow.svelte": "b51a938814bf2300034130a5c6ed0da7bca6899b91ed49de58150dc363a930c6",
-    "src/fork/calendar/NextEventChip.svelte": "c242fb9766518bd5dd891e75bfe3163cc7f7b8352ebc24ae0c7f4408fe8f27a1",
-    "src/fork/calendar/TitlebarExtras.svelte": "bd68aea5bee6d4eb6b0f53e7a4cdee3e01010313a6c76ea0c23b60e016b95c32",
+    "src/fork/calendar/MeetNow.svelte": "a8fb4e99f48c2ebfbea9a950d63eb4143fda52233b55deacd3b70e20860f65bb",
+    "src/fork/calendar/NextEventChip.svelte": "5ac4d48811b17079c09471ff3b3369c3b7ae7142c85ac7c5fd75f0dfe4c6e26d",
+    "src/fork/calendar/TitlebarExtras.svelte": "72dc33965010ca82fa43f9a08513f615bed4c22bc55a72771b9c6e4b7aa26c14",
     "src/fork/calendar/ec-theme.css": "9ff83303bef160340b51c9dc505aba15f745590d0def329ece3cfe235ec30c30",
     "src/fork/calendar/store.svelte.ts": "edb843d73ba56cd9582aa99d583cf9bfbd0bcf4167ba78ce3734fdec3f0f121c",
     "src/fork/calendar/types.ts": "364cb2597009edf1129bf405c72bc22050fdebf33ba7d64bbe30a51a39631fc0",
@@ -31,19 +31,19 @@
     "src/fork/search/filters.ts": "706dbe72da362be07a9077527e2cf1cd58d8497a12c13acdbb5d24eab32d9833",
     "src/fork/search/query.ts": "94b1ff8929421ccdc03b56ea26c8e8b85dcf7d0857443d5e2eac80e4459258ef",
     "src/fork/sync/SyncStatus.svelte": "70cabfb44358ab93342e570122852e8ff5c042e9248e3075f367aa7ed97cf3f4",
-    "src/fork/sync/api.ts": "72d8f02b61a46c96d20c7602aa4aae7af06176c7017b19b1fbb72e2f313ec732",
-    "src/lib/stores/mail.svelte.ts": "780bd04bddec452a5466adb8a3c261e0420036f2849455f3822ef254a70b1bef",
+    "src/fork/sync/api.ts": "9448cb45d002f958f0f4dd31793c2b729c33a545be264aa1a7e16686e1c3f781",
+    "src/lib/stores/mail.svelte.ts": "cbbaf289c69c4f5490b19ddc4d984f689b405f7a92ca9063fe6836e24345f568",
     "src/styles/tokens.css": "5880bd236a99806d42eba4da3e2d977cf975a9505af4b054f563b9ad79c87ea2",
     "docs/fork/DECISIONS.md": "fedcacbd2fd3d8ed94d6a355b7fa3d3d3d0b57e70e13b854a3f14fcdb9211ea7",
-    "src/fork/attachments/groups.ts": "6ce44094bd244c3cbdb1b493e308bb870aec9139415390818853ecdc3d99f348",
+    "src/fork/attachments/groups.ts": "14fd8c27c15bb0515322cec01b610f33e19dbd0300fa57ed6e05a75794ddf46a",
     "src/fork/calendar/AttachmentLinks.svelte": "3f1263abf030f93ead32989e5a25fa7b915ae3bd4c77e31907589ad8a37d6819",
     "src/fork/calendar/presentation.ts": "a1e53a176288520b7f67f7047e450b3efbec6c604b1c0e72cf96d505657eb4f7",
     "src/fork/compose/Snippets.svelte": "d151c69a8653736524f8e20fcc3693a92607a617bd82b8720cf24d0f8f9823d2",
-    "src/fork/compose/workflow.ts": "f72e7271c0ecaa155d1e16d9b3e6b5476ed7706acf25fb8c73f09558ec7c7c12",
+    "src/fork/compose/workflow.ts": "806411140f5847b85fac06182009f7ff56a329ff1e3a3c60679eb07b818ccf6a",
     "src/fork/deals/CompanyOverview.svelte": "0431595b7ee94d0aae8f61377dac066515c4928b50a5736941760a61b68ff12f",
-    "src/fork/layout/MessageMenu.svelte": "2bb3be6d69e3b589d8edce6dd3344b1e7214287d17b5f82cc55d13c9e7a2af98",
+    "src/fork/layout/MessageMenu.svelte": "7f9b3c0134cc8af3c90877ac229210a856329c617e4078825d9234190183d3a1",
     "src/fork/layout/mail-list.ts": "e28af36358a995114cd6f957bf88f0d370eadc2d0fed5254fec1ae4ecc808b3c",
-    "src/fork/search/HighlightedText.svelte": "e89858ac7efa71fcd5b95a88426de604affe0d717ea38dd3b5d9ab2928f77591",
+    "src/fork/search/HighlightedText.svelte": "c0d7b17fb4d675b0465777e7e211b5fe0aaff9ad20063a34caa02ba75661c8b0",
     "src/fork/search/passages.ts": "eba85606ea9404baea51a2ea6f60add6ca2f66b4751d3f7bf27ebce62a915fe3"
   },
   "reference_files": [
@@ -59,7 +59,7 @@
     "component": "Verified contained logos and fallbacks, scoped Deals forms, exact source links, menu keyboard boundaries, time/Join bounds, attachment errors and draft transition ordering.",
     "screen": "Built-demo renders inspected in Base dark and light at 1600, 1200 and 900 pixels. Header checked to 700 pixels. Teal and amber pairs pass computed rendered contrast in all six themes.",
     "journey": "Shell, Deals, reading/calendar, search/files, compose, navigation and refresh browser suites use fictional data. Delayed and failed saves preserve the draft.",
-    "product": "Preserves Base navigation and manual Deals. Colour is semantic and sparse. Review records agent inspection, not human visual approval. Installation verification is pending."
+    "product": "Preserves Base navigation and manual Deals. Colour is semantic and sparse. Review records agent inspection, not human visual approval. Source3433770 installed as1.1.7. Native checks confirm header,17visible aligned logos, menus, context and editor controls. Refresh continuity across1722samples passed with zero page errors. Private captures remain in Temp. Canonical source/evidence hashes reflect paddy checkout line endings."
   },
   "evidence": [
     {
@@ -104,7 +104,7 @@
     },
     {
       "path": "docs/fork/shots/1.1.7/colour-evidence.json",
-      "sha256": "232d0e38ee0f8570d3e6d4ff29e752b566a94c8bf474e474110c5c1cef331736",
+      "sha256": "7564aec1f0640fa3ecdeb920910bfbb971e8ad1eb4ae0f6317d99d290f344f82",
       "description": "Fictional built-demo evidence: colour-evidence"
     },
     {

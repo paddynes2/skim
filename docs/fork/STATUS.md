@@ -6,7 +6,7 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
-## Version 1.1.7 (verified build, installation pending)
+## Version 1.1.7 (installed October 7)
 
 Patrick requested all ten daily-use improvements in one pass, with parallel builders, consistent company logos and occasional colour. This release preserves the Base direction and manual Deals model.
 
@@ -19,7 +19,17 @@ Patrick requested all ten daily-use improvements in one pass, with parallel buil
 - Calendar improves short/overlapping/all-day events, RSVP states, a second time zone and move feedback. The event editor adds HTTPS attachment and meeting-note links while preserving existing remote attachments.
 - Failed queued mail actions link to cached source messages or existing drafts where resolvable. Missing sources are explicit. Automatic retry remains restricted to read/star flags.
 
-Validation: 544 Rust tests passed, one existing ignored; 67 frontend tests passed; all-target Clippy, Rust formatting, production build and 192 token contrast ratios passed. Svelte check reports zero errors and the existing ComposeForm warning. Browser suites cover both Base themes, 700/900/1200/1600 header widths, reading/calendar views, Deals, exact file sources, save failures and delayed compose transitions. Refresh regression preserves the iframe, document, scroll and geometry. Ten semantic mutations across Deals, calendar, search, attachment grouping and draft transfer failed assertions and were restored byte-for-byte. Test proof and installed readback follow below.
+Validation: 544 Rust tests passed, one existing ignored; 67 frontend tests passed; all-target Clippy, Rust formatting, production build and 192 token contrast ratios passed. Svelte check reports zero errors and the existing ComposeForm warning. Browser suites cover both Base themes, 700/900/1200/1600 header widths, reading/calendar views, Deals, exact file sources, save failures and delayed compose transitions. Refresh regression preserves the iframe, document, scroll and geometry. Ten semantic mutations across Deals, calendar, search, attachment grouping and draft transfer failed assertions and were restored byte-for-byte. 
+`PROVE_TEST: status=PROVEN base=b0276d725541 reverted=111 tests=1 exit_without_fix=1`
+
+The actual-store test and the browser navigation test each produced that verdict in separate runs. With the implementation removed, selection restoration failed and browser scroll changed from 600 to 0. The helper tests have separate semantic mutation evidence; missing-module failures alone are not treated as behavioral proof.
+
+Signed Windows installer built from `3433770`. Installed version 1.1.7, SHA256 `b5c5900986e942e2e6dd953e23a94316f9104f69836859bd5023c5ac7e231ac3`. Pre-install database/WAL/SHM backup: `C:/Users/Patrick/.skim-fork/backups/20261007-144630/`; copied bytes were hash-checked before installation. The first silent installer pass updated the registry but left the old executable; a second pass after complete process exit replaced it, and the binary version/hash were checked directly.
+
+Native installed readback passed: meeting time/Join stay within the titlebar, 17 visible Deals logos align in their identity column, company context loads, all three popup paths preserve the selected email, calendar link controls are present, and queue status reads without error. Six local refresh events plus 40 seconds produced 1,722 samples with zero iframe loads, inserted loading/status rows, missing frames, or movement. The same iframe, document and scroll survived. Zero page errors. Private native screenshots stay in local Temp. Skim is running on Inbox, responding, without the temporary debug port.
+
+Rollback installer: `src-tauri/target/release/bundle/nsis/Skim_1.1.6_x64-setup.exe`. No schema rollback is needed. The package lock keeps the previously vetted dependency versions.
+
 
 Review evidence: review-1.1.7.json, shots/1.1.7, and pending/117-*.md. A second builder review found and fixed context-menu shortcut targeting, native preview shortcut leakage, account snapshot loss, obsolete empty-view cache, original-message file navigation and hidden file-save errors.
 
