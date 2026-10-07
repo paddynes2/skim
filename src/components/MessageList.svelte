@@ -22,6 +22,17 @@
   import ListResizer from "../fork/layout/ListResizer.svelte";
   import { calendar } from "../fork/calendar/store.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listLayout, listWindow } from "../fork/layout/mail-list";
+  import { tick, untrack } from "svelte";
+  import MessageMenu from "../fork/layout/MessageMenu.svelte";
+  import type { ThreadRow } from "../lib/types";
+  let context = $state<{ thread: ThreadRow; x: number; y: number; opener: HTMLElement } | null>(null);
+  function openMenu(event: MouseEvent, thread: ThreadRow) {
+    event.preventDefault();
+    const opener = event.currentTarget as HTMLElement, rect = opener.getBoundingClientRect();
+    context = { thread, x: event.clientX || rect.x + 40, y: event.clientY || rect.y + 20, opener };
+  }
+  function closeMenu() { const opener = context?.opener; context = null; opener?.focus({ preventScroll: true }); }
 
   let windowWidth = $state(1200);
   const maxWidth = $derived(Math.max(300, Math.min(640, windowWidth - 580)));
@@ -106,11 +117,10 @@
   let viewH = $state(0);
   let rowH = $state(76);
 
-  const start = $derived(Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN));
-  const end = $derived(
-    Math.min(mail.threads.length, Math.ceil((scrollTop + viewH) / rowH) + OVERSCAN),
-  );
-  const visible = $derived(mail.threads.slice(start, end));
+  const layout = $derived(listLayout(mail.threads, rowH, !mail.searching && !mail.courtView && prefs.listOrder === "date", nowSecs * 1000));
+  const range = $derived(listWindow(layout.items, scrollTop, viewH, OVERSCAN));
+  const visibleItems = $derived(layout.items.slice(range.start, range.end));
+  const visible = $derived(visibleItems.flatMap(item => item.thread ? [item.thread] : []));
 
   // Measure the row height for the windowing arithmetic. Rows are NOT perfectly
   // uniform — one with an empty snippet is a line shorter — so as different rows
@@ -135,15 +145,16 @@
 
   // A new folder (or grouping mode) is a new list — start it at the top.
   $effect(() => {
-    void mail.selectedFolderId;
-    void mail.groupThreads;
-    if (rowsEl) rowsEl.scrollTop = 0;
-    scrollTop = 0;
+    const revision = mail.listViewRevision;
+    const top = untrack(() => mail.listScrollTop);
+    scrollTop = top;
+    void tick().then(() => { if (rowsEl && revision === mail.listViewRevision) rowsEl.scrollTop = top; });
   });
 
   function onScroll() {
     if (!rowsEl) return;
     scrollTop = rowsEl.scrollTop;
+    mail.listScrollTop = scrollTop;
     if (rowsEl.scrollTop + rowsEl.clientHeight > rowsEl.scrollHeight - 400) {
       if (mail.threads.length >= 100) void mail.loadMoreThreads();
     }
@@ -244,7 +255,7 @@
     {/if}
   </header>
   {#if mail.dealsView}
-    <DealsToolbar onselect={() => {mail.selectedThreadId=null; mail.selectedMessageId=null; if(rowsEl) rowsEl.scrollTop=0; scrollTop=0; void mail.selectFolder(mail.selectedFolderId!);}} onthread={id => {mail.selectedThreadId=id; mail.selectedMessageId=null;}} onevent={(id, startTs) => {calendar.goto(new Date(startTs * 1000)); ui.showCalendar(); calendar.open(id);}} onsearch={query => void mail.enterSearch(query)} />
+    <DealsToolbar onselect={() => {mail.selectedThreadId=null; mail.selectedMessageId=null; if(rowsEl) rowsEl.scrollTop=0; scrollTop=0; void mail.selectFolder(mail.selectedFolderId!);}} onthread={(id, messageId) => {mail.selectedThreadId=id; mail.selectedMessageId=messageId??null;}} onevent={(id, startTs) => {calendar.goto(new Date(startTs * 1000)); ui.showCalendar(); calendar.open(id);}} onsearch={query => void mail.enterSearch(query)} />
   {:else if !mail.courtView}
     <SearchTools query={mail.searchQuery ?? ""} onsearch={query => void mail.enterSearch(query)} />
   {/if}
@@ -269,8 +280,12 @@
         {/if}
       </div>
     {:else}
-      <div class="spacer" style="height: {start * rowH}px"></div>
-      {#each visible as thread (thread.messageId ?? thread.id)}
+      <div class="spacer" style="height: {layout.items[range.start]?.top ?? 0}px"></div>
+      {#each visibleItems as item (item.key)}
+        {#if !item.thread}
+          <div class="date-section">{t(`fork.list.date_${item.bucket}`)}</div>
+        {:else}
+        {@const thread = item.thread}
         {@const court = mail.courtView ? courtOf(thread) : null}
         {@const deal = mail.dealsView ? dealOf(thread) : null}
         <!-- Fork (10): in a court view the row gets its age + reason as an
@@ -279,6 +294,8 @@
         <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:compact={prefs.density === "compact"}>
           <MessageRow
             {thread}
+            companyIdentity={deal !== null}
+            onmenu={openMenu}
             recipientLabel={recipientLabels[recipientKey(thread)] ?? ""}
             selected={mail.groupThreads
               ? mail.selectedThreadId === thread.id
@@ -296,15 +313,17 @@
             </div>
           {:else if deal}
             <div class="court-badge-slot deal-logo-slot">
-              <DealBadge {deal} domain={(thread as DealRow).dealDomain ?? null} />
+              <DealBadge {deal} domain={(thread as DealRow).dealDomain ?? null} onclick={() => dealsStore.openCompany(deal)} />
             </div>
           {/if}
         </div>
+        {/if}
       {/each}
-      <div class="spacer" style="height: {(mail.threads.length - end) * rowH}px"></div>
+      <div class="spacer" style="height: {layout.height - (layout.items[range.end]?.top ?? layout.height)}px"></div>
     {/if}
   </div>
 </section>
+{#if context}<MessageMenu thread={context.thread} x={context.x} y={context.y} onclose={closeMenu} />{/if}
 
 <style>
   .list {
@@ -486,17 +505,26 @@
     padding-right: 48px;
   }
   .court-wrap .deal-logo-slot {
-    width: 24px;
-    bottom: 7px;
+    pointer-events: auto;
+    width: 28px;
+    left: 26px;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
   }
   .court-wrap.compact .deal-logo-slot {
+    --deal-logo-size: 24px;
     width: 24px;
     bottom: auto;
+    left: 26px;
+    right: auto;
   }
   .court-wrap.deal :global(.snippet),
   .court-wrap.deal :global(.subject) {
-    padding-right: 32px;
+    padding-right: 0;
   }
+  .date-section { height: 28px; box-sizing: border-box; display: flex; align-items: center; padding: 0 24px; font-size: 11px; font-weight: 600; color: var(--text-dim); background: var(--surface); border-bottom: 1px solid var(--hairline); }
   /* One line has room for the age only; the reason stays in the tooltip. */
   .court-wrap.compact :global(.court-badge .sep),
   .court-wrap.compact :global(.court-badge .why) {

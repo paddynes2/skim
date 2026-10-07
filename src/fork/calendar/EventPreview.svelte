@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { t } from "../../lib/i18n/index.svelte";
+  import AttachmentLinks from "./AttachmentLinks.svelte";
+  import { eventState } from "./presentation";
   import { calendar } from "./store.svelte";
   import { fmtWhen, parseAttendees, calendarErrorText } from "./guests";
   import type { EventRow } from "./types";
@@ -19,6 +21,7 @@
   <div class="body">
     <h2 bind:this={heading} tabindex="-1">{row.summary || t("fork.cal.untitled")}</h2>
     <p class="when">{fmtWhen(row)}</p>
+    <p class="event-state">{t(`fork.cal.state_${eventState(row)}`)}</p>
     {#if row.time_zone}<p class="muted">{row.time_zone}</p>{/if}
     <p class="sync" class:failed={sync?.status === "failed"}>{t(sync?.status === "failed" ? "fork.cal.sync_failed" : sync?.status === "pending" || row.local_only ? "fork.cal.sync_pending" : calendar.syncKnown(row) ? "fork.cal.synced" : "fork.cal.sync_unknown")}</p>
     {#if sync?.status === "failed"}<p class="muted">{sync.message}</p><button class="btn" onclick={retry}>{t("fork.cal.retry")}</button>{/if}
@@ -27,6 +30,7 @@
     {#if row.hangout_link}<button class="btn primary" onclick={() => openUrl(row.hangout_link!)}>{t("fork.cal.join")}</button>{/if}
     {#if parseAttendees(row).length}<h3>{t("fork.cal.guests")}</h3><ul>{#each parseAttendees(row) as guest}<li><span>{guest.displayName || guest.email}</span><small>{t(`fork.cal.rsvp_${guest.responseStatus ?? "needsAction"}`)}</small></li>{/each}</ul>{/if}
     {#if row.description}<h3>{t("fork.cal.description")}</h3><p class="description">{row.description}</p>{/if}
+    {#if row.options?.attachments?.length}<AttachmentLinks value={row.options.attachments} />{/if}
     {#if error}<p class="failed" role="alert">{error}</p>{/if}
   </div>
   <footer><button class="btn primary" onclick={() => calendar.edit(row.id)}>{t(calendar.canEdit(row) ? "fork.cal.edit_event" : "fork.cal.event_details")}</button><button class="btn" disabled={!calendar.connected} onclick={() => calendar.duplicate(row)}>{t("fork.cal.duplicate")}</button>{#if row.html_link}<button class="google" onclick={() => openUrl(row.html_link!)}>{t("fork.cal.open_in_google")}</button>{/if}</footer>

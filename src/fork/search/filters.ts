@@ -1,20 +1,20 @@
 import { chipsOf, tokenize } from "./query";
-export interface SearchFilters { sender: string; company: string; after: string; before: string; attachments: boolean }
-const managed = new Set(["from", "company", "after", "before", "has"]);
+export interface SearchFilters { sender: string; company: string; after: string; before: string; attachments: boolean; filename: string }
+const managed = new Set(["from", "company", "after", "before", "has", "filename"]);
 export function readFilters(query: string): SearchFilters {
   const chips = chipsOf(query).filter(c => !c.negated);
   const value = (key: string) => chips.filter(c => c.key === key).at(-1)?.value ?? "";
-  return {sender:value("from"),company:value("company"),after:value("after"),before:value("before"),attachments:chips.some(c=>c.key==="has")};
+  return {sender:value("from"),company:value("company"),after:value("after"),before:value("before"),attachments:chips.some(c=>c.key==="has"),filename:value("filename")};
 }
 export function applyFilters(query: string, filters: SearchFilters): string {
   const before=readFilters(query);
   const changed=new Set<string>();
-  for(const [key,field] of [["from","sender"],["company","company"],["after","after"],["before","before"],["has","attachments"]] as const) {
+  for(const [key,field] of [["from","sender"],["company","company"],["after","after"],["before","before"],["has","attachments"],["filename","filename"]] as const) {
     if(filters[field]!==before[field]) changed.add(key);
   }
   const removed = new Set(chipsOf(query).filter(c => !c.negated && managed.has(c.key) && changed.has(c.key)).map(c=>c.token));
   const terms=tokenize(query).filter(token=>!removed.has(token));
-  for(const [key,value] of [["from",filters.sender],["company",filters.company],["after",filters.after],["before",filters.before]]) {
+  for(const [key,value] of [["from",filters.sender],["company",filters.company],["after",filters.after],["before",filters.before],["filename",filters.filename]]) {
     if(!changed.has(key)) continue;
     const clean=value.trim().replace(/["\r\n]/g," ").trim();
     if(clean) terms.push(`${key}:"${clean}"`);

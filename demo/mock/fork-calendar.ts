@@ -140,6 +140,12 @@ let EVENTS: any[] = [
     hangout_link: "https://meet.google.com/kln-mnop-qrs",
   }),
 ];
+if (globalThis.localStorage?.getItem("skimdemo.fork_calendar_dense") === "1") {
+  EVENTS.push(...Array.from({length: 7}, (_, i) => row({id: 970 + i, summary: `Project milestone ${i + 1}`, all_day:true, start_date:dateOf(2), end_date:dateOf(3), start_ts:at(2,0), end_ts:at(3,0)})));
+  EVENTS.push(row({id:980,summary:"Quick check-in",start_ts:at(2,10),end_ts:at(2,10,15),self_response:"accepted"}));
+  EVENTS.push(row({id:981,summary:"Cancelled workshop",start_ts:at(2,10),end_ts:at(2,11),status:"cancelled"}));
+  EVENTS.push(row({id:982,summary:"Product review",start_ts:at(2,10,15),end_ts:at(2,11),self_response:"tentative"}));
+}
 let nextId = 950;
 
 function status(accountId: string) {

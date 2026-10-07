@@ -33,7 +33,6 @@
   import { SCHEDULED_FOLDER_ID } from "./fork/compose/api";
   import { dealsStore } from "./fork/deals/store.svelte";
   import CalendarView from "./fork/calendar/CalendarView.svelte";
-  import TitlebarExtras from "./fork/calendar/TitlebarExtras.svelte";
   import SlotsPopover from "./fork/slots/SlotsPopover.svelte";
   import { calendar } from "./fork/calendar/store.svelte";
   import { undo } from "./fork/stores/undo.svelte";
@@ -327,6 +326,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    if (e.defaultPrevented || document.querySelector("dialog[open]")) return;
     if (mail.accounts.length === 0) return;
 
     // Letter shortcuts match the physical key (e.code), not the produced
@@ -506,7 +506,6 @@
 
 <div class="app">
   <Titlebar />
-  <TitlebarExtras />
   {#if ready}
     {#if !needsOnboarding}
       <main class="panes">

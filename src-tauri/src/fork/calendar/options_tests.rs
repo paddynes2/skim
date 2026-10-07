@@ -65,3 +65,32 @@ fn invalid_advanced_fields_cannot_enter_the_queue() {
         assert!(commands::local_row_from_input(1, &input).is_err());
     }
 }
+
+#[test]
+fn attachment_links_roundtrip_and_keep_remote_files_on_addition() {
+    use super::options::{merge_attachment_additions, EventOptions};
+    let mut options: EventOptions = serde_json::from_value(serde_json::json!({"attachments":[{"fileUrl":"https://docs.google.com/document/d/notes/edit","title":"Meeting notes","fileId":"notes"}]})).unwrap();
+    options.validate().unwrap();
+    let encoded = serde_json::to_string(&options).unwrap();
+    let restored: EventOptions = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(restored, options);
+    let remote = serde_json::json!([{"fileUrl":"https://drive.google.com/file/d/other/view","title":"Added elsewhere"}]);
+    let requested = serde_json::to_value(options.attachments.as_ref().unwrap()).unwrap();
+    let combined = merge_attachment_additions(&remote, &requested).unwrap();
+    assert_eq!(combined.as_array().unwrap().len(), 2);
+    assert_eq!(combined[0]["title"], "Added elsewhere");
+    assert_eq!(
+        merge_attachment_additions(&combined, &requested).unwrap(),
+        combined
+    );
+    options.attachments.as_mut().unwrap()[0].file_url = "http://example.com/file".into();
+    assert!(options.validate().is_err());
+    options.attachments.as_mut().unwrap()[0].file_url = "javascript:alert(1)".into();
+    assert!(options.validate().is_err());
+    options.attachments.as_mut().unwrap()[0].file_url =
+        "https://user:secret@example.com/file".into();
+    assert!(options.validate().is_err());
+    let unchanged = EventOptions::default();
+    options.merge(&unchanged);
+    assert_eq!(options.attachments.as_ref().unwrap().len(), 1);
+}

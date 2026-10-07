@@ -9,3 +9,5 @@ What is open now is in `../STATUS.md`. Decisions from these files were copied
 into `../DECISIONS.md`, and touch rows into `../TOUCHLIST.md`.
 
 Merged handbacks: `10-ui.md`, `10.md`, `11.md`, `12.md`, `3.4.md`, `4.md`, `5.md`, `6.5.md`, `6.md`, `7-ui.md`, `7.md`, `9.md`, `palette.md`, `settings.md`.
+
+Version 1.1.7 handbacks merged: `117-deals.md`, `117-calendar-reading.md`, `117-search-compose.md`; their strings and registrations are integrated. Mutation records accompany the handbacks. The search/compose harness and string map retain their initial 116 filename.

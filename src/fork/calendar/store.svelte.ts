@@ -385,7 +385,7 @@ export const calendar = {
     return row;
   },
   /** False when cancelled at the guests prompt. Throws on a backend error. */
-  async patch(id: number, input: EventInput): Promise<boolean> {
+  async patch(id: number, input: EventInput, onQueued?: (updates: SendUpdates, guestCount: number) => void): Promise<boolean> {
     const row = (input.series || input.following) ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
     const own = ownEmails();
     const reach = new Set<string>();
@@ -394,6 +394,7 @@ export const calendar = {
     const su = await askGuests("update", reach.size);
     if (su === null) return false;
     const updated = await calendarApi.patch(id, input, su);
+    onQueued?.(su, reach.size);
     upsert(updated);
     void this.refreshSync();
     void refreshUpcoming();

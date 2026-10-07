@@ -68,6 +68,7 @@ pub struct Filters {
     pub to: Vec<Term>,
     pub cc: Vec<Term>,
     pub subject: Vec<Term>,
+    pub filename: Vec<Term>,
     /// `is:unread` → `Some(true)`, `is:read` → `Some(false)`.
     pub unread: Option<bool>,
     /// `is:starred` → `Some(true)`, `is:unstarred` → `Some(false)`.
@@ -247,6 +248,10 @@ pub fn parse_at(input: &str, now: DateTime<Local>) -> ParsedQuery {
                 f.cc.push(Term::new(value, negated));
                 true
             }
+            "filename" => {
+                f.filename.push(Term::new(value, negated));
+                true
+            }
             "subject" => {
                 f.subject.push(Term::new(value, negated));
                 true
@@ -392,6 +397,11 @@ pub fn filter_sql(f: &Filters) -> (String, Vec<SqlValue>) {
         clauses.push(format!("{not}(COALESCE(m.subject,'') LIKE ?)"));
         params.push(SqlValue::Text(like(&t.value)));
     }
+    for term in &f.filename {
+        let not = if term.negated { "NOT " } else { "" };
+        clauses.push(format!("{not}EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.is_inline = 0 AND instr(lower(COALESCE(a.filename,'')), lower(?)) > 0)"));
+        params.push(SqlValue::Text(term.value.clone()));
+    }
     match &f.place {
         Some(Place::Role(role)) => {
             clauses.push("m.folder_id IN (SELECT id FROM folders WHERE role = ?)".into());
@@ -496,24 +506,24 @@ pub fn search_threads(
          SELECT t.id, m.from_name, m.from_addr, m.subject, m.snippet, m.date,
                 (NOT EXISTS (SELECT 1 FROM messages m3
                              WHERE m3.thread_id = t.id AND m3.is_read = 0)),
-                t.starred, max(m2.has_attachments), t.message_count, t.account_id
+                t.starred, max(m2.has_attachments), t.message_count, t.account_id, m.id
          FROM threads t
          JOIN hit h ON h.thread_id = t.id
          JOIN messages m ON m.id = h.id
          JOIN messages m2 ON m2.thread_id = t.id
-         WHERE h.date = (SELECT max(h2.date) FROM hit h2 WHERE h2.thread_id = t.id)
+         WHERE h.id = (SELECT h2.id FROM hit h2 WHERE h2.thread_id = t.id ORDER BY h2.date DESC, h2.id DESC LIMIT 1)
          GROUP BY t.id
          ORDER BY m.date DESC, t.id DESC
          LIMIT ? OFFSET ?"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt
+    let mut rows = stmt
         .query_map(rusqlite::params_from_iter(params.iter()), |r| {
             let from_name: Option<String> = r.get(1)?;
             let from_addr: Option<String> = r.get(2)?;
             Ok(ThreadRow {
                 id: r.get(0)?,
-                message_id: None,
+                message_id: Some(r.get(11)?),
                 account_id: r.get(10)?,
                 from_name: from_name
                     .filter(|s| !s.is_empty())
@@ -530,7 +540,81 @@ pub fn search_threads(
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    for row in &mut rows {
+        row.snippet = matching_passage(conn, row.message_id.unwrap_or_default(), parsed)?;
+    }
     Ok(rows)
+}
+
+/// The FTS index is contentless. Read cached source text to show the matching passage.
+pub fn matching_passage(
+    conn: &rusqlite::Connection,
+    message_id: i64,
+    parsed: &ParsedQuery,
+) -> rusqlite::Result<String> {
+    let (subject, snippet, text, html): (String, String, String, String) = conn.query_row(
+        "SELECT COALESCE(m.subject,''),COALESCE(m.snippet,''),COALESCE(b.body_text,''),COALESCE(b.body_html,'') FROM messages m LEFT JOIN message_bodies b ON b.message_id=m.id WHERE m.id=?1",
+        [message_id], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)))?;
+    if !parsed.filters.filename.is_empty() {
+        let mut stmt=conn.prepare("SELECT filename FROM attachments WHERE message_id=?1 AND is_inline=0 AND filename IS NOT NULL")?;
+        let names = stmt
+            .query_map([message_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let matches: Vec<_> = names
+            .into_iter()
+            .filter(|name| {
+                parsed.filters.filename.iter().any(|term| {
+                    !term.negated && name.to_lowercase().contains(&term.value.to_lowercase())
+                })
+            })
+            .collect();
+        if !matches.is_empty() {
+            return Ok(format!("Attachment: {}", matches.join(", ")));
+        }
+    }
+    let body = if text.is_empty() {
+        crate::mail::parse::html_to_text(&html)
+    } else {
+        text
+    };
+    let terms: Vec<String> = parsed
+        .text
+        .split_whitespace()
+        .map(|term| term.replace('"', "").to_lowercase())
+        .filter(|term| !term.is_empty())
+        .collect();
+    for source in [&body, &subject, &snippet] {
+        let clean = source.split_whitespace().collect::<Vec<_>>().join(" ");
+        let lower = clean.to_lowercase();
+        if let Some(at) = terms.iter().filter_map(|term| lower.find(term)).min() {
+            let chars: Vec<char> = clean.chars().collect();
+            let pos = lower[..at].chars().count().min(chars.len());
+            let from = pos.saturating_sub(60);
+            let to = (from + 220).min(chars.len());
+            return Ok(format!(
+                "{}{}{}",
+                if from > 0 { "..." } else { "" },
+                chars[from..to].iter().collect::<String>(),
+                if to < chars.len() { "..." } else { "" }
+            ));
+        }
+    }
+    Ok(snippet)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchCoverage {
+    pub cached_messages: i64,
+    pub total_messages: i64,
+    pub attachment_messages: i64,
+}
+#[tauri::command]
+pub async fn fork_search_coverage(
+    state: State<'_, AppState>,
+    account_id: Option<String>,
+) -> Result<SearchCoverage> {
+    state.db.read("fork_search_coverage",move|conn| conn.query_row("SELECT count(*),sum(CASE WHEN body_state=1 THEN 1 ELSE 0 END),sum(CASE WHEN has_attachments=1 AND body_state=1 THEN 1 ELSE 0 END) FROM messages WHERE (?1 IS NULL OR account_id=?1)",[account_id],|r|Ok(SearchCoverage{total_messages:r.get(0)?,cached_messages:r.get::<_,Option<i64>>(1)?.unwrap_or(0),attachment_messages:r.get::<_,Option<i64>>(2)?.unwrap_or(0)}))).await
 }
 
 // ---- tests -------------------------------------------------------------------
@@ -1218,6 +1302,50 @@ mod tests {
             conn.execute("UPDATE messages SET to_addrs='[]',cc_addrs='[{\"addr\":\"c@child.filter-test.example\"}]' WHERE id=(SELECT min(id) FROM messages)", [])?;
             assert_eq!(run(conn, "company:filter-test.example")?.len(), 1);
             assert!(p("-company:filter-test.example").filters.company.is_empty());
+            Ok(())
+        }).unwrap();
+    }
+
+    #[test]
+    fn cached_search_returns_the_matching_passage_and_exact_older_message() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn)?;
+            let id: i64 = conn.query_row(
+                "SELECT id FROM messages WHERE subject='Q3 launch checklist'",
+                [],
+                |r| r.get(0),
+            )?;
+            let body = format!(
+                "{} The zephyr agreement is ready for signature. {}",
+                "Opening paragraph. ".repeat(35),
+                "Other details. ".repeat(30)
+            );
+            crate::db::bodies::set_body(conn, id, None, Some(&body), "Opening paragraph", &[])?;
+            let rows = run(conn, "zephyr")?;
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].message_id, Some(id));
+            assert!(rows[0].snippet.contains("zephyr agreement"));
+            assert!(rows[0].snippet.chars().count() < 250);
+            assert_ne!(rows[0].snippet, "Opening paragraph");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn filename_search_uses_cached_literal_names_and_excludes_inline_parts() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn|{
+            seed(conn)?;
+            let id:i64=conn.query_row("SELECT min(id) FROM messages",[],|r|r.get(0))?;
+            conn.execute("INSERT INTO attachments(message_id,part_id,filename,mime_type,size,is_inline) VALUES(?1,'1','Budget 100%.pdf','application/pdf',20,0),(?1,'2','signature.png','image/png',10,1)",[id])?;
+            let rows=run(conn,"filename:\"BUDGET 100%\"")?;
+            assert_eq!(rows.len(),1);assert_eq!(rows[0].message_id,Some(id));assert_eq!(rows[0].snippet,"Attachment: Budget 100%.pdf");
+            assert!(run(conn,"filename:signature")?.is_empty());
+            assert!(run(conn,"filename:100_")?.is_empty());
+            assert!(run(conn,"filename:uncached")?.is_empty());
+            assert!(run(conn,"-filename:budget")?.iter().all(|row|row.message_id!=Some(id)));
             Ok(())
         }).unwrap();
     }

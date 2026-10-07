@@ -1,0 +1,64 @@
+import {chromium} from "playwright";
+import assert from "node:assert/strict";
+import {mkdirSync} from "node:fs";
+const browser=await chromium.launch();
+const capture=process.env.SKIM_CAPTURE==="1";
+try{
+ for(const theme of ["base-dark","base-light"]){
+  const page=await browser.newPage({viewport:{width:1600,height:1000}});page.setDefaultTimeout(12000);
+  const errors=[];page.on("pageerror",e=>errors.push(String(e)));
+  await page.addInitScript(theme=>{localStorage.setItem("skimdemo.theme",theme);localStorage.setItem("skimdemo.fork_thread_multi","1");},theme);
+  await page.route("https://www.google.com/s2/favicons**",route=>route.request().url().includes("acme-partners")?route.abort():route.fulfill({contentType:"image/svg+xml",body:'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="white"/><path d="M10 50V14l44 36V14" stroke="#315ccd" stroke-width="7" fill="none"/></svg>'}));
+  await page.goto(process.env.SKIM_DEMO_URL??"http://127.0.0.1:1426/");
+  await page.locator(".sidebar .item",{hasText:"Deals"}).click();
+  await page.locator(".deal-logo-slot img.loaded").first().waitFor();
+  await page.locator('.deal-logo-slot button[aria-label="Acme Partners"] .initials').waitFor();
+  assert.equal(await page.locator('.deal-logo-slot button[aria-label="Acme Partners"] img').count(),0);
+  const boxes=await page.locator(".deal-logo-slot .deal-badge").evaluateAll(nodes=>nodes.map(n=>({w:n.getBoundingClientRect().width,h:n.getBoundingClientRect().height,label:n.getAttribute('aria-label')})));
+  assert.ok(boxes.length>=3&&boxes.every(b=>b.w===28&&b.h===28&&b.label));
+  await page.locator(".sidebar .item",{hasText:"Inbox"}).click();
+  await page.locator(".row",{hasText:"Q3 launch"}).first().click();await page.locator(".pane iframe").waitFor();
+  await page.getByRole("button",{name:"Deal: Northwind",exact:true}).click();
+  const form=page.locator(".tools .menu");await form.waitFor();
+  await form.getByLabel("Include in this deal").selectOption("person");await form.locator(".preview").getByText(/cached conversations/).waitFor();
+  assert.match(await form.locator(".preview").innerText(),/^[1-9]/);
+  await form.getByLabel("Include in this deal").selectOption("conversation");
+  await form.getByLabel("Deal",{exact:true}).fill("Manual Review");
+  await form.locator(".preview").getByText("1 cached conversations will belong to this deal.",{exact:true}).waitFor();
+  await form.getByRole("button",{name:"Add",exact:true}).click();await form.waitFor({state:"detached"});
+  await page.getByRole("button",{name:"Deal: Manual Review",exact:true}).waitFor();
+  await page.getByRole("button",{name:"Deal: Manual Review",exact:true}).click();await form.waitFor();
+  await page.keyboard.press("Escape");await form.waitFor({state:"detached"});
+  assert.equal(await page.locator(".pane iframe").count(),1,"Escape keeps the selected conversation");
+  await page.locator(".sidebar .item",{hasText:"Deals"}).click();
+  await page.locator(".deal-tools").getByLabel("Company",{exact:true}).selectOption("Manual Review");
+  await page.locator(".deal-tools").getByRole("button",{name:"Overview",exact:true}).click();
+  const overview=page.locator(".company-overview");await overview.getByRole("button",{name:"Conversations (1)",exact:true}).waitFor();
+  await overview.locator("summary").filter({hasText:"Private notes"}).click();
+  await overview.getByRole("textbox",{name:"Private notes",exact:true}).fill("Local handoff note for the fictional company.");
+  await overview.getByRole("button",{name:"Save notes",exact:true}).click();await overview.getByRole("status").getByText("Saved",{exact:true}).waitFor();
+  await overview.getByRole("button",{name:"Attachments",exact:true}).click();
+  await overview.getByLabel("Current document",{exact:true}).selectOption("90001");
+  await overview.locator(".pinned-file").getByText("launch-checklist.pdf",{exact:true}).waitFor();
+  await overview.locator(".pinned-file").click();
+  await page.waitForFunction(()=>document.querySelector(".message[data-message-id]")?.getAttribute("data-message-id")==="1011");
+  assert.equal(await page.locator(".message[data-message-id]").count(),1,"Pinned file opens exact source 1011, before the newer reply 1019");
+  await overview.locator(".sources button").first().click();
+  assert.equal(await page.locator(".message[data-message-id]").getAttribute("data-message-id"),"1011","Original email opens the exact source");
+  if(capture){mkdirSync("docs/fork/shots/1.1.7",{recursive:true});await page.screenshot({path:`docs/fork/shots/1.1.7/company-${theme}.png`});}
+  await page.locator(".deal-tools").getByRole("button",{name:"Overview",exact:true}).click();
+  await page.locator(".deal-tools").getByRole("button",{name:"Overview",exact:true}).click();
+  await overview.locator(".pinned-file").getByText("launch-checklist.pdf",{exact:true}).waitFor();
+  await overview.locator("summary").filter({hasText:"Private notes"}).click();
+  assert.equal(await overview.getByRole("textbox",{name:"Private notes",exact:true}).inputValue(),"Local handoff note for the fictional company.");
+  await page.locator(".row",{hasText:"Q3 launch"}).first().click();
+  await page.getByRole("button",{name:"Deal: Manual Review",exact:true}).click();
+  await form.getByRole("button",{name:"Exclude this conversation from Deals",exact:true}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('.list button.row').length===0);
+  await page.locator(".sidebar .item",{hasText:"Inbox"}).click();await page.locator(".row",{hasText:"Q3 launch"}).first().click();
+  await page.getByRole("button",{name:"Add to Deals",exact:true}).click();
+  await form.getByRole("button",{name:"Restore automatic matching for this conversation",exact:true}).click();
+  await page.getByRole("button",{name:"Deal: Manual Review",exact:true}).waitFor();
+  assert.deepEqual(errors,[]);await page.close();console.log(`${theme}: logos/failure, scoped count/apply, Escape, notes/pin reopen, exclude/restore passed`);
+ }
+}finally{await browser.close();}

@@ -39,6 +39,9 @@
     font-size: 12px;
     font-weight: 600;
     background: var(--surface);
+    flex-shrink: 0;
+    white-space: nowrap;
+    line-height: 1;
   }
   .meet:hover {
     background: var(--hover);
@@ -47,5 +50,9 @@
   .meet.busy {
     opacity: 0.6;
     cursor: progress;
+  }
+  @media (max-width: 1050px) {
+    .label { display: none; }
+    .meet { width: 28px; padding: 0; justify-content: center; }
   }
 </style>

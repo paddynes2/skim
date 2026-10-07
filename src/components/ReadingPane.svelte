@@ -23,6 +23,8 @@
   import DealTool from "../fork/deals/DealTool.svelte";
 
   let detail = $state<ThreadDetail | null>(null);
+  let moreOpen = $state(false);
+  let moreMenu = $state<HTMLDetailsElement>();
   let detailLoading = $state(false);
   let detailError = $state("");
   let threadSeq = 0;
@@ -216,6 +218,7 @@
   // Open a different message from the chain. The AI target follows, so the dock
   // shows that message's chat (usually none, until it is asked something).
   function setFocus(id: number) {
+    if (!conversation) mail.selectedMessageId = id;
     expanded = { ...expanded, [id]: true };
     if (id === focusedId) return;
     focusedId = id;
@@ -549,6 +552,8 @@
   });
 </script>
 
+<svelte:window onkeydowncapture={(e) => { if ((moreOpen || moreMenu?.open) && e.key === "Escape") { moreOpen = false; if (moreMenu) moreMenu.open = false; e.preventDefault(); e.stopImmediatePropagation(); } }} />
+
 <section class="pane">
   {#if !detail}
     {#if ui.temperature === "warm" && mail.selectedThreadId === null}
@@ -595,20 +600,9 @@
           <kbd>E</kbd>
         </button>
       {/if}
-      <button class="tool" onclick={remove} title={`${t("reading.delete")}  Del`}>
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.5 9.5h6l.5-9.5M6.7 6.5v5M9.3 6.5v5" /></svg>
-        <kbd>Del</kbd>
-      </button>
-      <button class="tool" onclick={reportSpam} title={`${t("reading.spam")}  !`}>
-        <!-- Warning octagon: junk / report spam. -->
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5.4 1.8h5.2l3.6 3.6v5.2l-3.6 3.6H5.4L1.8 10.6V5.4L5.4 1.8z" /><path d="M8 4.6v4M8 11.1v.1" /></svg>
-        <kbd>!</kbd>
-      </button>
-      <button class="tool" onclick={openMove} title={`${t("reading.move")}  V`}>
-        <!-- Folder with an arrow going in: file this somewhere. -->
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M1.5 3.5h4l1.5 2h7.5v7h-13v-9z" /><path d="M8 7.5v3.5M6.4 9.4L8 11l1.6-1.6" /></svg>
-        <kbd>V</kbd>
-      </button>
+
+
+
       <button class="tool" class:starred={anyStarred} onclick={toggleStar} title={`${anyStarred ? t("reading.unstar") : t("reading.star")}  S`}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill={anyStarred ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.2"><path d="M8 1.5l2 4.1 4.5.6-3.3 3.2.8 4.5L8 11.8l-4 2.1.8-4.5L1.5 6.2 6 5.6 8 1.5z" /></svg>
         <kbd>S</kbd>
@@ -623,6 +617,7 @@
         {/if}
         <kbd>U</kbd>
       </button>
+      <details class="reading-more" bind:this={moreMenu} bind:open={moreOpen}><summary>{t("fork.reading.more")}</summary><div class="more-menu"><button onclick={() => { moreOpen = false; openMove(); }}>{t("reading.move")}<kbd>V</kbd></button><button onclick={() => { moreOpen = false; reportSpam(); }}>{t("reading.spam")}<kbd>!</kbd></button><button onclick={() => { moreOpen = false; remove(); }}>{t("reading.delete")}<kbd>Del</kbd></button></div></details>
       {#if mail.selectedThreadId !== null}
         {#key mail.selectedThreadId}
           <DealTool threadId={mail.selectedThreadId} mode="tools" />
@@ -638,17 +633,15 @@
         {/key}
       {/if}
 
-      {#key detail.id}<ConversationTools messages={detail.messages} {bodies} loading={bulkLoading} onload={() => void loadRemaining()} onselect={setFocus} />{/key}
+      {#key detail.id}<ConversationTools messages={detail.messages} {bodies} loading={bulkLoading} onload={() => void loadRemaining()} onselect={setFocus} onexpand={conversation ? expandAll : undefined} oncollapse={conversation ? collapseAll : undefined} />{/key}
       {#if detailLoading}<div class="refresh-note" role="status">{t("fork.reading.refreshing")}</div>{/if}
       {#if detailError}<div class="refresh-error" role="alert">{detailError}<button onclick={() => loadThread(detail!.id)}>{t("reading.retry")}</button></div>{/if}
       {#if conversation}
-        <div class="conversation-heading"><span>{t("fork.reading.message_count", { count: ordered.length })}</span>{#if ordered.length > 1}<div><button onclick={expandAll}>{t("fork.reading.expand_all")}</button><button onclick={collapseAll}>{t("fork.reading.collapse_all")}</button></div>{/if}</div>
         <div class="convo">
           {#each ordered as m, i (m.id)}
             {#if i === 1}<div class="history-label">{t("fork.reading.history", { n: ordered.length - 1 })}</div>{/if}
             {#if expanded[m.id]}
               <div class="focused-msg" class:not-first={i > 0} class:reply-target={m.id === focused?.id}>
-                <div class="message-controls"><button class:chosen={m.id === focused?.id} onclick={() => setFocus(m.id)}>{t(m.id === focused?.id ? "fork.reading.reply_target" : "fork.reading.select_for_reply")}</button><button disabled={m.id === inlineMessageId && inlineReply.draftId !== null && inlineReply.threadId === detail.id} onclick={() => collapseMessage(m.id)} aria-label={t("fork.reading.collapse_message")}>{t("fork.reading.collapse_message")}</button></div>
                 {@render messageBlock(m, bodies[m.id])}
                 {#if m.id === inlineMessageId}{@render inlineReplySlot()}{/if}
               </div>
@@ -726,12 +719,13 @@
       <span class="avatar">{initial(message.from.name ?? message.from.addr)}</span>
       <div class="who">
         <div class="from">
-          {message.from.name ?? message.from.addr}
-          <span class="addr">&lt;{message.from.addr}&gt;</span>
+          {#if conversation}<button class="sender-select" class:selected={message.id === focused?.id} onclick={() => setFocus(message.id)} title={t(message.id === focused?.id ? "fork.reading.reply_target" : "fork.reading.select_for_reply")}>{isOutgoing(message) ? t("reading.you") : message.from.name ?? message.from.addr}</button>{:else}{message.from.name ?? message.from.addr}{/if}
+          <span class="addr" title={message.from.addr}>&lt;{message.from.addr}&gt;</span>
         </div>
-        <div class="microlabel">{recipients(message)}</div>
+        <details class="recipients"><summary>{t("fork.reading.to_label")} {recipients(message)}</summary><div>{#each message.to as person}<p><span>{t("fork.reading.to_label")}</span>{person.name ? `${person.name} <${person.addr}>` : person.addr}</p>{/each}{#each message.cc as person}<p><span>Cc</span>{person.name ? `${person.name} <${person.addr}>` : person.addr}</p>{/each}</div></details>
       </div>
-      <span class="date microlabel">{formatFull(message.date)}</span>
+      <time class="date" datetime={new Date(message.date * 1000).toISOString()} title={new Date(message.date * 1000).toLocaleString(getLocale(), {dateStyle:"full",timeStyle:"short"})}>{formatFull(message.date)}</time>
+      {#if conversation}<button class="collapse-message" disabled={message.id === inlineMessageId && inlineReply.draftId !== null && inlineReply.threadId === detail?.id} onclick={() => collapseMessage(message.id)} aria-label={t("fork.reading.collapse_message")} title={t("fork.reading.collapse_message")}>&minus;</button>{/if}
     </div>
 
     {#if offerTranslate || message.canUnsubscribe}
@@ -901,12 +895,14 @@
 {/snippet}
 
 <style>
+  .reading-more { position:relative; font-size:12px; color:var(--text-dim); }.reading-more summary { cursor:pointer; padding:6px 9px; border-radius:var(--radius-s); list-style:none; }.reading-more summary:hover { background:var(--hover); }.more-menu { position:absolute; right:0; top:100%; width:190px; padding:5px; z-index:25; border:1px solid var(--hairline-strong); border-radius:var(--radius-m); background:var(--surface-raised); box-shadow:var(--shadow-pop); }.more-menu button { display:flex; justify-content:space-between; width:100%; padding:9px; text-align:left; border-radius:var(--radius-s); }.more-menu button:hover { background:var(--hover); }
+
   .body-skeleton { display: grid; gap: 10px; margin-top: 18px; max-width: 620px; }.body-skeleton span { height: 10px; border-radius: 3px; background: var(--hairline); }.body-skeleton span:nth-child(2) { width: 90%; }.body-skeleton span:nth-child(3) { width: 65%; }
   .body-skeleton { display: grid; gap: 10px; margin-top: 18px; max-width: 620px; }.body-skeleton span { height: 10px; border-radius: 3px; background: var(--hairline); }.body-skeleton span:nth-child(2) { width: 90%; }.body-skeleton span:nth-child(3) { width: 65%; }
-  .conversation-heading, .message-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--text-dim); }
-  .conversation-heading { margin: 12px 0; }.conversation-heading div { display: flex; gap: 16px; }.conversation-heading button:hover, .message-controls button:hover { color: var(--text); }
-  .message-controls button:disabled { opacity: .4; cursor: default; }
-  .message-controls { padding: 8px 0 0; }.message-controls .chosen { color: var(--primary); }.history-label { padding: 20px 0 8px; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .history-label { padding: 20px 0 8px; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .sender-select { text-align: left; font-weight: 650; }.sender-select:hover { text-decoration: underline; text-underline-offset: 3px; }.sender-select.selected { color: var(--text); }
+  .recipients { position: relative; color: var(--text-dim); font-size: 12px; margin-top: 4px; }.recipients summary { cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }.recipients div { padding: 8px 0; }.recipients p { margin: 4px 0; overflow-wrap: anywhere; }.recipients p span { display: inline-block; width: 28px; color: var(--text-faint); }
+  .collapse-message { width: 26px; height: 26px; flex-shrink: 0; color: var(--text-dim); border-radius: var(--radius-s); }.collapse-message:hover { background: var(--hover); }.collapse-message:disabled { opacity: .3; }
   .reply-controls, .ai-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }.ai-actions { margin-left: auto; padding-left: 12px; border-left: 1px solid var(--hairline); }.btn.primary-reply { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }.btn.secondary-reply { border-color: transparent; color: var(--text-dim); }
   .refresh-note { font-size: 11px; color: var(--text-dim); padding: 8px 0; }.refresh-error { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--danger); padding: 8px 0; }.refresh-error button { text-decoration: underline; }
 
@@ -920,6 +916,8 @@
     min-height: 320px;
   }
   .pane {
+    container-type: inline-size;
+    container-name: reading;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -1179,7 +1177,8 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-top: 12px;
+    margin-top: 8px;
+    margin-bottom: 18px;
     width: 100%;
     text-align: left;
   }
@@ -1209,15 +1208,10 @@
     color: var(--text-faint);
     font-weight: 400;
   }
-  .who .microlabel {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-transform: none;
-    letter-spacing: 0.02em;
-    font-size: 11px;
-  }
   .date {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
@@ -1403,5 +1397,13 @@
 
   .sep {
     color: var(--text-faint);
+  }
+  @container reading (max-width: 500px) {
+    .scroll { padding-inline: 20px; }
+    .meta { display: grid; grid-template-columns: 34px minmax(0, 1fr) 26px; align-items: start; gap: 6px 10px; }
+    .who { grid-column: 2; }
+    .date { grid-column: 2; grid-row: 2; }
+    .collapse-message { grid-column: 3; grid-row: 1; }
+    .avatar { grid-column: 1; grid-row: 1; }
   }
 </style>

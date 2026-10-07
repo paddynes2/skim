@@ -113,6 +113,7 @@
   // forcing the dark canvas produced dark-on-dark, invisible text. Plain-text
   // and colorless emails still follow the app theme.
   const ownColors = $derived(hasOwnColors(html));
+  const wideLayout = $derived(/<table\b|<(?:img|div)\b[^>]*(?:width=["\']?[5-9]\d\d|width\s*:\s*(?:[5-9]\d\d|\d{4,})px)/i.test(html));
   // The iframe document can't see the app's CSS variables, so resolve --surface
   // here and paint it in. Transparency looks like the obvious answer but isn't:
   // under `color-scheme: dark` the UA paints its own opaque canvas and ignores a
@@ -126,7 +127,7 @@
     );
   });
   const srcdoc = $derived(
-    buildDoc(html, ui.effective === "dark" && !ownColors, ownColors, surface, folded),
+    buildDoc(html, ui.effective === "dark" && !ownColors, ownColors, surface, folded, wideLayout),
   );
 
   function hasOwnColors(body: string): boolean {
@@ -143,6 +144,7 @@
     ownColors: boolean,
     surface: string,
     folded = false,
+    wideLayout = false,
   ): string {
     // The default canvas follows the app theme: it's painted with the live
     // --surface, so the message blends into the pane in every palette. It used
@@ -186,6 +188,7 @@
        that margin short, which is a scrollbar on the message. */
     display: flow-root;
     box-sizing: border-box;
+    max-width: ${wideLayout ? "none" : "76ch"};
     padding: ${ownColors ? "20px 24px" : "0"};
     font-family: 'Hanken Grotesk', 'Segoe UI', sans-serif;
     font-size: 14px; line-height: 1.6; color: ${colors.text};

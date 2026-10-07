@@ -44,6 +44,8 @@ const state = $state({
   syncMessage: null as string | null,
   syncProgress: null as { done: number; total: number } | null,
   threadsLoading: false,
+  listScrollTop: 0,
+  listViewRevision: 0,
   // How many rows have been FETCHED for the current folder — the paging offset.
   // Deliberately not `threads.length`: an optimistic archive/delete shrinks the
   // list, and paging from that shorter length skips exactly as many server rows
@@ -293,6 +295,8 @@ async function switchAccount(id: string) {
   const valid =
     id === UNIFIED ? state.accounts.length > 1 : state.accounts.some((a) => a.id === id);
   if (id === state.activeAccountId || !valid) return;
+  rememberView();
+  activeViewKey = "";
   listRequest++;
   state.activeAccountId = id;
   state.selectedFolderId = null;
@@ -398,17 +402,8 @@ async function setListOrder(order: ListOrder) {
 
 async function reloadList() {
   const folderId = state.selectedFolderId;
-  const request = ++listRequest;
-  const identity = listIdentity();
-  clearSelection();
   if (folderId === null) return;
-  state.threadsLoading = true;
-  try {
-    const rows = await guard(() => fetchPage(folderId, 0));
-    if (request === listRequest && identity === listIdentity() && rows !== null) shown(rows);
-  } finally {
-    if (request === listRequest) state.threadsLoading = false;
-  }
+  await selectFolder(folderId);
 }
 
 /** Deepest a refresh will re-read. A list scrolled thousands of rows down does
@@ -416,7 +411,15 @@ async function reloadList() {
 const MAX_REFRESH = 500;
 
 let listRequest = 0;
-const listIdentity = () => JSON.stringify([state.selectedFolderId, state.activeAccountId, state.groupThreads, state.listFilter, state.searchQuery, prefs.listOrder, dealsStore.selectedCompany]);
+const listIdentity = () => JSON.stringify([state.selectedFolderId, state.activeAccountId, state.groupThreads, state.listFilter, state.selectedFolderId === SEARCH_FOLDER_ID ? state.searchQuery : null, prefs.listOrder, state.selectedFolderId === VF_DEALS ? dealsStore.selectedCompany : null]);
+let activeViewKey = "";
+const viewSnapshots = new Map<string, { rows: ThreadRow[]; fetched: number; thread: number | null; message: number | null; scroll: number }>();
+function rememberView() {
+  if (!activeViewKey || (state.threadsLoading && !state.threads.length)) return;
+  viewSnapshots.delete(activeViewKey);
+  viewSnapshots.set(activeViewKey, { rows: state.threads, fetched: state.fetched, thread: state.selectedThreadId, message: state.selectedMessageId, scroll: state.listScrollTop });
+  if (viewSnapshots.size > 8) viewSnapshots.delete(viewSnapshots.keys().next().value!);
+}
 
 async function refreshThreads() {
   const folderId = state.selectedFolderId;
@@ -433,6 +436,10 @@ async function refreshThreads() {
   );
   const request = ++listRequest;
   const identity = listIdentity();
+  if (identity !== activeViewKey) {
+    await selectFolder(folderId);
+    return;
+  }
   // Cached refreshes must not insert a loading row and move the message list.
   state.threadsLoading = state.threads.length === 0;
   const rows = await guard(() => fetchPage(folderId, 0, depth));
@@ -444,23 +451,27 @@ async function refreshThreads() {
 }
 
 async function selectFolder(id: number) {
+  rememberView();
   const request = ++listRequest;
-  state.threads = [];
-  state.fetched = 0;
   state.selectedFolderId = id;
+  activeViewKey = listIdentity();
+  const cached = viewSnapshots.get(activeViewKey);
+  state.threads = cached?.rows ?? [];
+  state.fetched = cached?.fetched ?? 0;
+  state.listScrollTop = cached?.scroll ?? 0;
+  state.listViewRevision++;
   void folderSelected(state.folders.find((f) => f.id === id)); // fork (3.4)
-  state.selectedThreadId = null;
-  state.selectedMessageId = null;
+  state.selectedThreadId = cached?.thread ?? null;
+  state.selectedMessageId = cached?.message ?? null;
   clearSelection();
-  state.threadsLoading = true;
+  state.threadsLoading = !cached;
   try {
-    const rows = await guard(() => fetchPage(id, 0));
+    const rows = await guard(() => fetchPage(id, 0, Math.min(MAX_REFRESH, Math.max(PAGE, cached?.fetched ?? PAGE))));
     if (request !== listRequest) return;
     // A failed read must not leave the previous folder's mail under the new
     // folder's name — the list says "couldn't load" instead.
     if (rows === null) {
-      state.threads = [];
-      state.fetched = 0;
+      if (!cached) { state.threads = []; state.fetched = 0; }
     } else {
       shown(rows);
     }
@@ -742,6 +753,9 @@ export const mail = {
   get threadsLoading() {
     return state.threadsLoading;
   },
+  get listViewRevision() { return state.listViewRevision; },
+  get listScrollTop() { return state.listScrollTop; },
+  set listScrollTop(value: number) { state.listScrollTop = Math.max(0, value); },
   get loadFailed() {
     return state.loadFailed;
   },

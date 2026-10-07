@@ -21,6 +21,7 @@
   import MiniMonth from "./MiniMonth.svelte";
   import EventPreview from "./EventPreview.svelte";
   import EventPanel from "./EventPanel.svelte";
+  import { eventState, zoneClock } from "./presentation";
   import { EVENT_COLORS } from "./editor";
   import GuestsPrompt from "./GuestsPrompt.svelte";
   import { calendarErrorText, localDate, localZone } from "./guests";
@@ -62,7 +63,7 @@
     const color = EVENT_COLORS[Number(row.options?.colorId)] || cal?.color || "var(--acct-1)";
     const declined = row.self_response === "declined";
     const tentative = row.status === "tentative" || row.self_response === "tentative";
-    const classNames = ["cal-ev"];
+    const classNames = ["cal-ev", `cal-state-${eventState(row)}`];
     if (!row.all_day && row.end_ts - row.start_ts <= 1800) classNames.push("cal-short");
     if (declined) classNames.push("cal-declined");
     if (tentative) classNames.push("cal-tentative");
@@ -77,7 +78,7 @@
       classNames,
       styles: [`--cal-color: ${color}`],
       editable: !declined && row.status !== "cancelled" && calendar.canEdit(row),
-      extendedProps: { rowId: row.id },
+      extendedProps: { rowId: row.id, state: eventState(row), short: !row.all_day && row.end_ts - row.start_ts <= 1800 },
     };
   }
 
@@ -119,7 +120,9 @@
       ? { all_day: true, start_date: localDate(start), end_date: localDate(end) }
       : { all_day: false, start_ts: sec(start), end_ts: sec(end), time_zone: localZone() };
     try {
-      const ok = await calendar.patch(id, input);
+      const ok = await calendar.patch(id, input, (updates, count) => {
+        toast.show({ text: t(count ? updates === "all" ? "fork.cal.move_notify_queued" : "fork.cal.move_no_notify" : "fork.cal.move_saved"), ms: 6000 });
+      });
       if (!ok) info.revert();
     } catch (e: unknown) {
       info.revert();
@@ -140,7 +143,7 @@
       allDaySlot: true,
       scrollTime: "08:00:00",
       slotDuration: "00:30:00",
-      slotHeight: 32,
+      slotHeight: 36,
       slotEventOverlap: false,
       slotMinTime: `${calPrefs.visibleStart}:00`,
       slotMaxTime: `${calPrefs.visibleEnd}:00`,
@@ -165,7 +168,7 @@
         timeGridWeek: { displayEventEnd: false },
         timeGridDay: { displayEventEnd: false },
       },
-      eventTimeFormat: { hour: "2-digit", minute: "2-digit" },
+      eventTimeFormat: { hour: "2-digit", minute: "2-digit", hour12: false },
       slotLabelFormat: { hour: "2-digit", minute: "2-digit" },
       listDayFormat: { weekday: "short", day: "numeric", month: "short" },
       listDaySideFormat: { weekday: "long" },
@@ -175,6 +178,10 @@
       eventClick: onEventClick,
       eventDrop: onMoved,
       eventResize: onMoved,
+      eventDidMount: ({el, event, timeText}) => {
+        const text = `${event.title} ? ${timeText} ? ${t(`fork.cal.state_${event.extendedProps.state}`)}`;
+        el.title = text; el.setAttribute("aria-label", text);
+      },
   });
 
   onMount(() => {
@@ -187,6 +194,16 @@
     options.hiddenDays = calendar.view === "workweek" ? [0, 6] : [];
     options.slotMinTime = `${calPrefs.visibleStart}:00`;
     options.slotMaxTime = `${calPrefs.visibleEnd}:00`;
+    const zone = calPrefs.secondTz, anchor = calendar.date, locale = getLocale();
+    options.slotLabelFormat = (time: Date) => {
+      const local = document.createElement("span"); local.className = "cal-clock-local";
+      local.textContent = time.toLocaleTimeString(locale, {hour:"2-digit", minute:"2-digit", hour12:false});
+      if (!zone) return {domNodes:[local]};
+      const second = document.createElement("span"); second.className = "cal-clock-second";
+      second.textContent = zoneClock(anchor, time.getHours(), time.getMinutes(), zone, locale);
+      second.title = `${zone} (${anchor.toLocaleDateString(locale)})`;
+      return {domNodes:[second, local]};
+    };
   });
 
   $effect(() => {
@@ -303,7 +320,7 @@
         <label>{t("fork.cal.visible_hours")}<select aria-label={t("fork.cal.visible_from")} value={calPrefs.visibleStart} onchange={(e) => calPrefs.setVisibleHours(e.currentTarget.value, calPrefs.visibleEnd)}>{#each Array.from({length: 24}, (_, n) => `${String(n).padStart(2, "0")}:00`) as hour}<option value={hour} disabled={hour >= calPrefs.visibleEnd}>{hour}</option>{/each}</select></label>
         <span aria-hidden="true">&ndash;</span><select aria-label={t("fork.cal.visible_to")} value={calPrefs.visibleEnd} onchange={(e) => calPrefs.setVisibleHours(calPrefs.visibleStart, e.currentTarget.value)}>{#each Array.from({length: 24}, (_, n) => `${String(n + 1).padStart(2, "0")}:00`) as hour}<option value={hour} disabled={hour <= calPrefs.visibleStart}>{hour}</option>{/each}</select>
       {/if}
-      <span class="zone">{localZone()}</span>
+      <div class="zone"><span>{localZone()}</span><select aria-label={t("fork.cal.second_column")} value={calPrefs.secondTz} onchange={(e) => calPrefs.setSecondTz(e.currentTarget.value)}><option value="">{t("fork.cal.second_column_off")}</option>{#each Intl.supportedValuesOf("timeZone") as zone}<option value={zone}>{zone}</option>{/each}</select></div>
     </div>
     {#if filtersOpen}<div class="calendar-filters">{#each calendar.calendars as cal}<label><input type="checkbox" checked={cal.selected} disabled={visibilityBusy !== null} onchange={(e) => toggleCalendar(cal.id, e.currentTarget.checked)} /><span class="color" style:background={cal.color || "var(--primary)"}></span>{cal.summary}</label>{/each}</div>{/if}
     {#if calendar.failedEvents.length}<div class="sync-alert" role="status"><span>{t("fork.cal.failed_changes", { count: calendar.failedEvents.length })}</span><button onclick={retryFailed}>{t("fork.cal.retry")}</button></div>{/if}
@@ -318,8 +335,14 @@
       <div class="error" role="alert">{calendar.error} <button onclick={() => calendar.reload()}>{t("fork.cal.retry")}</button></div>
     {/if}
 
-    <div class="grid">
-      <Calendar plugins={PLUGINS} {options} />
+    {#if calendar.events.filter((e) => e.all_day).length > 4}<div class="all-day-hint">{t("fork.cal.all_day_scroll", {count: calendar.events.filter((e) => e.all_day).length})}</div>{/if}
+    {#if calPrefs.secondTz && ["day", "week", "workweek"].includes(calendar.view)}<div class="zone-legend" title={t("fork.cal.zone_anchor", {date: calendar.date.toLocaleDateString(getLocale())})}><span>{calPrefs.secondTz.split("/").at(-1)?.replaceAll("_", " ")}</span><span>{localZone().split("/").at(-1)?.replaceAll("_", " ")}</span></div>{/if}
+    <div class="grid" class:second-clock={!!calPrefs.secondTz}>
+      <Calendar plugins={PLUGINS} {options}>
+        {#snippet eventContent({event, timeText})}
+          <span class="cal-event-content">{#if !event.extendedProps.short && !event.allDay}<span class="cal-event-time">{timeText}</span>{/if}<span class="cal-event-title"><span class="cal-state-mark" aria-hidden="true">{event.extendedProps.state === "accepted" ? "\u2713 " : event.extendedProps.state === "tentative" ? "? " : event.extendedProps.state === "declined" ? "\u00d7 " : event.extendedProps.state === "cancelled" ? `${t("fork.cal.state_cancelled")}: ` : ""}</span>{event.title}</span></span>
+        {/snippet}
+      </Calendar>
     </div>
   </div>
 
@@ -346,7 +369,11 @@
   .calendar-controls label { display: flex; align-items: center; gap: 8px; margin-left: 6px; }
   .calendar-controls select { padding: 4px 6px; border: 1px solid var(--hairline); border-radius: var(--radius-s); background: var(--surface); color: var(--text); font-size: 12px; }
   .control { padding: 5px 9px; border: 1px solid var(--hairline); border-radius: var(--radius-s); }.control:hover, .control.active { background: var(--hover); } .control span { margin-left: 6px; color: var(--text); }
-  .zone { margin-left: auto; font-size: 11px; }
+  .zone { margin-left: auto; font-size: 11px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; }.zone select { max-width:180px; }
+  .zone-legend { display:flex; gap:12px; font-size:10px; color:var(--text-dim); padding:0 10px 4px; }.zone-legend span { max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .all-day-hint { padding:3px 16px 7px; font-size:11px; color:var(--text-dim); }
+  .cal-event-content { display:block; width:100%; min-width:0; }.cal-state-mark { font-weight:700; }.cal-event-time { display:block; font-size:10px; color:var(--text-dim); line-height:1.2; margin-bottom:2px; }.cal-event-title { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; overflow-wrap:break-word; }
+
   .calendar-filters { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 6px 20px 14px; border-bottom: 1px solid var(--hairline); }
   .calendar-filters label { display: flex; align-items: center; gap: 7px; font-size: 12px; }.calendar-filters input { accent-color: var(--primary); }.color { width: 8px; height: 8px; border-radius: 50%; }
   .sync-alert { display: flex; justify-content: space-between; gap: 12px; margin: 4px 16px 10px; font-size: 12px; color: var(--danger); }.sync-alert button, .error button { text-decoration: underline; }

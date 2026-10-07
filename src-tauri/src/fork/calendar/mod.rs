@@ -507,6 +507,10 @@ impl Engine {
             .as_str()
             .ok_or_else(|| SkimError::other("gcal_api", "The event version is unavailable."))?;
         let mut body = body.clone();
+        if body.get("attachments").is_some() {
+            body["attachments"] =
+                options::merge_attachment_additions(&current["attachments"], &body["attachments"])?;
+        }
         body["extendedProperties"] = current
             .get("extendedProperties")
             .cloned()

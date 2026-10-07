@@ -27,9 +27,18 @@ export interface DealSuggestion {
   deal: string | null;
   name: string;
   entry: string;
+  personEntry: string;
+  companyEntry: string | null;
+  excluded: boolean;
 }
 
+export interface ScopeInput {threadId:number; name:string; scope:"conversation"|"person"|"company"; entry:string}
 export const dealsApi = {
+  catalog: () => invoke<ParsedDeals>("fork_deals_catalog"),
+  previewScope: (input:ScopeInput) => invoke<{count:number;entry:string}>("fork_deals_preview_scope",{input}),
+  applyScope: (input:ScopeInput) => invoke<string>("fork_deals_apply_scope",{input}),
+  exclude: (threadId:number, excluded:boolean) => invoke<void>("fork_deals_exclude",{threadId,excluded}),
+  saveContext: (company:string,notes:string,pinnedId:number|null) => invoke<void>("fork_deals_save_context",{company,notes,pinnedId}),
   list: (offset: number, limit: number, company: string | null = null) => invoke<DealRow[]>("fork_deals_list", { offset, limit, company }),
   context: (company: string) => invoke<DealContext>("fork_deals_context", { company }),
   count: () => invoke<{ unread: number; total: number }>("fork_deals_count"),
@@ -43,6 +52,10 @@ export interface DealContext {
   conversationCount: number;
   conversations: DealRow[];
   people: { name: string | null; addr: string }[];
-  attachments: { threadId: number; filename: string; date: number }[];
+  attachments: DealAttachment[];
+  notes: string;
+  pinned: DealAttachment | null;
   meetings: { id: number; summary: string; startTs: number; allDay: boolean }[];
 }
+
+export interface DealAttachment {id:number;messageId:number;mimeType:string|null;size:number;isInline:boolean;threadId:number;filename:string;date:number}

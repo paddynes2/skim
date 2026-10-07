@@ -194,3 +194,18 @@ moving sent copies to Trash while deleting grouped drafts.
 
 | `src/components/ReadingPane.svelte`, `src/lib/stores/mail.svelte.ts` | loading state | Cached background refresh does not insert rows that move content | flicker fix 1.1.6 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.6 | flicker fix |
+
+## Version 1.1.7
+
+| File | Symbol | Change | Reason |
+|---|---|---|---|
+| `src/App.svelte`, `src/components/Titlebar.svelte` | shell | Put titlebar extras in layout; guard modal shortcuts | Prevent overlap and underlying email actions |
+| `src/components/MessageList.svelte`, `src/components/MessageRow.svelte` | rows | Virtual date sections, identity column, context menu, clean/highlighted snippets | Readable list and predictable actions |
+| `src/lib/stores/mail.svelte.ts` | view transitions | Bounded snapshots keyed by account, folder, filter and query | Restore scroll/selection without stale cross-view responses |
+| `src/components/ReadingPane.svelte`, `src/components/HtmlViewer.svelte` | reading | Compact toolbar, recipient detail, prose measure, wide-content preservation | Calmer reading and stable content |
+| `src/components/CommandPalette.svelte`, `src-tauri/src/commands/search.rs` | search | Match passages and exact-message selection | Show and open the matching email |
+| `src/components/AttachmentChips.svelte` | shared files | Preview, grouping, Save all, source links and visible errors | Consistent attachment handling |
+| `src/components/ComposeForm.svelte` | draft workflow | Snippets, attachment check, local-save state, serialized transitions | Preserve drafts across failure and popout |
+| `src-tauri/src/lib.rs` | IPC | Register Deals details, file and search-coverage commands | Expose bounded local features |
+| `src/lib/i18n/locales/en.json`, `src/styles/tokens.css` | labels/tokens | Feature copy and semantic meeting/company colours | Accessible, consistent accents |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.7 | Signed local release |

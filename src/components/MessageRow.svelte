@@ -8,12 +8,16 @@
   import { act, archiveOffered } from "../fork/actions";
   import { avatarColor, initials } from "../fork/avatar";
   import { prefs } from "../fork/stores/prefs.svelte";
+  import { cleanPreview } from "../fork/layout/mail-list";
+  import HighlightedText from "../fork/search/HighlightedText.svelte";
 
   let {
     thread,
     recipientLabel = "",
     selected = false,
     checked = false,
+    companyIdentity = false,
+    onmenu,
     onselect,
     ontoggle,
   }: {
@@ -21,6 +25,8 @@
     recipientLabel?: string;
     selected?: boolean;
     checked?: boolean;
+    companyIdentity?: boolean;
+    onmenu?: (event: MouseEvent, thread: ThreadRow) => void;
     onselect?: (id: number) => void;
     ontoggle?: (extend: boolean) => void;
   } = $props();
@@ -31,7 +37,7 @@
   const badge = $derived(mail.unified ? mail.accountBadge(thread.accountId) : null);
   const compact = $derived(prefs.density === "compact");
   const avatar = $derived(
-    prefs.avatars ? { text: initials(thread.fromName, thread.fromAddr), color: avatarColor(thread.fromAddr) } : null,
+    prefs.avatars && !companyIdentity ? { text: initials(thread.fromName, thread.fromAddr), color: avatarColor(thread.fromAddr) } : null,
   );
   const canArchive = $derived(archiveOffered(mail.selectedFolder?.role));
 
@@ -79,6 +85,7 @@
   class:checked
   class:compact
   class:with-avatar={avatar !== null}
+  class:with-company={companyIdentity}
 >
   <button
     class="check"
@@ -117,7 +124,7 @@
     <span class="avatar" style:background="var(--acct-{avatar.color})" aria-hidden="true">{avatar.text}</span>
   {/if}
 
-  <button class="row" aria-label={label} onclick={() => onselect?.(thread.id)}>
+  <button class="row" aria-label={label} onclick={() => onselect?.(thread.id)} oncontextmenu={(event) => onmenu?.(event, thread)}>
     <div class="line1">
       <span class="from">
         {#if badge}
@@ -128,7 +135,7 @@
       </span>
       {#if compact}
         <span class="subject">{thread.subject}</span>
-        <span class="snippet">{thread.snippet}</span>
+        <span class="snippet"><HighlightedText text={cleanPreview(thread.snippet)} query={mail.searchQuery ?? ""} /></span>
       {/if}
       <span class="meta">
         {#if thread.hasAttachments}
@@ -141,7 +148,7 @@
     </div>
     {#if !compact}
       <div class="subject">{thread.subject}</div>
-      <div class="snippet">{thread.snippet}</div>
+      <div class="snippet"><HighlightedText text={cleanPreview(thread.snippet)} query={mail.searchQuery ?? ""} /></div>
     {/if}
   </button>
 
@@ -193,6 +200,8 @@
   .row-wrap.with-avatar {
     --avatar-w: 36px;
   }
+  .row-wrap.with-company { --avatar-w: 40px; }
+  .row-wrap.starred .star svg { width: 14px; height: 14px; }
 
   .row {
     display: block;

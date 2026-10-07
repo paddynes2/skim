@@ -4,6 +4,9 @@
   import { t } from "../../lib/i18n/index.svelte";
   import { mail } from "../../lib/stores/mail.svelte";
   import { syncStatusApi, type QueueStatus } from "./api";
+  import { api } from "../../lib/api";
+  import { ui } from "../../lib/stores/ui.svelte";
+  async function openMessage(location: {folderId:number;threadId:number|null;messageId:number}) { ui.showMail(); await mail.openLocation(location.folderId, location.threadId, location.messageId); mail.selectedMessageId=location.messageId; }
   let queue=$state<QueueStatus|null>(null), error=$state(""), expanded=$state(false), busy=$state(false);
   let request=0;
   async function refresh(){const current=++request;try{const q=await syncStatusApi.status(mail.account?.id??null);if(current===request){queue=q;error="";}}catch(e){if(current===request)error=String((e as {message?:string})?.message??e);}}
@@ -25,7 +28,7 @@
         {#if queue.pending}<p>{t("fork.sync.pending",{n:queue.pending})}</p>{/if}
         {#if queue.scheduled}<p>{t("fork.sync.scheduled",{n:queue.scheduled})}</p>{/if}
         {#if queue.failed}<p class="failure-count">{t("fork.sync.failed",{n:queue.failed})}</p>{/if}
-        {#each queue.failures as item (item.id)}<div class="failure"><strong>{action(item.action)}</strong><span>{item.accountEmail}</span><span>{new Date(item.createdAt*1000).toLocaleString()}</span>{#if item.retryable}<button disabled={busy} onclick={()=>void retry(item.id)}>{t("fork.sync.retry_action")}</button>{:else}<span>{t("fork.sync.manual_review")}</span>{/if}</div>{/each}
+        {#each queue.failures as item (item.id)}<div class="failure"><strong>{action(item.action)}</strong><span>{item.accountEmail}</span><span>{new Date(item.createdAt*1000).toLocaleString()}</span>{#if item.draftId}<button onclick={()=>void api.openComposeWindow(item.draftId!)}>{t("fork.sync.open_draft")}</button>{/if}{#each item.locations ?? [] as location}<button class="source-message" onclick={()=>void openMessage(location)}>{location.subject || t("fork.row.no_subject")}</button>{/each}{#if !item.draftId && !(item.locations?.length)}<span>{t("fork.sync.source_unavailable")}</span>{/if}{#if item.retryable}<button disabled={busy} onclick={()=>void retry(item.id)}>{t("fork.sync.retry_action")}</button>{:else}<span>{t("fork.sync.manual_review")}</span>{/if}</div>{/each}
         {#if queue.failed>queue.failures.length}<p>{t("fork.sync.first_failures")}</p>{/if}
       {/if}
       {#if error}<p role="alert" class="error">{error}</p>{/if}

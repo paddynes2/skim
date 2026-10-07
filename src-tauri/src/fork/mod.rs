@@ -69,3 +69,5 @@ pub fn start(app: AppHandle) {
 
 pub mod mail_status;
 pub mod reading;
+
+pub mod attachments;

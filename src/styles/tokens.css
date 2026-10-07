@@ -11,6 +11,10 @@
    to tell apart. Deliberately no violet — that's AI's. */
 
 :root {
+  --meeting-ink: #176b4b;
+  --meeting-soft: color-mix(in srgb, var(--meeting-ink) 9%, var(--surface));
+  --deal-ink: #7d520d;
+  --deal-soft: color-mix(in srgb, var(--deal-ink) 8%, var(--surface));
   /* type — shared across all themes */
   --font-ui: "Hanken Grotesk Variable", "Hanken Grotesk", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
@@ -68,7 +72,10 @@
   color-scheme: light;
 }
 
+
 :root[data-theme="cold-dark"] {
+  --meeting-ink: #91d9b8;
+  --deal-ink: #efc777;
   --bg: #0d0d10;
   --surface: #141418;
   --surface-raised: #1a1a20;
@@ -148,6 +155,8 @@
 
 /* warm · dark — warm ink instead of cold near-black */
 :root[data-theme="warm-dark"] {
+  --meeting-ink: #91d9b8;
+  --deal-ink: #efc777;
   --bg: #14110d;
   --surface: #1a1712;
   --surface-raised: #241f17;
@@ -238,6 +247,8 @@
 }
 
 :root[data-theme="base-dark"] {
+  --meeting-ink: #91d9b8;
+  --deal-ink: #efc777;
   --font-ui: "Inter Variable", "Inter", "Segoe UI", sans-serif;
   --tracking-ui: -0.01em;
   --weight-ui: 450;

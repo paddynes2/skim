@@ -23,6 +23,60 @@ pub struct Failure {
     pub account_email: String,
     pub created_at: i64,
     pub retryable: bool,
+    pub locations: Vec<FailureLocation>,
+    pub draft_id: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FailureLocation {
+    pub message_id: i64,
+    pub thread_id: Option<i64>,
+    pub folder_id: i64,
+    pub subject: String,
+}
+
+fn failure_locations(
+    conn: &Connection,
+    account: &str,
+    payload: &str,
+) -> rusqlite::Result<(Vec<FailureLocation>, Option<i64>)> {
+    let Ok(value) = serde_json::from_str::<Value>(payload) else {
+        return Ok((vec![], None));
+    };
+    let draft = if let Some(id) = value.get("draftId").and_then(Value::as_i64) {
+        conn.query_row(
+            "SELECT id FROM drafts WHERE id=?1 AND account_id=?2",
+            params![id, account],
+            |r| r.get(0),
+        )
+        .optional()?
+    } else {
+        None
+    };
+    let mut locations = vec![];
+    if let (Some(folder), Some(uids)) = (
+        value.get("imapName").and_then(Value::as_str),
+        value.get("uids").and_then(Value::as_array),
+    ) {
+        let mut query = conn.prepare("SELECT m.id,m.thread_id,m.folder_id,COALESCE(m.subject,'') FROM messages m JOIN folders f ON f.id=m.folder_id WHERE m.account_id=?1 AND f.account_id=?1 AND f.imap_name=?2 AND m.uid=?3")?;
+        for uid in uids.iter().filter_map(Value::as_i64).take(20) {
+            if let Some(location) = query
+                .query_row(params![account, folder, uid], |r| {
+                    Ok(FailureLocation {
+                        message_id: r.get(0)?,
+                        thread_id: r.get(1)?,
+                        folder_id: r.get(2)?,
+                        subject: r.get(3)?,
+                    })
+                })
+                .optional()?
+            {
+                locations.push(location);
+            }
+        }
+    }
+    Ok((locations, draft))
 }
 
 /// Only explicit flag assignments can be repeated from this surface.
@@ -56,12 +110,13 @@ pub fn status(conn: &Connection, account_id: Option<&str>) -> rusqlite::Result<Q
     let (pending, scheduled, failed) = conn.query_row(
         "SELECT COALESCE(sum(state='pending' AND NOT EXISTS(SELECT 1 FROM fork_op_schedule s WHERE s.op_id=p.id AND s.not_before>unixepoch())),0), COALESCE(sum(state='pending' AND EXISTS(SELECT 1 FROM fork_op_schedule s WHERE s.op_id=p.id AND s.not_before>unixepoch())),0), COALESCE(sum(state='failed'),0) FROM pending_ops p WHERE (?1 IS NULL OR account_id=?1)",
         [account_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-    let mut stmt=conn.prepare("SELECT p.id,p.kind,p.payload,a.email,p.created_at FROM pending_ops p JOIN accounts a ON a.id=p.account_id WHERE p.state='failed' AND (?1 IS NULL OR p.account_id=?1) ORDER BY p.created_at DESC,p.id DESC LIMIT 30")?;
+    let mut stmt=conn.prepare("SELECT p.id,p.kind,p.payload,a.email,p.created_at,p.account_id FROM pending_ops p JOIN accounts a ON a.id=p.account_id WHERE p.state='failed' AND (?1 IS NULL OR p.account_id=?1) ORDER BY p.created_at DESC,p.id DESC LIMIT 30")?;
     let failures = stmt
         .query_map([account_id], |r| {
             let kind: String = r.get(1)?;
             let payload: String = r.get(2)?;
             let action = flag_action(&kind, &payload);
+            let (locations, draft_id) = failure_locations(conn, &r.get::<_, String>(5)?, &payload)?;
             Ok(Failure {
                 id: r.get(0)?,
                 action: action.unwrap_or(&kind).to_string(),
@@ -69,6 +124,8 @@ pub fn status(conn: &Connection, account_id: Option<&str>) -> rusqlite::Result<Q
                 kind,
                 account_email: r.get(3)?,
                 created_at: r.get(4)?,
+                locations,
+                draft_id,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -161,6 +218,28 @@ pub async fn fork_mail_retry_flag(state: State<'_, AppState>, id: i64) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failure_links_stay_in_the_operation_account_and_survive_missing_sources() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            conn.execute_batch("INSERT INTO accounts(id,email,provider,imap_host,smtp_host,created_at) VALUES('a','a@example.com','custom','i','s',0),('b','b@example.com','custom','i','s',0);
+                INSERT INTO folders(id,account_id,imap_name,display_name) VALUES(1,'a','INBOX','Inbox'),(2,'b','INBOX','Inbox');
+                INSERT INTO messages(id,account_id,folder_id,uid,date,subject) VALUES(1,'a',1,7,0,'First'),(2,'b',2,7,0,'Other account');
+                INSERT INTO drafts(id,account_id,updated_at) VALUES(1,'a',0);")?;
+            let payload = r#"{"imapName":"INBOX","uids":[7,999],"draftId":1}"#;
+            let (locations, draft) = failure_locations(conn, "a", payload)?;
+            assert_eq!(locations.len(), 1);
+            assert_eq!(locations[0].message_id, 1);
+            assert_eq!(locations[0].subject, "First");
+            assert_eq!(draft, Some(1));
+            let (other, draft) = failure_locations(conn, "b", payload)?;
+            assert_eq!(other[0].message_id, 2);
+            assert_eq!(draft, None);
+            assert!(failure_locations(conn, "missing", payload)?.0.is_empty());
+            assert!(failure_locations(conn, "a", "invalid json")?.0.is_empty());
+            Ok(())
+        }).unwrap();
+    }
     #[test]
     fn queue_retry_only_requeues_valid_failed_flag_and_keeps_send_failed() {
         let db = crate::db::Db::open_in_memory().unwrap();

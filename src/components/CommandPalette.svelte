@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HighlightedText from "../fork/search/HighlightedText.svelte";
   // Ctrl+K palette: commands + instant local search, plus the mailbox-wide
   // AI chat (the "Ask Skim AI" row on any query).
   import { api, type Citation } from "../lib/api";
@@ -159,7 +160,9 @@
 
   async function openHit(hit: SearchHit) {
     palette.hide();
-    await mail.openLocation(hit.folderId, hit.threadId, hit.messageId);
+    await mail.enterSearch(input.trim());
+    mail.selectedThreadId = hit.threadId;
+    mail.selectedMessageId = hit.messageId;
   }
 
   async function activate(index: number) {
@@ -321,7 +324,7 @@
                   <span class="hit-subject">{hit.subject}</span>
                 </span>
                 {#if hit.snippet}
-                  <span class="hit-snippet">{hit.snippet}</span>
+                  <span class="hit-snippet"><HighlightedText text={hit.snippet} query={input}/></span>
                 {/if}
               </span>
               <span class="date microlabel">{formatDate(hit.date)}</span>

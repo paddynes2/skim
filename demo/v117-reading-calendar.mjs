@@ -1,0 +1,44 @@
+import {chromium} from "playwright";
+import assert from "node:assert/strict";
+import {execSync} from "node:child_process";
+import {mkdirSync} from "node:fs";
+execSync("npm run demo:build",{stdio:"pipe",windowsHide:true});
+const capture=process.env.SKIM_CAPTURE==="1", url=process.env.SKIM_DEMO_URL||"http://127.0.0.1:1427/", out="docs/fork/shots/1.1.7";
+if(capture)mkdirSync(out,{recursive:true});
+const browser=await chromium.launch();
+try{for(const theme of ["base-dark","base-light"]){
+ const context=await browser.newContext({viewport:{width:1600,height:1000},timezoneId:"Africa/Johannesburg"});
+ await context.addInitScript(theme=>{localStorage.setItem("skimdemo.theme",theme);localStorage.setItem("skimdemo.fork_thread_multi","1");localStorage.setItem("skimdemo.fork_calendar_dense","1");localStorage.setItem("skimdemo.fork_court_nudge","off");},theme);
+ const page=await context.newPage();page.setDefaultTimeout(10000);const errors=[];page.on("pageerror",e=>errors.push(String(e)));
+ await page.goto(url);await page.locator(".row",{hasText:"Q3 launch"}).first().click();await page.locator(".pane iframe").waitFor();
+ await page.evaluate(()=>document.fonts.ready);await page.waitForFunction(()=>document.querySelector('.pane iframe')?.contentDocument?.body?.textContent?.trim().length>0);
+ assert.equal(await page.locator(".conversation-tools .tabs").getByRole("button",{name:"Expand all",exact:true}).count(),1);
+ assert.equal(await page.locator(".conversation-heading").count(),0);
+ const readingWidth=await page.locator(".pane iframe").evaluate(el=>({body:el.contentDocument.body.getBoundingClientRect().width,frame:el.clientWidth,max:el.contentDocument.defaultView.getComputedStyle(el.contentDocument.body).maxWidth}));
+ assert.ok(readingWidth.body<readingWidth.frame);assert.notEqual(readingWidth.max,"none");
+ await page.locator(".recipients summary").first().click();assert.match(await page.locator(".recipients[open]").innerText(),/Anna Weber/);
+ await page.locator(".reading-more summary").click();assert.equal(await page.locator(".more-menu").getByRole("button",{name:/Move/}).count(),1);await page.keyboard.press("Escape");assert.equal(await page.locator(".reading-more").getAttribute("open"),null);assert.equal(await page.locator(".pane iframe").count(),1);
+ await page.getByRole("button",{name:"Search conversation",exact:true}).click();await page.getByRole("searchbox",{name:"Search conversation"}).fill("pricing page");assert.ok(await page.locator(".conversation-tools mark").count());
+ await page.getByRole("button",{name:"Search conversation",exact:true}).click();
+ if(capture)await page.screenshot({path:`${out}/reading-compact-${theme}.png`});
+ for(const width of [1200,900]){await page.setViewportSize({width,height:800});assert.equal(await page.locator(".pane").evaluate(el=>el.scrollWidth<=el.clientWidth),true);if(capture)await page.screenshot({path:`${out}/reading-compact-${width}-${theme}.png`});}await page.setViewportSize({width:1600,height:1000});
+ await page.evaluate(()=>localStorage.setItem("skimdemo.fork_body","wide"));await page.reload();await page.locator(".row",{hasText:"Q3 launch"}).first().click();await page.waitForFunction(()=>document.querySelector(".pane iframe")?.contentDocument?.querySelector("table"));assert.equal(await page.locator(".pane iframe").evaluate(el=>el.contentDocument.defaultView.getComputedStyle(el.contentDocument.body).maxWidth),"none");
+ await page.locator(".sidebar .item.calendar").click();
+ await page.getByLabel("Second time zone column",{exact:true}).selectOption("Europe/London");
+ await page.locator(".cal-clock-second:visible").first().waitFor();const clocks=await page.locator(".cal-clock-second:visible").first().evaluate(el=>({second:el.textContent,local:el.parentElement.querySelector(".cal-clock-local").textContent}));assert.equal(Number(clocks.local.slice(0,2))-Number(clocks.second.slice(0,2)),1);
+ assert.ok(await page.locator(".cal-state-accepted").count());assert.ok(await page.locator(".cal-state-tentative").count());assert.ok(await page.locator(".cal-state-declined").count());assert.ok(await page.locator(".cal-state-cancelled").count());
+ const allDay=page.locator(".ec-all-day");assert.ok(await allDay.evaluate(el=>el.scrollHeight>el.clientHeight&&el.clientHeight<=120));
+ await allDay.evaluate(el=>{el.scrollTop=el.scrollHeight;});await page.locator(".ec-event",{hasText:"Project milestone 7"}).waitFor();await allDay.evaluate(el=>{el.scrollTop=0;});
+ if(capture)await page.screenshot({path:`${out}/calendar-crowded-${theme}.png`});
+ const moving=page.locator(".ec-event",{hasText:"Q3 launch sync"}).first();await moving.scrollIntoViewIfNeeded();const box=await moving.boundingBox();
+ await page.mouse.move(box.x+box.width/2,box.y+12);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+84,{steps:15});await page.mouse.up();
+ await page.getByRole("dialog").waitFor();await page.getByRole("button",{name:"Don't send",exact:true}).click();await page.getByText("Change saved on this device. Guests will not be notified.",{exact:true}).waitFor();
+ await page.getByRole("button",{name:"New event",exact:false}).click();const panel=page.locator(".fork-cal .panel");await panel.locator("textarea.title").fill("Notes review");
+ await panel.getByLabel("File or notes URL",{exact:true}).fill("javascript:alert(1)");await panel.getByRole("button",{name:"Link file or notes",exact:true}).click();await panel.getByText("Enter an HTTPS link without embedded sign-in details.",{exact:true}).waitFor();
+ await panel.getByLabel("File or notes title",{exact:true}).fill("Meeting notes");await panel.getByLabel("File or notes URL",{exact:true}).fill("https://docs.google.com/document/d/fictional-notes/edit");await panel.getByRole("button",{name:"Link file or notes",exact:true}).click();assert.equal(await panel.locator(".event-files .file").count(),1);
+ await panel.getByRole("button",{name:"Create",exact:true}).click();await panel.waitFor({state:"detached"});await page.locator(".ec-event",{hasText:"Notes review"}).first().click();await page.locator(".preview .event-files").waitFor();assert.match(await page.locator(".preview .event-files").innerText(),/Meeting notes/);
+ if(capture)await page.screenshot({path:`${out}/calendar-linked-notes-${theme}.png`});
+ await page.getByRole("button",{name:"Edit event",exact:true}).click();
+ for(const width of [1200,900]){await page.setViewportSize({width,height:800});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth),true);if(capture)await page.screenshot({path:`${out}/calendar-editor-${width}-${theme}.png`});}
+ assert.deepEqual(errors,[]);console.log(`${theme}: compact reading, prose width, recipients, More, highlights, event states, time zones, crowded all-day row, move feedback and linked notes passed`);await context.close();
+}}finally{await browser.close();}

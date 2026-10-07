@@ -30,7 +30,7 @@ async function store(){
   const prefs={listOrder:"date",setListOrder(value){this.listOrder=value;}};
   const stubs={
     listen:async()=>()=>{},reportError:(...e)=>control.errors.push(e),t:key=>key,
-    api:{listThreads:call("folder"),listMessages:call("flat"),listUnifiedThreads:call("unified"),listUnifiedMessages:call("unified-flat"),setSetting:async()=>{},getSettings:async()=>({active_account:"a"}),listAccounts:async()=>[{id:"a",email:"me@example.com"}],listFolders:async()=>[{id:1,role:"inbox",accountId:"a"}],takePendingOpen:async()=>null},
+    api:{listThreads:call("folder"),listMessages:call("flat"),listUnifiedThreads:call("unified"),listUnifiedMessages:call("unified-flat"),setSetting:async()=>{},getSettings:async()=>({active_account:"a"}),listAccounts:async()=>[{id:"a",email:"me@example.com"},{id:"b",email:"second@example.com"}],listFolders:async(account)=>[{id:account==="b"?2:1,role:"inbox",accountId:account}],takePendingOpen:async()=>null},
     prefs,searchApi:{searchThreads:call("search")},SEARCH_FOLDER_ID:-900,withoutToken:(q,t)=>q.replace(t,""),
     COURT_UPDATED:"court",courtApi:{list:call("court")},VF_ON_ME:-920,VF_WAITING:-921,courtCounts:{refresh:async()=>{}},
     dealsApi:{list:call("deals")},VF_DEALS:-924,dealsStore:{get selectedCompany(){return control.company;}},dealsCount:{refresh:async()=>{}},
@@ -100,4 +100,32 @@ test("background refresh keeps cached rows steady while an empty view shows load
   initial.resolve([row(3)]);await loading;
   assert.equal(mail.threadsLoading,false);
   assert.deepEqual(mail.threads.map(r=>r.id),[3]);
+});
+
+test("returning to a view restores its selected conversation and scroll without mixing filters",async()=>{
+  const {mail,control}=await store();
+  control.read=async(_kind,args)=>[row(args[0])];
+  await mail.selectFolder(1);mail.selectedThreadId=1;mail.listScrollTop=420;
+  await mail.selectFolder(2);mail.selectedThreadId=2;mail.listScrollTop=80;
+  const pending=deferred();control.read=()=>pending.promise;
+  const back=mail.selectFolder(1);
+  assert.equal(mail.selectedThreadId,1);assert.equal(mail.listScrollTop,420);
+  assert.equal(mail.threadsLoading,false);assert.deepEqual(mail.threads.map(r=>r.id),[1]);
+  pending.resolve([row(1)]);await back;
+  control.read=async()=>[row(3)];await mail.setListFilter("starred");
+  assert.equal(mail.selectedThreadId,null);assert.equal(mail.listScrollTop,0);
+  control.read=async()=>[row(1)];await mail.setListFilter("all");
+  assert.equal(mail.selectedThreadId,1);assert.equal(mail.listScrollTop,420);
+});
+
+test("account switches save the latest view and an empty view replaces its old snapshot",async()=>{
+  const {mail,control}=await store();control.read=async(_kind,args)=>[row(args[0])];await mail.boot();
+  for(let i=0;i<8&&mail.threadsLoading;i++)await new Promise(resolve=>setImmediate(resolve));
+  mail.selectedThreadId=1;mail.listScrollTop=210;
+  await mail.switchAccount("b");await mail.switchAccount("a");
+  assert.equal(mail.selectedThreadId,1);assert.equal(mail.listScrollTop,210);
+  await mail.selectFolder(2);await mail.selectFolder(1);
+  control.read=async()=>[];await mail.refreshThreads();await mail.selectFolder(2);
+  control.read=async()=>{throw new Error("offline");};await mail.selectFolder(1);
+  assert.deepEqual(mail.threads,[]);assert.equal(mail.loadFailed,true);
 });

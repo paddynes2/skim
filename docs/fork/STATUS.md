@@ -6,6 +6,27 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-07.**
 
+## Version 1.1.7 (verified build, installation pending)
+
+Patrick requested all ten daily-use improvements in one pass, with parallel builders, consistent company logos and occasional colour. This release preserves the Base direction and manual Deals model.
+
+- Meeting time and Join stay on one line inside the titlebar layout. Teal meeting and amber company accents are restrained and pass contrast checks in all six themes.
+- Deals logos occupy one aligned identity column with a contained white canvas and equal-size initials fallback. Click a logo for company context. Add to Deals is labelled in the reading toolbar and right-click menu, with conversation/person/company scopes, match counts and exclusion/restore.
+- Company context includes conversations, people, meetings, files, private local notes and a pinned document. File links select their exact original message.
+- Reading uses compact actions, clearer recipients, comfortable prose width and full-width wide email tables. Date sections and clean snippets improve the list. Folder, account, filter and search transitions remember the recent selection and scroll position.
+- Search shows matching passages and opens the matching message. Filename search and cache coverage are explicit. Attachments offer image or PDF text preview, original-file opening, collision-safe Save all and content-hash grouping of identical cached files.
+- Compose adds reusable snippets, a forgotten-attachment check, recipient and local-save feedback, retry after save errors, and serialized saving before popout/close. Plain text, rich HTML and staged attachments survive the tested transitions.
+- Calendar improves short/overlapping/all-day events, RSVP states, a second time zone and move feedback. The event editor adds HTTPS attachment and meeting-note links while preserving existing remote attachments.
+- Failed queued mail actions link to cached source messages or existing drafts where resolvable. Missing sources are explicit. Automatic retry remains restricted to read/star flags.
+
+Validation: 544 Rust tests passed, one existing ignored; 67 frontend tests passed; all-target Clippy, Rust formatting, production build and 192 token contrast ratios passed. Svelte check reports zero errors and the existing ComposeForm warning. Browser suites cover both Base themes, 700/900/1200/1600 header widths, reading/calendar views, Deals, exact file sources, save failures and delayed compose transitions. Refresh regression preserves the iframe, document, scroll and geometry. Ten semantic mutations across Deals, calendar, search, attachment grouping and draft transfer failed assertions and were restored byte-for-byte. Test proof and installed readback follow below.
+
+Review evidence: review-1.1.7.json, shots/1.1.7, and pending/117-*.md. A second builder review found and fixed context-menu shortcut targeting, native preview shortcut leakage, account snapshot loss, obsolete empty-view cache, original-message file navigation and hidden file-save errors.
+
+Limits: PDF preview extracts text, not page layout or scanned pages. Calendar files are links, not uploads. Search/company context use cached mail; grouping is bounded to 200 files and 128 MB. Complex calendar exceptions, room booking and appointment schedules still use Google Calendar. No authenticated calendar writes or mail sends were used for verification. No new migration, dependency, OAuth scope or CSP change.
+
+Context: project_skim_fork.md, checked against current source and D50-D60. Proposed memory update for Claude Code after install: record 1.1.7 and link this status file.
+
 ## Version 1.1.6 (installed October 7)
 
 Patrick reported flicker in the open email after 1.1.5. Cached list refreshes inserted a loading row on every mail update. A metadata refresh of the open thread also inserted a status row above its body. Both paths now keep cached content in place. Initial loading and error recovery remain available.

@@ -68,7 +68,10 @@ export interface EventInput {
   optional_attendees?: string[];
 }
 
+export interface EventAttachment { fileUrl: string; title?: string; mimeType?: string; fileId?: string }
+
 export interface EventOptions {
+  attachments?: EventAttachment[];
   recurrence?: string[];
   reminders?: { useDefault: boolean; overrides?: { method: "popup" | "email"; minutes: number }[] };
   visibility?: "default" | "public" | "private" | "confidential";

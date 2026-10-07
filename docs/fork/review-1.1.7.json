@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "project": "C:\\Users\\Patrick\\Projects\\skim-header-polish-20261007",
+  "task": "skim-117-daily-use-polish",
+  "inputs": {
+    "src/App.svelte": "a81173cbb1a05cd14a451292ccc925bec6504e394e28ffca634d350ad4a8c925",
+    "src/components/AttachmentChips.svelte": "1484ceefc9463b09335023ee50568f83c61ba77e804e111ab50c4fd1990ca83c",
+    "src/components/CommandPalette.svelte": "59b8bbe50a6e3d89e491e36c7d2d64b82eaaa19c0c6d32de8d1e1f3b000fd712",
+    "src/components/ComposeForm.svelte": "26aeb1206cff9d57d132e1ee3a147f082275f5c38d33567b5d9944a4f6663219",
+    "src/components/HtmlViewer.svelte": "d14fb97264df3b403b9ef62eefb012f843596ee17c0024c424165028f3f14221",
+    "src/components/MessageList.svelte": "af5d7bd028e27ae68f40747f63d09e6e7d213e488617fed9ef4aa12a0b1675cc",
+    "src/components/MessageRow.svelte": "d992af8196f1d4b24c811d5350c6099e82ed7d0a19d6531af731f2ef3287fa22",
+    "src/components/ReadingPane.svelte": "8d8968acd4781c6b126c98eeef7136a1e255501df635688f553e1d8855178d5e",
+    "src/components/Titlebar.svelte": "f05cc03941c6c7c34e55c87042d1512421cb51e07ec458b458487a2d06ab54a3",
+    "src/fork/calendar/CalendarView.svelte": "555a629d225d4253a54f5dd55ceb158269a121b51ead64d91eb0a1aa792107c7",
+    "src/fork/calendar/EventPanel.svelte": "2f651ee755e9f2b19f0c74a1873cf23ee942a026f8f560d9e39036179cb9064d",
+    "src/fork/calendar/EventPreview.svelte": "3f0ab2c17aafcdf1724c4e604cf76f0ea85e5f3efdc4b17dbdc80b4634a5cf27",
+    "src/fork/calendar/MeetNow.svelte": "b51a938814bf2300034130a5c6ed0da7bca6899b91ed49de58150dc363a930c6",
+    "src/fork/calendar/NextEventChip.svelte": "c242fb9766518bd5dd891e75bfe3163cc7f7b8352ebc24ae0c7f4408fe8f27a1",
+    "src/fork/calendar/TitlebarExtras.svelte": "bd68aea5bee6d4eb6b0f53e7a4cdee3e01010313a6c76ea0c23b60e016b95c32",
+    "src/fork/calendar/ec-theme.css": "9ff83303bef160340b51c9dc505aba15f745590d0def329ece3cfe235ec30c30",
+    "src/fork/calendar/store.svelte.ts": "edb843d73ba56cd9582aa99d583cf9bfbd0bcf4167ba78ce3734fdec3f0f121c",
+    "src/fork/calendar/types.ts": "364cb2597009edf1129bf405c72bc22050fdebf33ba7d64bbe30a51a39631fc0",
+    "src/fork/deals/DealBadge.svelte": "60342525dad6fdbb02a85769de863ef4477f83dc574883242a0a42f7010d476e",
+    "src/fork/deals/DealTool.svelte": "a3458854953498f2d0a1571fdf537fdd1ae2f13601296c959359912326063632",
+    "src/fork/deals/DealsToolbar.svelte": "2178492c9c7d8f5e2b162cc888d0273b75b6f30cb464a45de4b126fe8d7c94ff",
+    "src/fork/deals/api.ts": "abcfefcc40be6bf9ba692baff552f6ec6c47f730069954cda2c1ee12726bedf0",
+    "src/fork/deals/store.svelte.ts": "9f19b55795ba3f09de2f3f07c2d2a2542eb16451ad166e08d6e26968e0e4c1b0",
+    "src/fork/reading/ConversationTools.svelte": "23df79507e3eea51ab4ea2d85f35babac6c748e58d1a22abd3a306b1b3c0d7ad",
+    "src/fork/search/SearchTools.svelte": "2539cadb1455072e6080fa378a4cab6a75bd6704688c7e9f1ce8d0661c6b4ca8",
+    "src/fork/search/filters.ts": "706dbe72da362be07a9077527e2cf1cd58d8497a12c13acdbb5d24eab32d9833",
+    "src/fork/search/query.ts": "94b1ff8929421ccdc03b56ea26c8e8b85dcf7d0857443d5e2eac80e4459258ef",
+    "src/fork/sync/SyncStatus.svelte": "70cabfb44358ab93342e570122852e8ff5c042e9248e3075f367aa7ed97cf3f4",
+    "src/fork/sync/api.ts": "72d8f02b61a46c96d20c7602aa4aae7af06176c7017b19b1fbb72e2f313ec732",
+    "src/lib/stores/mail.svelte.ts": "780bd04bddec452a5466adb8a3c261e0420036f2849455f3822ef254a70b1bef",
+    "src/styles/tokens.css": "5880bd236a99806d42eba4da3e2d977cf975a9505af4b054f563b9ad79c87ea2",
+    "docs/fork/DECISIONS.md": "fedcacbd2fd3d8ed94d6a355b7fa3d3d3d0b57e70e13b854a3f14fcdb9211ea7",
+    "src/fork/attachments/groups.ts": "6ce44094bd244c3cbdb1b493e308bb870aec9139415390818853ecdc3d99f348",
+    "src/fork/calendar/AttachmentLinks.svelte": "3f1263abf030f93ead32989e5a25fa7b915ae3bd4c77e31907589ad8a37d6819",
+    "src/fork/calendar/presentation.ts": "a1e53a176288520b7f67f7047e450b3efbec6c604b1c0e72cf96d505657eb4f7",
+    "src/fork/compose/Snippets.svelte": "d151c69a8653736524f8e20fcc3693a92607a617bd82b8720cf24d0f8f9823d2",
+    "src/fork/compose/workflow.ts": "f72e7271c0ecaa155d1e16d9b3e6b5476ed7706acf25fb8c73f09558ec7c7c12",
+    "src/fork/deals/CompanyOverview.svelte": "0431595b7ee94d0aae8f61377dac066515c4928b50a5736941760a61b68ff12f",
+    "src/fork/layout/MessageMenu.svelte": "2bb3be6d69e3b589d8edce6dd3344b1e7214287d17b5f82cc55d13c9e7a2af98",
+    "src/fork/layout/mail-list.ts": "e28af36358a995114cd6f957bf88f0d370eadc2d0fed5254fec1ae4ecc808b3c",
+    "src/fork/search/HighlightedText.svelte": "e89858ac7efa71fcd5b95a88426de604affe0d717ea38dd3b5d9ab2928f77591",
+    "src/fork/search/passages.ts": "eba85606ea9404baea51a2ea6f60add6ca2f66b4751d3f7bf27ebce62a915fe3"
+  },
+  "reference_files": [
+    "docs/fork/DECISIONS.md"
+  ],
+  "intended_improvement": "Consistent company identity, calm reading, clear actions and resilient daily workflows.",
+  "selection": {
+    "outcome": "adapt",
+    "reason": "Reuse the approved Base components. Registered-source search for dense mail identity and responsive titlebar returned no compatible candidates. No new UI dependency.",
+    "sources": []
+  },
+  "inspection": {
+    "component": "Verified contained logos and fallbacks, scoped Deals forms, exact source links, menu keyboard boundaries, time/Join bounds, attachment errors and draft transition ordering.",
+    "screen": "Built-demo renders inspected in Base dark and light at 1600, 1200 and 900 pixels. Header checked to 700 pixels. Teal and amber pairs pass computed rendered contrast in all six themes.",
+    "journey": "Shell, Deals, reading/calendar, search/files, compose, navigation and refresh browser suites use fictional data. Delayed and failed saves preserve the draft.",
+    "product": "Preserves Base navigation and manual Deals. Colour is semantic and sparse. Review records agent inspection, not human visual approval. Installation verification is pending."
+  },
+  "evidence": [
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-crowded-base-dark.png",
+      "sha256": "2213e7b3ae5368a39b72a36ea3947b16e78ef0863376d998716b13a3e0daa6ee",
+      "description": "Fictional built-demo evidence: calendar-crowded-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-crowded-base-light.png",
+      "sha256": "27a0cf3c798f533fe6942966e96105481dd45df1bc563556ad381d2e46c95408",
+      "description": "Fictional built-demo evidence: calendar-crowded-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-editor-1200-base-dark.png",
+      "sha256": "0753e867b4820ae2f063f04dcbf5dd1c15dd7b48f0937fce2c30a8bda3eaae52",
+      "description": "Fictional built-demo evidence: calendar-editor-1200-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-editor-1200-base-light.png",
+      "sha256": "1ca21502f8df8ed4bb340ec6f4290ccd11ab1d0abdaa461748db9600c22e69da",
+      "description": "Fictional built-demo evidence: calendar-editor-1200-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-editor-900-base-dark.png",
+      "sha256": "41b187cfe4ff3d6c391b0a4774b19fb0b6211f6be479b19b4bccd02ecd45585b",
+      "description": "Fictional built-demo evidence: calendar-editor-900-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-editor-900-base-light.png",
+      "sha256": "12bc5e0cd630befc8832cce554aa24baf985328c825867c548919af4e1161146",
+      "description": "Fictional built-demo evidence: calendar-editor-900-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-linked-notes-base-dark.png",
+      "sha256": "eec66b633bac2c00aba90078f80a50a16d596000d53438bebb25913e9ac9837c",
+      "description": "Fictional built-demo evidence: calendar-linked-notes-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/calendar-linked-notes-base-light.png",
+      "sha256": "9e20405bc73bc7c39be40fba182719a2157cbef2e033bf55f0214fdd2020f399",
+      "description": "Fictional built-demo evidence: calendar-linked-notes-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/colour-evidence.json",
+      "sha256": "232d0e38ee0f8570d3e6d4ff29e752b566a94c8bf474e474110c5c1cef331736",
+      "description": "Fictional built-demo evidence: colour-evidence"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/company-base-dark.png",
+      "sha256": "b09d47b2cf41c7ac7a05b94f1038800466517b97d25760aec0ece6e61c54f09e",
+      "description": "Fictional built-demo evidence: company-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/company-base-light.png",
+      "sha256": "c5d540b52a4ed3356a6887fce12e36db8887bc8eef5511003601f01541f3f181",
+      "description": "Fictional built-demo evidence: company-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/deals-base-dark.png",
+      "sha256": "d9a044da46c5557b3c9c0bd78a1a2515fdca0917846cd112f1740aea8fa2c354",
+      "description": "Fictional built-demo evidence: deals-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/deals-base-light.png",
+      "sha256": "6b6657eb6bfdaf5b1bcdfa44b11ba5bd606815e579f499b933f2d6c11f7944e4",
+      "description": "Fictional built-demo evidence: deals-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/inbox-base-dark.png",
+      "sha256": "514e628f657772f5c78ac15f31331e51eeb75b9752e2590dd14adcb20c17799b",
+      "description": "Fictional built-demo evidence: inbox-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/inbox-base-light.png",
+      "sha256": "0090afde574e5f16abe4b11aa15656109fdb13a43ed7f48aee8a9cbfbf428c5c",
+      "description": "Fictional built-demo evidence: inbox-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/reading-compact-1200-base-dark.png",
+      "sha256": "26864c93fb619591e2110734496d7cfc0f00916a7262166f83447ad7c786804b",
+      "description": "Fictional built-demo evidence: reading-compact-1200-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/reading-compact-1200-base-light.png",
+      "sha256": "f268dc0aab1830340b9a7597258db661237ef2c455ac6ed37788771b254aae4a",
+      "description": "Fictional built-demo evidence: reading-compact-1200-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/reading-compact-900-base-dark.png",
+      "sha256": "b57711011e2c56b8bc56e75ace4adb9ab03c8e9262794cd9a1f9870da078c2eb",
+      "description": "Fictional built-demo evidence: reading-compact-900-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/reading-compact-900-base-light.png",
+      "sha256": "3f7ad2105e25f1b6f1d361fc2cfd9e5700f6bb887acc298dc31910f3d6c09336",
+      "description": "Fictional built-demo evidence: reading-compact-900-base-light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/reading-compact-base-dark.png",
+      "sha256": "e87454c2833ad78fecde25858506ccfc99c4f1b6aa61dbe91fe5c561ccfc5446",
+      "description": "Fictional built-demo evidence: reading-compact-base-dark"
+    },
+    {
+      "path": "docs/fork/shots/1.1.7/reading-compact-base-light.png",
+      "sha256": "bd915394c54d76717db3d4f9566ae440a545f6d223bde3ab84d798ed2c2f331c",
+      "description": "Fictional built-demo evidence: reading-compact-base-light"
+    }
+  ],
+  "limitations": [
+    "PDF text preview only; no rendered pages or scan OCR.",
+    "Calendar attachments are HTTPS links; special event types and complex recurrence remain in Google Calendar.",
+    "Search and company context are cache-based. No live sends or invitations were tested.",
+    "Visible DOM colour audit records all text; assertions cover the new semantic pairs, not full accessibility conformance."
+  ],
+  "human_feedback": null
+}

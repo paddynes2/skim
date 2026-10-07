@@ -19,7 +19,7 @@ try {
   await context.route('https://www.google.com/s2/favicons**', route => route.request().url().includes('acme-partners') ? route.abort() : route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="8" fill="#3165cd"/><path d="M16 48V16l32 32V16" stroke="white" stroke-width="6" fill="none"/></svg>' }));
   const page = await context.newPage(); page.setDefaultTimeout(10000);
   const errors=[]; page.on('pageerror', e => errors.push(String(e)));
-  await page.goto('http://127.0.0.1:1421/');
+  await page.goto(process.env.SKIM_DEMO_URL ?? 'http://127.0.0.1:1421/');
   await page.locator('.row', { hasText: 'Q3 launch' }).first().waitFor();
   await page.evaluate(() => document.fonts.ready);
   const nav = await page.locator('.sidebar .item .name').allTextContents();

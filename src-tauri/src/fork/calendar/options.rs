@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct EventOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<EventAttachment>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recurrence: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reminders: Option<Reminders>,
@@ -22,6 +24,18 @@ pub struct EventOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guests_can_see_other_guests: Option<bool>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EventAttachment {
+    pub file_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Reminders {
@@ -59,6 +73,24 @@ impl EventOptions {
         {
             return Err(bad("Invalid event colour"));
         }
+        if let Some(files) = &self.attachments {
+            if files.len() > 25
+                || files.iter().any(|f| {
+                    f.file_url.len() > 4096
+                        || f.title.as_ref().is_some_and(|s| s.len() > 512)
+                        || !url::Url::parse(&f.file_url).is_ok_and(|u| {
+                            u.scheme() == "https"
+                                && u.host_str().is_some()
+                                && u.username().is_empty()
+                                && u.password().is_none()
+                        })
+                })
+            {
+                return Err(bad(
+                    "Use up to 25 HTTPS attachment links with no embedded credentials.",
+                ));
+            }
+        }
         if let Some(r) = &self.reminders {
             if r.overrides.len() > 5
                 || r.overrides.iter().any(|v| {
@@ -91,6 +123,7 @@ impl EventOptions {
     pub fn merge(&mut self, patch: &Self) {
         macro_rules! set { ($($f:ident),*) => { $(if patch.$f.is_some() { self.$f = patch.$f.clone(); })* }; }
         set!(
+            attachments,
             recurrence,
             reminders,
             visibility,
@@ -101,4 +134,27 @@ impl EventOptions {
             guests_can_see_other_guests
         );
     }
+}
+
+/// Add links to the fresh remote list. An old local cache must not remove a file.
+pub fn merge_attachment_additions(
+    current: &serde_json::Value,
+    requested: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    let mut files = current.as_array().cloned().unwrap_or_default();
+    for file in requested.as_array().into_iter().flatten() {
+        if !files
+            .iter()
+            .any(|existing| existing["fileUrl"] == file["fileUrl"])
+        {
+            files.push(file.clone());
+        }
+    }
+    if files.len() > 25 {
+        return Err(SkimError::other(
+            "gcal_input",
+            "This event already has too many attachment links.",
+        ));
+    }
+    Ok(serde_json::Value::Array(files))
 }

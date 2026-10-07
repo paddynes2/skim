@@ -2,12 +2,14 @@
   // The compose/edit surface, decoupled from any window. Rendered both inside
   // its own native window (Composer.svelte, `chrome` on) and inline in the
   // reading pane for editing a draft from the Drafts folder (`chrome` off).
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { aiStream, api, errorMessage } from "../lib/api";
   import { t } from "../lib/i18n/index.svelte";
   import { createSlowStart } from "../lib/slow-start.svelte";
   import { ai } from "../lib/stores/ai.svelte";
   import type { Account, Draft, DraftAttachment } from "../lib/types";
+  import Snippets from "../fork/compose/Snippets.svelte";
+  import { mentionsMissingAttachment, serialSaves, transferDraft } from "../fork/compose/workflow";
   import AddressInput from "./AddressInput.svelte";
   import WindowControls from "./WindowControls.svelte";
   // Fork (6.1-6.4): rich text, inline reply, send safety.
@@ -59,6 +61,16 @@
   let showCc = $state(false);
   let sending = $state(false);
   let error = $state("");
+  let localStatus=$state<"saved"|"saving"|"dirty"|"error">("saved");
+  let transferring=$state(false);
+  let attachmentsChanged=false;
+  let revision=0;
+  let attachmentBusy=$state(0);
+  const attachmentTasks=new Set<Promise<void>>();
+  let attachmentPrompt=$state(false);
+  let attachmentApprovedText="";
+  let attachmentPendingWhen:WhenPick|null=null;
+  let attachmentPendingSmell=false;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   // Once the draft has been sent or discarded, teardown must not resurrect it
   // with a write-back.
@@ -82,7 +94,7 @@
     return d ? JSON.stringify([d.to, d.cc, d.bcc, d.subject, d.body]) : "";
   }
   function edited(): boolean {
-    return dirty && shapeOf(draft) !== loadedShape;
+    return dirty && (shapeOf(draft) !== loadedShape || attachmentsChanged);
   }
 
   // For the From picker (several mailboxes, fresh compose only). Replies keep
@@ -162,12 +174,6 @@
     });
   });
 
-  /** Persist the words as HTML (or drop the row in plain mode). */
-  async function flushHtml() {
-    if (!draft) return;
-    await forkComposeApi.draftHtmlSet(draft.id, richMode ? wordsHtml : null).catch(() => {});
-  }
-
   // ---- Fork (6.1): discard with a second click ----
   let discardArmed = $state(false);
   let discardTimer: ReturnType<typeof setTimeout> | null = null;
@@ -202,6 +208,8 @@
   /** Mark an edit: guards the inline write-back and drives the window Save state. */
   function markDirty() {
     dirty = true;
+    revision++;
+    localStatus="dirty";
     saveState = "dirty";
   }
 
@@ -219,7 +227,12 @@
 
   /** Read each file's bytes and stage it on the draft. Shared by the paperclip
    *  button and drag & drop. */
-  async function attachFiles(files: FileList | File[] | null) {
+  function attachFiles(files:FileList|File[]|null):Promise<void>{
+    if(!files?.length)return Promise.resolve();
+    attachmentsChanged=true;markDirty();attachmentBusy++;
+    const task=stageFiles(files).finally(()=>{attachmentBusy--;attachmentTasks.delete(task);});attachmentTasks.add(task);return task;
+  }
+  async function stageFiles(files: FileList | File[] | null) {
     if (!draft || !files) return;
     for (const file of Array.from(files)) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
@@ -252,6 +265,7 @@
     try {
       await api.removeDraftAttachment(id);
       attachments = attachments.filter((a) => a.id !== id);
+      attachmentsChanged=true;
       markDirty();
     } catch (e) {
       error = errorMessage(e);
@@ -588,6 +602,7 @@
         loadedShape = shapeOf(d);
         showCc = d.cc.length > 0 || d.bcc.length > 0;
         attachments = await api.listDraftAttachments(draftId);
+        committed=d.originMessageId!==null || Boolean(d.subject.trim() || ownWords(d.body).text.trim() || attachments.length);
         accounts = await api.listAccounts();
         // Fork (6.2): an inline reply comes into view and takes the cursor.
         if (variant === "reply") {
@@ -603,38 +618,38 @@
     })();
   });
 
-  function scheduleSave() {
-    markDirty();
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      if (!draft) return;
-      const snapshot = $state.snapshot(draft) as Draft;
-      await api.updateDraft(snapshot);
-      await flushHtml();
-      // Let an inline host reflect the edit in its list row (subject/preview).
-      onLocalSave?.(snapshot);
-    }, 800);
+  const persistSnapshot=serialSaves(async (value:{draft:Draft;html:string|null})=>{
+    await api.updateDraft(value.draft);
+    await forkComposeApi.draftHtmlSet(value.draft.id,value.html);
+    onLocalSave?.(value.draft);
+  });
+  async function saveLocal(){
+    if(!draft)return;
+    if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+    await Promise.all([...attachmentTasks]);
+    const at=revision;const snapshot=$state.snapshot(draft) as Draft;
+    const html=richMode?wordsHtml:null;localStatus="saving";
+    try{await persistSnapshot({draft:snapshot,html});if(revision===at)localStatus="saved";}
+    catch(e){localStatus="error";error=errorMessage(e);throw e;}
   }
+  function scheduleSave(){markDirty();if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>{void saveLocal().catch(()=>{});},800);}
 
   /** Persist to the server: for a Drafts-folder draft this queues the write-back
    *  to the IMAP Drafts folder; for a local-only draft it just saves locally. */
-  async function flushServer() {
-    // Nothing the user changed → don't rewrite the server copy.
-    if (!draft || !edited()) return;
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    try {
-      await api.saveServerDraft($state.snapshot(draft) as Draft);
-    } catch {
-      // Best effort — the local autosave already captured the text.
-    }
+  async function flushServer(){
+    if(!draft || !edited())return;
+    await saveLocal();
+    await api.saveServerDraft($state.snapshot(draft) as Draft);
+    committed=true;
   }
 
   /** Send now (held for the undo window, 6.4) or at `when` (send later). */
   async function send(when: WhenPick | null = null, smellOverride = false) {
-    if (!draft || sending || !draft.to.trim()) return;
+    if (!draft || sending || transferring || attachmentBusy || !draft.to.trim()) return;
+    if(draft.body!==attachmentApprovedText && mentionsMissingAttachment(ownWords(draft.body).text,attachments.length)){
+      attachmentPendingWhen=when;attachmentPendingSmell=smellOverride;attachmentPrompt=true;return;
+    }
+    attachmentPrompt=false;
     // Fork (6.5): must-fix items (dashes, placeholders, invisible characters)
     // stop the send once; "Send anyway" passes the override.
     if (!smellOverride && smellSettings?.blockHard && smell && mustFix(smell.rescan()).length) {
@@ -647,8 +662,7 @@
     error = "";
     try {
       if (saveTimer) clearTimeout(saveTimer);
-      await api.updateDraft($state.snapshot(draft) as Draft);
-      await flushHtml();
+      await saveLocal();
       // Fork (6.4): the hold. A scheduled send names its moment; a plain send
       // is held for the undo window (0 = straight out, as upstream).
       const undoSecs = prefs.undoSendSecs;
@@ -664,10 +678,10 @@
     }
   }
 
-  async function discard() {
-    settled = true;
-    if (draft) await api.deleteDraft(draft.id).catch(() => {});
-    onDiscarded?.();
+  async function discard(){
+    if(!draft)return;
+    try{await saveLocal();await api.deleteDraft(draft.id);settled=true;onDiscarded?.();}
+    catch(e){error=errorMessage(e);}
   }
 
   /** Explicit save from the compose window: commit the draft to the Drafts
@@ -679,13 +693,12 @@
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    const snapshot = $state.snapshot(draft) as Draft;
+    const at=revision;
     try {
-      await api.updateDraft(snapshot);
-      await api.saveServerDraft(snapshot);
-      dirty = false;
+      await saveLocal();
+      await api.saveServerDraft($state.snapshot(draft) as Draft);
+      if(revision===at){dirty=false;saveState="saved";}
       committed = true;
-      saveState = "saved";
     } catch (e) {
       error = errorMessage(e);
     }
@@ -724,33 +737,27 @@
   }
 
   /** Fork (6.2): continue in a window; this inline copy unmounts. */
-  async function popOut() {
-    if (!draft) return;
-    if (saveTimer) clearTimeout(saveTimer);
-    await api.updateDraft($state.snapshot(draft) as Draft);
-    await flushHtml();
-    settled = true;
-    await api.openComposeWindow(draft.id);
-    onPopOut?.();
+  async function popOut(){
+    if(!draft||transferring)return;transferring=true;error="";
+    try{await transferDraft(saveLocal,()=>api.openComposeWindow(draft!.id),()=>{settled=true;committed=true;onPopOut?.();});}
+    catch(e){error=errorMessage(e);}finally{transferring=false;}
   }
-
-  async function close() {
-    settled = true;
-    if (chrome) {
-      // Fork (6.1): the window's ✕ keeps what was typed. Edited: commit to
-      // Drafts (a failed save keeps the row so nothing is lost). Untouched:
-      // drop the never-saved local draft so it doesn't linger.
-      if (saveState === "dirty") {
-        await save();
-      } else if (!committed && draft) {
-        await api.deleteDraft(draft.id).catch(() => {});
-      }
-    } else {
-      // Inline: closing keeps the draft — flush edits back to the server.
-      await flushServer();
-    }
-    onClose?.();
+  async function close(){
+    if(transferring)return;
+    try{
+      if(edited() || attachmentBusy){await saveLocal();await flushServer();}
+      else if(!committed && draft)await api.deleteDraft(draft.id);
+      settled=true;onClose?.();
+    }catch(e){error=errorMessage(e);localStatus="error";}
   }
+  onMount(()=>{
+    if(!chrome)return;let unlisten:(()=>void)|undefined;let disposed=false;
+    void import("@tauri-apps/api/window").then(async({getCurrentWindow})=>{
+      const stop=await getCurrentWindow().onCloseRequested(async event=>{if(!settled){event.preventDefault();await close();}});
+      if(disposed)stop();else unlisten=stop;
+    }).catch(()=>{});
+    return()=>{disposed=true;unlisten?.();};
+  });
 
   // Teardown. Inline (switching draft rows / leaving the folder) still writes
   // edits back to the Drafts folder; the window instead cleans up an unsaved
@@ -759,15 +766,16 @@
     if (settled) return;
     settled = true;
     if (chrome) {
-      if (!committed && draft) void api.deleteDraft(draft.id).catch(() => {});
+      if(edited() || attachmentBusy)void flushServer().catch(()=>{});
+      else if (!committed && draft) void api.deleteDraft(draft.id).catch(() => {});
     } else if (variant === "reply") {
       // Fork (6.2): the thread changed under the inline reply. Untouched, the
       // empty draft goes; edited, it is kept like a closed inline editor.
-      if (edited()) void flushServer();
+      if (edited()) void flushServer().catch(()=>{});
       else if (draft) void api.deleteDraft(draft.id).catch(() => {});
       onClose?.();
     } else {
-      void flushServer();
+      void flushServer().catch(()=>{});
     }
   });
 
@@ -780,6 +788,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="compose-form"
+  inert={transferring}
   class:inline={!chrome}
   class:reply={variant === "reply"}
   role="region"
@@ -1027,13 +1036,15 @@
       <div class="error">{error}</div>
     {/if}
 
+    {#if attachmentPrompt}<div class="attachment-check" role="alert"><strong>{t("fork.compose.missing_file")}</strong><div><button onclick={()=>{attachmentPrompt=false;fileInput?.click();}}>{t("fork.compose.attach_file")}</button><button onclick={()=>{attachmentApprovedText=draft!.body;void send(attachmentPendingWhen,attachmentPendingSmell);}}>{t("fork.compose.send_without_file")}</button><button onclick={()=>attachmentPrompt=false}>{t("fork.compose.keep_editing")}</button></div></div>{/if}
+    <div class="compose-state" role="status"><span>{attachmentBusy?t("fork.compose.adding_files"):localStatus==="saving"?t("fork.compose.saving_local"):localStatus==="saved"?t("fork.compose.saved_local"):localStatus==="error"?t("fork.compose.save_failed"):t("fork.compose.unsaved")}</span>{#if localStatus==="error"}<button onclick={()=>void saveLocal().catch(()=>{})}>{t("fork.compose.retry_save")}</button>{/if}<span class="recipient-summary" title={`${t("compose.to")}: ${draft.to}${draft.cc?`; ${t("compose.cc")}: ${draft.cc}`:""}${draft.bcc?`; ${t("compose.bcc")}: ${draft.bcc}`:""}`}>{t("compose.to")}: {draft.to||t("fork.compose.add_recipient")}{#if draft.cc} &middot; {t("compose.cc")}: {draft.cc}{/if}{#if draft.bcc} &middot; {t("compose.bcc")}: {draft.bcc}{/if}</span></div>
     <footer class="bar">
       <!-- Fork (6.4): a split button — Send, and a caret for later. -->
       <div class="send-split">
-        <button class="send" onclick={() => send()} disabled={sending || !draft.to.trim()} title="Ctrl ↵">
+        <button class="send" onclick={() => send()} disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()} title="Ctrl ↵">
           {sending ? t("compose.sending") : t("compose.send")}
         </button>
-        <SendLater disabled={sending || !draft.to.trim()} onpick={(pick) => send(pick)} />
+        <SendLater disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()} onpick={(pick) => send(pick)} />
       </div>
       <button class="attach" onclick={() => fileInput?.click()} title={t("compose.attach")} aria-label={t("compose.attach")}>
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12.5 7.5l-5 5a3 3 0 0 1-4.243-4.243l5.657-5.657a2 2 0 0 1 2.829 2.829l-5.657 5.657a1 1 0 0 1-1.415-1.415l4.95-4.95" /></svg>
@@ -1046,10 +1057,11 @@
       <button type="button" class="attach fork-tool" onclick={() => addMeetLink((link) => insertAtCaret(link))} title={t("fork.compose.add_meet")} aria-label={t("fork.compose.add_meet")}>
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><rect x="1.5" y="4.5" width="9" height="7" rx="1.5" /><path d="M10.5 7l4-2.5v7l-4-2.5" /></svg>
       </button>
+      <Snippets oninsert={insertAtCaret} currentText={ownWords(draft.body).text}/>
       <div class="grow"></div>
       {#if variant === "reply"}
         <!-- Fork (6.2): continue in a window. -->
-        <button class="popout" onclick={popOut} title={t("fork.compose.pop_out")} aria-label={t("fork.compose.pop_out")}>
+        <button class="popout" disabled={transferring} onclick={popOut} title={t("fork.compose.pop_out")} aria-label={t("fork.compose.pop_out")}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M9 2.5h4.5V7M13.5 2.5L8 8" /><path d="M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>
         </button>
       {/if}
@@ -1088,6 +1100,8 @@
 </div>
 
 <style>
+  .compose-state{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:9px 16px;border-top:1px solid var(--hairline);color:var(--text-dim);font-size:11px;line-height:1.5}.compose-state button{color:var(--primary)}.recipient-summary{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attachment-check{margin:12px 16px;padding:12px;border:1px solid var(--hairline-strong);border-radius:var(--radius-s);font-size:13px}.attachment-check div{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px}.attachment-check button{color:var(--primary);font-size:12px}
+
   .compose-form {
     height: 100%;
     display: flex;

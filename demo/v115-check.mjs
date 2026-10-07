@@ -18,7 +18,7 @@ try {
   await context.route("https://www.google.com/s2/favicons**", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="8" fill="#3165cd"/><path d="M16 48V16l32 32V16" stroke="white" stroke-width="6" fill="none"/></svg>' }));
   const page = await context.newPage(); page.setDefaultTimeout(10000);
   const errors = []; page.on("pageerror", e => errors.push(String(e)));
-  await page.goto("http://127.0.0.1:1421/");
+  await page.goto(process.env.SKIM_DEMO_URL ?? "http://127.0.0.1:1421/");
   await page.locator(".row", { hasText: "Q3 launch" }).first().click();
   await page.locator(".convo .message").waitFor();
   await page.evaluate(() => document.fonts.ready);
@@ -38,7 +38,7 @@ try {
   await page.getByText("3 of 3 message bodies loaded.", { exact: false }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Load remaining messages", exact: true }).count(), 0);
   assert.ok((await page.locator(".conversation-tools").innerText()).includes("loaded"));
-  assert.equal(await page.locator(".conversation-tools .file-group .chip").count(), 2);
+  assert.equal(await page.locator(".conversation-tools .chip").count(), 2);
   assert.match(await page.locator(".conversation-tools").innerText(), /launch-checklist.pdf/);
   await page.getByRole("button", { name: "Files", exact: true }).click();
   await page.getByRole("button", { name: "Expand all", exact: true }).click();
@@ -69,8 +69,8 @@ try {
   await page.locator(".sidebar .item", { hasText: "Deals" }).click();
   await page.locator(".deal-tools").getByLabel("Company", { exact: true }).selectOption("Northwind");
   await page.locator(".deal-tools").getByRole("button", { name: "Overview", exact: true }).click();
-  await page.locator(".deal-tools .overview").waitFor();
-  assert.match(await page.locator(".deal-tools .overview").innerText(), /Northwind/);
+  await page.locator(".deal-tools .company-overview").waitFor();
+  assert.match(await page.locator(".deal-tools .company-overview").innerText(), /Northwind/);
   if (capture) await page.screenshot({ path: `${out}/deals-${theme}.png` });
   await page.locator(".sidebar .item", { hasText: "Inbox" }).click();
   await page.getByRole("button", { name: "Search & filters", exact: true }).click();

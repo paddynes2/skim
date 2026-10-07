@@ -5,19 +5,31 @@ import { api } from "../../lib/api";
 import { mail } from "../../lib/stores/mail.svelte";
 import { ui } from "../../lib/stores/ui.svelte";
 import { navHooks } from "../nav";
-import { DEALS_SETTING, dealsApi } from "./api";
+import { DEALS_SETTING, dealsApi, type ScopeInput } from "./api";
 import { dealsCount } from "./count.svelte";
 
-const state = $state({ text: "", loaded: false, failed: false, selectedCompany: "" });
+const state = $state({ text: "", loaded: false, failed: false, selectedCompany: "", revision: 0, overviewRequest: 0, noteDrafts: {} as Record<string,string>, addRequest: {threadId: 0, serial: 0} });
 let started = false;
 
 /** The list changed: the open Deals view and the badge follow at once. */
 function changed() {
+  state.revision++;
   void dealsCount.refresh();
   if (mail.dealsView) void mail.refreshThreads();
 }
 
 export const dealsStore = {
+  get revision() {return state.revision;},
+  noteDraft(company:string) {return state.noteDrafts[company];},
+  setNoteDraft(company:string,value:string) {state.noteDrafts[company]=value;},
+  clearNoteDraft(company:string) {delete state.noteDrafts[company];},
+  get overviewRequest() {return state.overviewRequest;},
+  get addRequest() {return state.addRequest;},
+  requestAdd(threadId:number) {state.addRequest={threadId,serial:state.addRequest.serial+1};},
+  openCompany(name:string) {state.selectedCompany=name;state.overviewRequest++;ui.showMail();void mail.selectDeals();},
+  async applyScope(input:ScopeInput) {state.text=await dealsApi.applyScope(input);changed();},
+  async exclude(threadId:number,excluded:boolean) {await dealsApi.exclude(threadId,excluded);changed();},
+  async saveContext(company:string,notes:string,pinnedId:number|null) {await dealsApi.saveContext(company,notes,pinnedId);changed();},
   get selectedCompany() { return state.selectedCompany; },
   selectCompany(name: string) { state.selectedCompany = name; },
   get text() {

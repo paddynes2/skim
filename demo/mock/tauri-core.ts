@@ -13,7 +13,7 @@ import { forkSmellRewrite, SMELL_FIXTURE_DRAFT } from "./fork-smell";
 import { forkComposeInvoke } from "./fork-compose";
 import { forkCalendarInvoke } from "./fork-calendar";
 import { forkCourtCounts, forkCourtList } from "./fork-court";
-import { DEMO_DEALS_TEXT, forkDealsContext, forkDealsCount, forkDealsList, forkDealsPreview, forkDealsSuggest } from "./fork-deals";
+import { forkDealsCatalog, forkDealsPreviewScope, forkDealsApplyScope, forkDealsExclude, forkDealsSaveContext, DEMO_DEALS_TEXT, forkDealsContext, forkDealsCount, forkDealsList, forkDealsPreview, forkDealsSuggest } from "./fork-deals";
 
 // The app checks `"__TAURI_INTERNALS__" in window` to decide whether to boot
 // (vs. show onboarding). Presence is enough — our aliased invoke does the work.
@@ -238,6 +238,7 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     case "get_message_body": {
       // Fork (5.3): `skimdemo.fork_body` swaps in a quoted-reply fixture.
       const kind = (globalThis as any).localStorage?.getItem("skimdemo.fork_body");
+      if (kind === "wide") return ok({...db.renderedBody(args.messageId),html:'<table style="width:100%;table-layout:fixed"><tr><th>Project</th><th>Owner</th><th>Status</th><th>Deadline</th></tr><tr><td>Northwind launch</td><td>Alex</td><td>On schedule</td><td>Friday</td></tr></table>'});
       if (kind === "gmail" || kind === "outlook" || kind === "plain" || kind === "forward")
         return ok(forkRenderedBody(args.messageId, kind));
       return ok(db.renderedBody(args.messageId));
@@ -280,7 +281,9 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
         sources: status === "ready" ? ["clients/example/project.md:12 (demo)"] : [],
         gaps: status === "ready" ? ["Delivery date needs your confirmation (demo)."] : [] });
     }
+    case "fork_search_coverage": return ok({ cachedMessages: 10, totalMessages: 14, attachmentMessages: 4 });
     case "fork_search_threads":
+      if(localStorage.getItem("skimdemo.search_match")==="older")return ok([{...db.INBOX_THREADS[0],messageId:1009,snippet:"The signed agreement is ready for review."}]);
       return ok(forkSearchThreads(args.query ?? "", args.offset ?? 0));
     // ---- Phase 9 CRM (demo/mock/fork-crm.ts) ----
     case "fork_crm_status":
@@ -300,6 +303,11 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
     case "fork_court_recompute":
       return ok(undefined);
     // ---- v1.1.3 deals ----
+    case "fork_deals_catalog": return ok(forkDealsCatalog());
+    case "fork_deals_preview_scope": return ok(forkDealsPreviewScope(args.input));
+    case "fork_deals_apply_scope": return ok(forkDealsApplyScope(args.input));
+    case "fork_deals_exclude": return ok(forkDealsExclude(args.threadId,args.excluded));
+    case "fork_deals_save_context": return ok(forkDealsSaveContext(args.company,args.notes,args.pinnedId));
     case "fork_deals_list":
       return ok(forkDealsList(args.offset ?? 0, args.company));
     case "fork_mail_queue_status":
@@ -356,6 +364,7 @@ ${args.name}: ${args.entry}`);
     case "take_pending_open":
       return ok(null);
     case "search_messages":
+      if(localStorage.getItem("skimdemo.search_match")==="older")return ok([{...db.searchHits("Q3")[0],messageId:1009,snippet:"The signed agreement is ready for review."}]);
       return ok(db.searchHits(args.query ?? ""));
 
     // compose
@@ -365,8 +374,7 @@ ${args.name}: ${args.entry}`);
       return ok(db.updateAccountIdentity(args.accountId, args.displayName, args.signature));
     case "set_draft_account":
       return ok(db.setDraftAccount(args.draftId, args.accountId, args.body));
-    case "get_draft":
-      return ok(db.getDraft(args.draftId));
+    case "get_draft": {const saved=localStorage.getItem(`skimdemo.draft.${args.draftId}`);return ok(structuredClone(saved?JSON.parse(saved):db.getDraft(args.draftId)));}
     case "get_reply_template": {
       const tpl = db.replyTemplate(args.messageId, args.mode);
       // Fork (6.5): the AI-tell fixture draft for the screenshot harness.
@@ -376,13 +384,27 @@ ${args.name}: ${args.entry}`);
         db.updateDraft(withTells);
         return ok(withTells);
       }
-      return ok(tpl);
+      return ok(structuredClone(tpl));
     }
-    case "update_draft":
-      db.updateDraft(args.draft);
-      return ok(undefined);
-    case "list_draft_attachments":
-      return ok([]);
+    case "update_draft": {
+      const snapshot=structuredClone(args.draft);
+      return new Promise((resolve,reject)=>setTimeout(()=>{if(localStorage.getItem("skimdemo.compose_save_error")==="on"){reject({message:"Demo local save failed"});return;}db.updateDraft(snapshot);localStorage.setItem(`skimdemo.draft.${snapshot.id}`,JSON.stringify(snapshot));resolve(undefined as T);},Number(localStorage.getItem("skimdemo.compose_save_delay")??0)));
+    }
+    case "list_draft_attachments": return ok(JSON.parse(localStorage.getItem(`skimdemo.draft_files.${args.draftId}`)??"[]"));
+    case "add_draft_attachment": {
+      const key=`skimdemo.draft_files.${args.draftId}`;const files=JSON.parse(localStorage.getItem(key)??"[]");
+      const file={id:Date.now(),draftId:args.draftId,filename:args.filename,mimeType:args.mimeType,size:args.data.length};files.push(file);localStorage.setItem(key,JSON.stringify(files));return ok(file);
+    }
+    case "remove_draft_attachment": {for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i)!;if(key.startsWith("skimdemo.draft_files."))localStorage.setItem(key,JSON.stringify(JSON.parse(localStorage.getItem(key)??"[]").filter((f:any)=>f.id!==args.attachmentId)));}return ok(undefined);}
+    case "save_server_draft": db.updateDraft(structuredClone(args.draft));return ok(undefined);
+    case "open_compose_window": {
+      if(localStorage.getItem("skimdemo.compose_open_error")==="on")return Promise.reject({message:"Demo window could not open"});
+      localStorage.setItem("skimdemo.opened_draft",JSON.stringify({draft:db.getDraft(args.draftId),attachments:JSON.parse(localStorage.getItem(`skimdemo.draft_files.${args.draftId}`)??"[]"),html:forkComposeInvoke("fork_draft_html_get",{draftId:args.draftId})?.value}));return ok(undefined);
+    }
+    case "fork_attachment_fingerprints":return ok(args.attachmentIds.map((id:number)=>({id,sha256:`fixture-${id}`})));
+    case "fork_attachment_preview":return ok({kind:"pdf-text",dataUrl:null,text:"Launch checklist\nThe complete planning notes are attached.",truncated:false});
+    case "fork_save_attachments":return ok({saved:args.attachmentIds.length,failed:[],cancelled:false});
+    case "save_attachment":if(localStorage.getItem("skimdemo.attachment_save_error")==="on")return Promise.reject({message:"Demo file could not save"});return ok(undefined);
     case "suggest_addresses":
       return ok([]);
 

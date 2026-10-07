@@ -1,0 +1,19 @@
+{
+  "fork.deals.scope": "Include in this deal",
+  "fork.deals.scope_conversation": "This conversation only",
+  "fork.deals.scope_person": "All mail with this person",
+  "fork.deals.scope_company": "All mail with this company",
+  "fork.deals.conversation_only": "This changes only the current conversation. It adds no domain or address rule.",
+  "fork.deals.scope_count": "{n} cached conversations will belong to this deal.",
+  "fork.deals.checking_scope": "Checking matching conversations?",
+  "fork.deals.exclude_conversation": "Exclude this conversation from Deals",
+  "fork.deals.restore_conversation": "Restore automatic matching for this conversation",
+  "fork.deals.current_document": "Current document",
+  "fork.deals.pin": "Pin as current",
+  "fork.deals.pinned": "Current",
+  "fork.deals.unpin": "Unpin document",
+  "fork.deals.private_notes": "Private notes",
+  "fork.deals.notes_local": "Saved on this device only. These notes are never sent to the company.",
+  "fork.deals.save_notes": "Save notes",
+  "fork.deals.no_current_document": "No current document"
+}

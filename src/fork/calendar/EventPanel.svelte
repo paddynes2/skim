@@ -27,6 +27,7 @@
   } from "./guests";
   import type { EventInput, EventRow, RsvpResponse } from "./types";
   // Fork (v1.1.1): typed time field, answer bar on top, propose a new time.
+  import AttachmentLinks from "./AttachmentLinks.svelte";
   import FindTime from "./FindTime.svelte";
   import { overlappingEvents } from "./planning";
   import ProposeTime from "./ProposeTime.svelte";
@@ -420,6 +421,7 @@
     <h3 class="section-heading">{t("fork.cal.description")}</h3>
     <textarea aria-label={t("fork.cal.description")} class="desc" bind:value={description} readonly={!editable} placeholder={editable ? t("fork.cal.description_placeholder") : ""} rows="4"></textarea>
 
+    <AttachmentLinks bind:value={options.attachments} editable={editable && !seriesMode && !followingMode} />
     <OptionsEditor bind:value={options} disabled={!editable || loadingSeries} />
     {#if remindersInvalid}<div class="hint danger" role="alert">{t("fork.cal.reminders_invalid")}</div>{/if}
     {#if error}<div class="hint danger" role="alert">{error}</div>{/if}

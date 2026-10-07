@@ -99,7 +99,7 @@ pub async fn search_messages(
             params.push(acct);
             params.push(rusqlite::types::Value::Integer(limit));
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt
+            let mut rows = stmt
                 .query_map(rusqlite::params_from_iter(params.iter()), |r| {
                     let from_name: Option<String> = r.get(4)?;
                     let from_addr: Option<String> = r.get(5)?;
@@ -118,6 +118,10 @@ pub async fn search_messages(
                     })
                 })?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
+            for row in &mut rows {
+                row.snippet =
+                    crate::fork::search_query::matching_passage(conn, row.message_id, &parsed)?;
+            }
             Ok(rows)
         })
         .await

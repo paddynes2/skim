@@ -20,10 +20,10 @@
 
 {#if ev}
   <div class="chip" data-testid="next-event">
-    <button class="main" onclick={open} title={t("fork.cal.chip_open")}>
+    <button class="main" onclick={open} title={`${ev.summary || t("fork.cal.untitled")} · ${fmtTime(ev.start_ts)} · ${t("fork.cal.chip_open")}`}>
       <span class="time">{fmtTime(ev.start_ts)}</span>
       <span class="title">{ev.summary || t("fork.cal.untitled")}</span>
-      <span class="sep">·</span>
+      <span class="sep" aria-hidden="true">·</span>
       <span class="in">{fmtIn(ev.start_ts, calendar.now)}</span>
     </button>
     {#if ev.hangout_link}
@@ -36,14 +36,18 @@
   .chip {
     display: inline-flex;
     align-items: center;
-    height: 24px;
+    height: 26px;
     border: 1px solid var(--hairline-strong);
     border-radius: 999px;
-    background: var(--surface);
+    background: var(--meeting-soft);
     font-size: 12px;
     color: var(--text-dim);
     overflow: hidden;
-    max-width: 380px;
+    max-width: 430px;
+    min-width: 0;
+    line-height: 1;
+    white-space: nowrap;
+    border-left: 3px solid var(--meeting-ink);
   }
   .main {
     display: inline-flex;
@@ -53,6 +57,8 @@
     height: 100%;
     min-width: 0;
     color: inherit;
+    flex: 1 1 auto;
+    white-space: nowrap;
   }
   .main:hover {
     background: var(--hover);
@@ -61,21 +67,26 @@
   .time {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--text);
+    color: var(--meeting-ink);
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 200px;
+    min-width: 0;
+    flex: 1 1 auto;
     color: var(--text);
     font-weight: 600;
   }
   .sep {
-    color: var(--text-faint);
+    color: var(--text-dim);
+    flex-shrink: 0;
   }
   .in {
     white-space: nowrap;
+    flex-shrink: 0;
   }
   .join {
     height: 100%;
@@ -83,10 +94,14 @@
     border-left: 1px solid var(--hairline-strong);
     font-weight: 700;
     font-size: 11.5px;
-    color: var(--text);
+    color: var(--meeting-ink);
+    flex-shrink: 0;
+    white-space: nowrap;
+    background: var(--meeting-soft);
   }
   .join:hover {
     background: var(--primary);
     color: var(--on-primary);
   }
+  @media (max-width: 900px) { .sep, .in { display: none; } }
 </style>

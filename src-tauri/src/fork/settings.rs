@@ -3,6 +3,7 @@
 //! list onto its own `ALLOWED`). Values are plain strings, like upstream's.
 
 pub const ALLOWED: &[&str] = &[
+    "fork_compose_snippets",
     "fork_list_width",
     "fork_saved_searches",
     "fork_cal_visible_start",

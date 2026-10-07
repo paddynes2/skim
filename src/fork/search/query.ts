@@ -10,6 +10,7 @@ const KEYS = new Set([
   "to",
   "cc",
   "subject",
+  "filename",
   "is",
   "has",
   "in",
@@ -21,7 +22,7 @@ const KEYS = new Set([
   "newer",
 ]);
 
-const NEGATABLE = new Set(["from", "to", "cc", "subject", "is", "has"]);
+const NEGATABLE = new Set(["from", "to", "cc", "subject", "filename", "is", "has"]);
 const IS_VALUES = new Set(["unread", "read", "starred", "unstarred"]);
 
 /** Split on whitespace outside double quotes, keeping the quotes. */

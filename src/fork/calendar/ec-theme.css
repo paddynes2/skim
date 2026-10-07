@@ -186,3 +186,13 @@
 .fork-cal .ec-time-grid .ec-event { margin-right: 2px; }
 .fork-cal .ec-time-grid .ec-event:not(.cal-short) .ec-event-title { white-space: normal; overflow-wrap: anywhere; }
 .fork-cal .ec-day-head, .fork-cal .ec-sidebar .ec-time { font-size: 11px; color: var(--text-dim); }
+
+.fork-cal .ec-all-day { max-height: 120px; overflow-y: auto; overflow-x: hidden; }
+.fork-cal .ec-event.cal-short .cal-event-content { flex-wrap: nowrap; line-height: 1.2; }
+.fork-cal .ec-event.cal-short .cal-event-title { white-space: nowrap; }
+.fork-cal .cal-state-cancelled { background: transparent; border-style: dotted; color: var(--text-dim); }
+.fork-cal .cal-state-cancelled .cal-event-title, .fork-cal .cal-state-declined .cal-event-title { text-decoration: line-through; }
+.fork-cal .cal-state-tentative .cal-state-mark { color: var(--text); }
+.fork-cal .cal-clock-second { display:inline-block; min-width:48px; padding-right:12px; margin-right:10px; border-right:1px solid var(--hairline); color:var(--text-dim); }
+.fork-cal .cal-clock-local { display:inline-block; min-width:42px; }
+.fork-cal .ec-event:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }

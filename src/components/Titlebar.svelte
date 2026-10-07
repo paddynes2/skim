@@ -2,6 +2,7 @@
   import { api } from "../lib/api";
   import { t } from "../lib/i18n/index.svelte";
   import { mail, UNIFIED } from "../lib/stores/mail.svelte";
+  import TitlebarExtras from "../fork/calendar/TitlebarExtras.svelte";
 
   const inTauri = "__TAURI_INTERNALS__" in window;
 
@@ -131,6 +132,7 @@
       <span class="account microlabel" data-tauri-drag-region>{mail.account.email}</span>
     {/if}
   </div>
+  <TitlebarExtras />
   <div class="controls">
     <button class="ctl" onclick={minimize} aria-label={t("a11y.minimize")}>
       <svg width="10" height="10" viewBox="0 0 10 10"><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1" /></svg>
@@ -151,7 +153,9 @@
 <style>
   .titlebar {
     height: var(--titlebar-h);
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(80px, 1fr) minmax(0, auto) 138px;
+    column-gap: 12px;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--hairline);
@@ -164,7 +168,13 @@
     gap: 12px;
     padding-left: 16px;
     position: relative;
+    min-width: 0;
   }
+  .account { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .switch-wrap { min-width: 0; }
+  .switcher { max-width: 100%; }
+  .logo { flex-shrink: 0; }
+  @media (max-width: 760px) { .brand .account { display: none; } }
   .logo {
     font-weight: 800;
     font-size: 15px;

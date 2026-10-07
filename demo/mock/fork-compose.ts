@@ -61,10 +61,12 @@ let scheduled = [...FORK_SCHEDULED];
 export function forkComposeInvoke(cmd: string, args: any): { value: unknown } | undefined {
   switch (cmd) {
     case "fork_draft_html_get":
-      return { value: HTML[args.draftId] ?? null };
+      return { value: HTML[args.draftId] ?? localStorage.getItem(`skimdemo.draft_html.${args.draftId}`) ?? null };
     case "fork_draft_html_set":
       if (args.wordsHtml == null) delete HTML[args.draftId];
       else HTML[args.draftId] = args.wordsHtml;
+      if (args.wordsHtml == null) localStorage.removeItem(`skimdemo.draft_html.${args.draftId}`);
+      else localStorage.setItem(`skimdemo.draft_html.${args.draftId}`, args.wordsHtml);
       return { value: undefined };
     case "send_draft": {
       const opId = ++opSeq;

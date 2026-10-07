@@ -37,6 +37,10 @@ use crate::db::queries;
 use crate::error::Result;
 use crate::state::AppState;
 
+#[path = "deals_details.rs"]
+mod details;
+pub use details::*;
+
 pub const SETTING: &str = "fork_deals";
 
 /// Never matched as a whole domain: personal mail lives there.
@@ -328,7 +332,9 @@ fn own_domains(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
 /// The setting, parsed against the mailboxes' own domains.
 pub fn read_list(conn: &Connection) -> rusqlite::Result<Parsed> {
     let text = queries::get_setting(conn, SETTING)?.unwrap_or_default();
-    Ok(parse(&text, &own_domains(conn)?))
+    let mut parsed = parse(&text, &own_domains(conn)?);
+    details::extend_catalog(&mut parsed.deals, &details::load(conn)?);
+    Ok(parsed)
 }
 
 /// Outside Trash and Spam: where a message counts as part of a conversation.
@@ -435,7 +441,12 @@ impl Cache {
         let tx = conn.transaction()?;
         let text = queries::get_setting(&tx, SETTING)?.unwrap_or_default();
         let (accounts, table) = shape(&tx)?;
-        let key = (text, accounts, table);
+        let details = details::load(&tx)?;
+        let key = (
+            format!("{}\0{}", text, details::cache_key(&tx)?),
+            accounts,
+            table,
+        );
         if let Ok(guard) = self.slot.lock() {
             if let Some((k, m)) = guard.as_ref() {
                 if *k == key {
@@ -443,8 +454,10 @@ impl Cache {
                 }
             }
         }
-        let deals = parse(&key.0, &own_domains(&tx)?).deals;
-        let map = scan(&tx, &deals)?;
+        let mut deals = parse(&text, &own_domains(&tx)?).deals;
+        details::extend_catalog(&mut deals, &details);
+        let mut map = scan(&tx, &deals)?;
+        details::apply_membership(&tx, &deals, &mut map, &details)?;
         tx.commit()?;
         let m: Membership = Arc::new((deals, map));
         if let Ok(mut guard) = self.slot.lock() {
@@ -590,6 +603,9 @@ pub struct Suggestion {
     /// What the line would match: the organisation's domain, or the address
     /// on a personal-mail provider.
     pub entry: String,
+    pub person_entry: String,
+    pub company_entry: Option<String>,
+    pub excluded: bool,
 }
 
 /// For "Add to Deals" on an open thread: the first person in it who is not on
@@ -598,9 +614,15 @@ pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Sug
     let parsed = read_list(conn)?;
     let own = own_domains(conn)?;
     let own_addrs = own_addresses(conn)?;
+    let overrides = details::load(conn)?;
     let deal = deal_of_thread(conn, &parsed.deals, thread_id)?
         .and_then(|i| parsed.deals.get(i))
         .map(|d| d.name.clone());
+    let deal = if overrides.excluded.contains(&thread_id) {
+        None
+    } else {
+        overrides.assignments.get(&thread_id).cloned().or(deal)
+    };
 
     let mut stmt = conn.prepare_cached(
         "SELECT from_name, from_addr, to_addrs, cc_addrs FROM messages
@@ -641,6 +663,8 @@ pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Sug
         .rsplit_once('@')
         .map(|(_, d)| d.to_string())
         .unwrap_or_default();
+    let person_entry = addr.clone();
+    let company_entry = (!is_personal(&domain)).then(|| base_domain(&domain));
     let (name, entry) = if is_personal(&domain) {
         let person = person
             .filter(|p| !p.trim().is_empty() && !p.contains('@'))
@@ -656,7 +680,14 @@ pub fn suggest(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<Sug
             .unwrap_or_default();
         (name, domain)
     };
-    Ok(Some(Suggestion { deal, name, entry }))
+    Ok(Some(Suggestion {
+        deal,
+        name,
+        entry,
+        person_entry,
+        company_entry,
+        excluded: overrides.excluded.contains(&thread_id),
+    }))
 }
 
 /// `text` with `entry` added under `name`: appended to that deal's line when
@@ -731,10 +762,17 @@ pub struct DealContext {
     pub people: Vec<Address>,
     pub attachments: Vec<DealAttachment>,
     pub meetings: Vec<DealMeeting>,
+    pub notes: String,
+    pub pinned: Option<DealAttachment>,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DealAttachment {
+    pub id: i64,
+    pub message_id: i64,
+    pub mime_type: Option<String>,
+    pub size: i64,
+    pub is_inline: bool,
     pub thread_id: i64,
     pub filename: String,
     pub date: i64,
@@ -769,11 +807,21 @@ pub fn context(
         people: vec![],
         attachments: vec![],
         meetings: vec![],
+        notes: details::load(conn)?
+            .notes
+            .get(company)
+            .cloned()
+            .unwrap_or_default(),
+        pinned: None,
     };
     let Some(index) = deal else {
         return Ok(context);
     };
     let selected = std::slice::from_ref(&membership.0[index]);
+    if let Some(id) = details::load(conn)?.pins.get(company) {
+        context.pinned = details::attachment(conn, *id, &ids)?;
+    }
+    let own = own_addresses(conn)?;
     let mut people = HashMap::<String, Option<String>>::new();
     {
         let mut stmt = conn.prepare(&format!("SELECT m.from_addr, m.from_name, m.to_addrs, m.cc_addrs FROM messages m JOIN folders f ON f.id=m.folder_id WHERE m.thread_id IN (SELECT value FROM json_each(?1)) AND {LIVE_FOLDER} ORDER BY m.date DESC"))?;
@@ -794,7 +842,11 @@ pub fn context(
                 );
             }
             for a in addresses {
-                if deal_for(selected, &a.addr).is_some() {
+                if deal_for(selected, &a.addr).is_some()
+                    || (selected[0].domains.is_empty()
+                        && selected[0].addresses.is_empty()
+                        && !own.contains(&a.addr.to_ascii_lowercase()))
+                {
                     people.entry(a.addr.to_ascii_lowercase()).or_insert(a.name);
                 }
             }
@@ -808,13 +860,18 @@ pub fn context(
     context.people.truncate(30);
     {
         // Group folder copies of the same attachment by message identity and part.
-        let mut stmt = conn.prepare(&format!("SELECT m.thread_id, COALESCE(a.filename, 'Attachment'), max(m.date) FROM attachments a JOIN messages m ON m.id=a.message_id JOIN folders f ON f.id=m.folder_id WHERE a.is_inline=0 AND m.thread_id IN (SELECT value FROM json_each(?1)) AND {LIVE_FOLDER} GROUP BY m.thread_id, COALESCE(m.message_id, CAST(m.id AS TEXT)), a.part_id, a.filename ORDER BY max(m.date) DESC LIMIT 30"))?;
+        let mut stmt = conn.prepare(&format!("SELECT m.thread_id, COALESCE(a.filename, 'Attachment'), max(m.date), min(a.id), a.message_id, a.mime_type, COALESCE(a.size,0) FROM attachments a JOIN messages m ON m.id=a.message_id JOIN folders f ON f.id=m.folder_id WHERE a.is_inline=0 AND m.thread_id IN (SELECT value FROM json_each(?1)) AND {LIVE_FOLDER} GROUP BY m.thread_id, COALESCE(m.message_id, CAST(m.id AS TEXT)), a.part_id, a.filename ORDER BY max(m.date) DESC LIMIT 30"))?;
         context.attachments = stmt
             .query_map([&ids_json], |r| {
                 Ok(DealAttachment {
                     thread_id: r.get(0)?,
                     filename: r.get(1)?,
                     date: r.get(2)?,
+                    id: r.get(3)?,
+                    message_id: r.get(4)?,
+                    mime_type: r.get(5)?,
+                    size: r.get(6)?,
+                    is_inline: false,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -837,7 +894,13 @@ pub fn context(
                         .map(str::to_string)
                 }));
             }
-            if addresses.iter().any(|a| deal_for(selected, a).is_some()) {
+            if addresses.iter().any(|a| {
+                deal_for(selected, a).is_some()
+                    || context
+                        .people
+                        .iter()
+                        .any(|p| p.addr.eq_ignore_ascii_case(a))
+            }) {
                 context.meetings.push(DealMeeting {
                     id: r.get(0)?,
                     summary: r.get(1)?,
