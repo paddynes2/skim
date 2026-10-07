@@ -59,7 +59,7 @@
     "component": "Verified contained logos and fallbacks, scoped Deals forms, exact source links, menu keyboard boundaries, time/Join bounds, attachment errors and draft transition ordering.",
     "screen": "Built-demo renders inspected in Base dark and light at 1600, 1200 and 900 pixels. Header checked to 700 pixels. Teal and amber pairs pass computed rendered contrast in all six themes.",
     "journey": "Shell, Deals, reading/calendar, search/files, compose, navigation and refresh browser suites use fictional data. Delayed and failed saves preserve the draft.",
-    "product": "Preserves Base navigation and manual Deals. Colour is semantic and sparse. Review records agent inspection, not human visual approval. Source3433770 installed as1.1.7. Native checks confirm header,17visible aligned logos, menus, context and editor controls. Refresh continuity across1722samples passed with zero page errors. Private captures remain in Temp. Canonical source/evidence hashes reflect paddy checkout line endings."
+    "product": "Preserves Base navigation and manual Deals. Colour is semantic and sparse. Review records agent inspection, not human visual approval. Source 3433770 installed as 1.1.7. Native checks confirm header, 17 visible aligned logos, menus, context and editor controls. Refresh continuity across 1,722 samples passed with zero page errors. Private captures remain in Temp. Canonical source/evidence hashes reflect paddy checkout line endings."
   },
   "evidence": [
     {
