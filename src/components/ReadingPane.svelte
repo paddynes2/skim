@@ -108,8 +108,17 @@
     if (msgs.length === 0) return null;
     const inFolder = msgs.filter((m) => m.folderId === mail.selectedFolderId);
     if (inFolder.length > 0) return inFolder[inFolder.length - 1];
-    return msgs[msgs.length - 1];
+    return newestOf(msgs);
   });
+
+  // Fork (v1.1.9): the newest message, skipping unsent drafts everywhere but
+  // the Drafts view, so a draft never stands in for the latest mail. A thread
+  // of drafts only still opens.
+  function newestOf(msgs: MessageMeta[]): MessageMeta | null {
+    const wantDraft = mail.selectedFolder?.role === "drafts";
+    for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].isDraft === wantDraft) return msgs[i];
+    return msgs[msgs.length - 1] ?? null;
+  }
 
   // Conversation view: the whole back-and-forth as a chat. Off in flat mode or
   // when a specific message was picked from a flat list.
@@ -296,11 +305,12 @@
       detail = d;
       // Fork (v1.1.1): open the newest message of the whole conversation, like
       // Outlook, so a reply filed in another folder is never hidden. Drafts keep
-      // the in-folder message, because that is the draft being opened.
+      // the in-folder message, because that is the draft being opened. v1.1.9:
+      // outside Drafts an unsent draft is never the one opened.
       const msgs = d.messages;
       const inFolder = msgs.filter((m) => m.folderId === mail.selectedFolderId);
       const draftsFolder = mail.selectedFolder?.role === "drafts";
-      const topId = (draftsFolder && inFolder.length ? inFolder[inFolder.length - 1] : msgs[msgs.length - 1])?.id ?? null;
+      const topId = (draftsFolder && inFolder.length ? inFolder[inFolder.length - 1] : newestOf(msgs))?.id ?? null;
       if (!sameThread || !msgs.some((m) => m.id === focusedId)) focusedId = topId;
       if (topId !== null && expanded[topId] === undefined) expanded = { ...expanded, [topId]: true };
 
@@ -336,16 +346,34 @@
     void loadRemaining();
   }
   function collapseAll() {
-    const newest = ordered[0];
+    const newest = newestOf(detail?.messages ?? []);
     const draftOpen = inlineReply.draftId !== null && inlineReply.threadId === detail?.id;
     expanded = draftOpen && inlineMessageId !== null ? { [inlineMessageId]: true } : {};
     if (newest && !draftOpen) focusedId = newest.id;
   }
+  // Fork (v1.1.9): open an unsent draft from the conversation in a compose
+  // window. The Drafts view has its own editor, so it never shows this button.
+  let draftOpening = $state(false);
+  let draftError = $state<{ id: number; text: string } | null>(null);
+  async function editDraft(messageId: number) {
+    if (draftOpening) return;
+    draftOpening = true;
+    draftError = null;
+    try {
+      const draft = await api.editDraft(messageId);
+      await api.openComposeWindow(draft.id);
+    } catch (e) {
+      draftError = { id: messageId, text: errorMessage(e) };
+    } finally {
+      draftOpening = false;
+    }
+  }
+
   function collapseMessage(id: number) {
     expanded = { ...expanded, [id]: false };
     if (focusedId === id) {
       const next = ordered.find((m) => expanded[m.id]);
-      focusedId = next?.id ?? ordered[0]?.id ?? null;
+      focusedId = next?.id ?? newestOf(detail?.messages ?? [])?.id ?? null;
     }
   }
 
@@ -728,6 +756,16 @@
       {#if conversation}<button class="collapse-message" disabled={message.id === inlineMessageId && inlineReply.draftId !== null && inlineReply.threadId === detail?.id} onclick={() => collapseMessage(message.id)} aria-label={t("fork.reading.collapse_message")} title={t("fork.reading.collapse_message")}>&minus;</button>{/if}
     </div>
 
+    {#if message.isDraft}
+      <div class="draft-bar" role="note">
+        <span class="draft-label">{t("fork.reading.draft_unsent")}</span>
+        {#if mail.selectedFolder?.role !== "drafts"}
+          <button class="chip" disabled={draftOpening} onclick={() => editDraft(message.id)}>{t("fork.reading.edit_draft")}</button>
+        {/if}
+        {#if draftError?.id === message.id}<span class="draft-error" role="alert">{draftError.text}</span>{/if}
+      </div>
+    {/if}
+
     {#if offerTranslate || message.canUnsubscribe}
       <!-- One row for the chips that act on this message. The meta line above is
            identity — sender, recipients, date — so a button in it was a squatter;
@@ -887,6 +925,7 @@
         <span class="chat-name">
           {isOutgoing(m) ? t("reading.you") : (m.from.name ?? m.from.addr)}
         </span>
+        {#if m.isDraft}<span class="chat-draft">{t("fork.reading.draft_unsent")}</span>{/if}
         <span class="chat-date">{formatFull(m.date)}</span>
       </div>
       <div class="chat-snippet">{m.snippet}</div>
@@ -1156,6 +1195,32 @@
     font-size: 11px;
     color: var(--text-dim);
     flex-shrink: 0;
+  }
+  /* Fork (v1.1.9): an unsent draft never reads as sent mail. */
+  .chat-draft {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--draft-ink);
+    flex-shrink: 0;
+  }
+  .draft-bar {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    border-radius: var(--radius-s);
+    background: var(--draft-soft);
+    font-size: 12px;
+  }
+  .draft-label {
+    color: var(--draft-ink);
+    font-weight: 600;
+  }
+  .draft-error {
+    color: var(--danger);
   }
   .chat-snippet {
     font-size: 13px;

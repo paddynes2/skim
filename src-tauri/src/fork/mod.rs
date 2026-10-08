@@ -71,3 +71,5 @@ pub mod mail_status;
 pub mod reading;
 
 pub mod attachments;
+
+mod unsent_drafts;

@@ -225,11 +225,20 @@ fn merge_threads(conn: &Connection, target: i64, other: i64) -> rusqlite::Result
 
 /// Recompute a thread's aggregate columns from its messages. Deletes the
 /// thread row when no messages remain; returns whether the thread survives.
+///
+/// Fork (v1.1.9): `last_date` and `snippet` come from the newest message
+/// outside a Drafts folder, so an unsent reply never moves or re-dates its
+/// conversation in Inbox, Sent or Deals. A thread of drafts only falls back to
+/// its newest draft.
 pub fn recompute_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<bool> {
     let row: Option<(i64, i64, i64, i64)> = conn
         .query_row(
-            "SELECT count(*), max(date), sum(is_read = 0), max(is_starred)
-             FROM messages WHERE thread_id = ?1",
+            "SELECT count(*),
+                    COALESCE(max(CASE WHEN f.role IS 'drafts' THEN NULL ELSE m.date END),
+                             max(m.date)),
+                    sum(m.is_read = 0), max(m.is_starred)
+             FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
+             WHERE m.thread_id = ?1",
             params![thread_id],
             |r| {
                 Ok((
@@ -249,7 +258,9 @@ pub fn recompute_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<b
     }
     let snippet: Option<String> = conn
         .query_row(
-            "SELECT snippet FROM messages WHERE thread_id = ?1 ORDER BY date DESC LIMIT 1",
+            "SELECT m.snippet FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
+             WHERE m.thread_id = ?1
+             ORDER BY f.role IS 'drafts', m.date DESC LIMIT 1",
             params![thread_id],
             |r| r.get(0),
         )

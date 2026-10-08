@@ -94,6 +94,9 @@ pub struct MessageMeta {
     /// reading pane can offer an unsubscribe chip. The full target stays in the
     /// DB and is never sent to the frontend — the chip just triggers the action.
     pub can_unsubscribe: bool,
+    /// Fork (v1.1.9): every copy of this message is in a Drafts folder, so it
+    /// is unsent and must never read as sent mail in a conversation.
+    pub is_draft: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

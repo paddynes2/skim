@@ -240,7 +240,7 @@ pub fn list_folders(conn: &Connection, account_id: &str) -> rusqlite::Result<Vec
 /// folder, so it must seek `idx_messages_thread_folder` — see migration 0014
 /// and `list_threads_seeks_the_thread_index`.
 pub(crate) const LIST_THREADS_SQL: &str = "SELECT t.id,
-        m.from_name, m.from_addr, m.subject, m.snippet, t.last_date,
+        m.from_name, m.from_addr, m.subject, m.snippet, max(t.last_date, m.date),
         (NOT EXISTS (SELECT 1 FROM messages m3
                      WHERE m3.thread_id = t.id AND m3.folder_id = ?1
                        AND m3.is_read = 0)),
@@ -252,7 +252,7 @@ pub(crate) const LIST_THREADS_SQL: &str = "SELECT t.id,
    AND m.date = (SELECT max(m2.date) FROM messages m2
                  WHERE m2.thread_id = t.id AND m2.folder_id = ?1)
  GROUP BY t.id
- ORDER BY t.last_date DESC
+ ORDER BY max(t.last_date, m.date) DESC
  LIMIT ?2 OFFSET ?3";
 
 /// Threads visible in a folder, newest first, shaped by each thread's latest
@@ -461,7 +461,7 @@ pub fn list_unified_threads_opts(
     let base = format!(
         "WITH sel(id) AS ({UNIFIED_SEL})
          SELECT t.id,
-                m.from_name, m.from_addr, m.subject, m.snippet, t.last_date,
+                m.from_name, m.from_addr, m.subject, m.snippet, max(t.last_date, m.date),
                 (NOT EXISTS (SELECT 1 FROM messages m3
                              WHERE m3.thread_id = t.id
                                AND m3.folder_id IN (SELECT id FROM sel)
@@ -475,7 +475,7 @@ pub fn list_unified_threads_opts(
                          WHERE m2.thread_id = t.id
                            AND m2.folder_id IN (SELECT id FROM sel))
          GROUP BY t.id
-         ORDER BY t.last_date DESC
+         ORDER BY max(t.last_date, m.date) DESC
          LIMIT ?3 OFFSET ?4"
     );
     let sql = crate::fork::list::apply(

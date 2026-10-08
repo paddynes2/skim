@@ -58,10 +58,18 @@ pub enum Shape {
     Flat,
 }
 
+/// The date a grouped row shows and sorts by. `t.last_date` skips drafts (see
+/// `threading::recompute_thread`), so a draft never moves a conversation; `m`
+/// is the row's newest in-folder message, which only in Drafts can be the
+/// draft, so the Drafts view keeps the draft's own time. Every other folder
+/// gets `t.last_date` unchanged, because its `m` is never newer.
+pub const ROW_DATE: &str = "max(t.last_date, m.date)";
+
 /// Splice filter and order into a base list query.
 ///
 /// The base SQL must contain, for `Grouped`, ` GROUP BY t.id` and
-/// ` ORDER BY t.last_date DESC`; for `Flat`, ` ORDER BY m.date DESC, m.id DESC`.
+/// ` ORDER BY max(t.last_date, m.date) DESC` ([`ROW_DATE`]); for `Flat`,
+/// ` ORDER BY m.date DESC, m.id DESC`.
 /// Those are the exact strings upstream's four queries carry; a missing marker
 /// is a programming error and panics in tests (see below).
 pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
@@ -80,9 +88,9 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
                 Filter::Starred => format!(" AND {hidden} AND t.starred = 1"),
             };
             let order = match opts.order {
-                Order::Date => format!(" ORDER BY ({pinned}) DESC, t.last_date DESC"),
+                Order::Date => format!(" ORDER BY ({pinned}) DESC, {ROW_DATE} DESC"),
                 Order::UnreadFirst => {
-                    format!(" ORDER BY ({pinned}) DESC, ({unread}) DESC, t.last_date DESC")
+                    format!(" ORDER BY ({pinned}) DESC, ({unread}) DESC, {ROW_DATE} DESC")
                 }
             };
             let marker = " GROUP BY t.id";
@@ -91,12 +99,12 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
                 "grouped list SQL lost its GROUP BY marker"
             );
             let with_filter = base.replacen(marker, &format!("{filter}{marker}"), 1);
-            let om = " ORDER BY t.last_date DESC";
+            let om = format!(" ORDER BY {ROW_DATE} DESC");
             assert!(
-                with_filter.contains(om),
+                with_filter.contains(&om),
                 "grouped list SQL lost its ORDER BY marker"
             );
-            with_filter.replacen(om, &order, 1)
+            with_filter.replacen(&om, &order, 1)
         }
         Shape::Flat => {
             let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
@@ -135,7 +143,7 @@ mod tests {
     use super::*;
 
     const GROUPED: &str = "SELECT t.id FROM threads t JOIN messages m ON m.thread_id = t.id \
-        WHERE m.folder_id = ?1 GROUP BY t.id ORDER BY t.last_date DESC LIMIT ?2 OFFSET ?3";
+        WHERE m.folder_id = ?1 GROUP BY t.id ORDER BY max(t.last_date, m.date) DESC LIMIT ?2 OFFSET ?3";
     const FLAT: &str =
         "SELECT m.id FROM messages m WHERE m.folder_id = ?1 ORDER BY m.date DESC, m.id DESC LIMIT ?2 OFFSET ?3";
 
@@ -151,8 +159,8 @@ mod tests {
             GROUPED
                 .replace(" GROUP BY", &format!(" AND {hidden} GROUP BY"))
                 .replace(
-                    " ORDER BY t.last_date",
-                    &format!(" ORDER BY ({pinned}) DESC, t.last_date")
+                    " ORDER BY max(t.last_date",
+                    &format!(" ORDER BY ({pinned}) DESC, max(t.last_date")
                 )
         );
         let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
@@ -175,7 +183,7 @@ mod tests {
         assert!(sql.contains(
             "AND EXISTS (SELECT 1 FROM messages m3 WHERE m3.thread_id = t.id AND m3.folder_id IN (SELECT id FROM sel) AND m3.is_read = 0) GROUP BY t.id"
         ));
-        assert!(sql.ends_with(") DESC, t.last_date DESC LIMIT ?2 OFFSET ?3"));
+        assert!(sql.ends_with(") DESC, max(t.last_date, m.date) DESC LIMIT ?2 OFFSET ?3"));
     }
 
     #[test]
@@ -190,7 +198,7 @@ mod tests {
         );
         assert!(sql.contains(" AND t.starred = 1 GROUP BY t.id"));
         assert!(sql.contains(") DESC, (EXISTS (SELECT 1 FROM messages m3"));
-        assert!(sql.contains(") DESC, t.last_date DESC LIMIT"));
+        assert!(sql.contains(") DESC, max(t.last_date, m.date) DESC LIMIT"));
     }
 
     #[test]

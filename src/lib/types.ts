@@ -79,6 +79,8 @@ export interface MessageMeta {
   bodyState: number;
   /** True when the message has a List-Unsubscribe header (mailing list). */
   canUnsubscribe: boolean;
+  /** Fork: every copy is in Drafts, so it is unsent. */
+  isDraft: boolean;
 }
 
 export interface ThreadDetail {

@@ -960,6 +960,8 @@
   "fork.reading.reply_target": "Selected for reply",
   "fork.reading.select_for_reply": "Select for reply",
   "fork.reading.collapse_message": "Collapse message",
+  "fork.reading.draft_unsent": "Draft, not sent",
+  "fork.reading.edit_draft": "Edit draft",
   "fork.sync.refreshing": "Refreshing mail?",
   "fork.sync.offline": "Offline ? saved mail",
   "fork.sync.trouble": "Mail sync needs attention",

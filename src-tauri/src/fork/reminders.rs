@@ -366,7 +366,7 @@ pub fn list(
          JOIN threads t ON t.id = r.thread_id
          JOIN messages m ON m.thread_id = t.id
          WHERE r.kind = ?3
-           AND m.date = (SELECT max(m2.date) FROM messages m2 WHERE m2.thread_id = t.id)
+           AND m.date = t.last_date
          GROUP BY t.id
          ORDER BY r.due_ts ASC, t.id ASC
          LIMIT ?1 OFFSET ?2",

@@ -396,6 +396,8 @@ async fn get_thread(server: &Server, a: &Args<'_>) -> ToolResult {
                     "unread": !m.is_read,
                     "starred": m.is_starred,
                     "has_attachments": m.has_attachments,
+                    // Unsent: an agent must never read a draft as a reply.
+                    "draft": m.is_draft,
                     "body": body,
                 }));
             }

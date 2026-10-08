@@ -337,21 +337,25 @@ fn row_to_meta(r: &rusqlite::Row) -> rusqlite::Result<MessageMeta> {
         has_attachments: r.get(12)?,
         body_state: r.get(13)?,
         can_unsubscribe: list_unsubscribe.is_some(),
+        is_draft: r.get(17)?,
     })
 }
 
 /// All messages of a thread, oldest first, deduplicated by Message-ID
 /// (Gmail label folders store copies of the same message under several
-/// mailboxes).
+/// mailboxes). A message is a draft only when every copy of it is in Drafts,
+/// the rule `court::classify` and `threading::recompute_thread` also follow.
 pub fn get_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<ThreadDetail>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT id, folder_id, thread_id, subject, from_name, from_addr, to_addrs, cc_addrs,
-                date, snippet, is_read, is_starred, has_attachments, body_state,
-                list_unsubscribe, list_unsubscribe_one_click, message_id
-         FROM messages WHERE thread_id = ?1 ORDER BY date, id",
+        "SELECT m.id, m.folder_id, m.thread_id, m.subject, m.from_name, m.from_addr,
+                m.to_addrs, m.cc_addrs, m.date, m.snippet, m.is_read, m.is_starred,
+                m.has_attachments, m.body_state, m.list_unsubscribe,
+                m.list_unsubscribe_one_click, m.message_id, f.role IS 'drafts'
+         FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
+         WHERE m.thread_id = ?1 ORDER BY m.date, m.id",
     )?;
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut messages = Vec::new();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut messages: Vec<MessageMeta> = Vec::new();
     let rows = stmt.query_map(params![thread_id], |r| {
         let meta = row_to_meta(r)?;
         let msgid: Option<String> = r.get(16)?;
@@ -360,8 +364,14 @@ pub fn get_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<
     for row in rows {
         let (meta, msgid) = row?;
         let key = msgid.unwrap_or_else(|| format!("pk:{}", meta.id));
-        if seen.insert(key) {
-            messages.push(meta);
+        match seen.get(&key) {
+            // Just after a send the Sent copy shares the draft's Message-ID
+            // while the Drafts copy waits for the next sync: that is sent mail.
+            Some(&kept) => messages[kept].is_draft &= meta.is_draft,
+            None => {
+                seen.insert(key, messages.len());
+                messages.push(meta);
+            }
         }
     }
     if messages.is_empty() {

@@ -783,7 +783,7 @@ pub fn list_since(
          JOIN messages m ON m.thread_id = t.id
          WHERE {pred}
            AND coalesce(c.since, 0) >= ?3
-           AND m.date = (SELECT max(m2.date) FROM messages m2 WHERE m2.thread_id = t.id)
+           AND m.date = t.last_date
          GROUP BY t.id
          ORDER BY c.since ASC, t.id ASC
          LIMIT ?1 OFFSET ?2"

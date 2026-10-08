@@ -527,7 +527,7 @@ pub fn list_filtered(
            FROM threads t
            JOIN messages m ON m.thread_id = t.id
           WHERE t.id IN (SELECT value FROM json_each(?3))
-            AND m.date = (SELECT max(m2.date) FROM messages m2 WHERE m2.thread_id = t.id)
+            AND m.date = t.last_date
           GROUP BY t.id
           ORDER BY t.last_date DESC, t.id DESC
           LIMIT ?1 OFFSET ?2"

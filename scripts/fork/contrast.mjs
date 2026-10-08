@@ -68,6 +68,7 @@ export function contrast(a, b) {
 export const RULES = [
   { token: "--meeting-ink", min: 4.5 },
   { token: "--deal-ink", min: 4.5 },
+  { token: "--draft-ink", min: 4.5 },
   { token: "--text", min: 7 },
   { token: "--text-dim", min: 4.5 },
   { token: "--text-faint", min: 4.5 },
