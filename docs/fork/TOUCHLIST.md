@@ -211,3 +211,10 @@ moving sent copies to Trash while deleting grouped drafts.
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.7 | Signed local release |
 | `README.md` | opening notice | Link to fork guide and status | Separate the fork from the upstream product description |
 | `demo/README.md` | fork regression checks | Document current harnesses, ports, capture flags and fixture controls | Reproduce the release checks |
+| `src-tauri/src/mail/threading.rs` | `recompute_thread` | `last_date` and `snippet` from the newest non-Drafts message, else the newest | A draft never moves or re-dates a conversation (D62) |
+| `src-tauri/src/db/queries.rs` | `LIST_THREADS_SQL`, `list_unified_threads_opts` | date column and ORDER BY `max(t.last_date, m.date)` (`fork::list::ROW_DATE`) | Drafts keeps the draft's own time (D62) |
+| `src-tauri/src/db/models.rs`, `src/lib/types.ts` | `MessageMeta` | `+ is_draft` / `isDraft` | D62 |
+| `src-tauri/src/db/bodies.rs` | `get_thread`, `row_to_meta` | joins the folder role; a draft only when every copy is in Drafts | D62 |
+| `src/components/ReadingPane.svelte` | `latest`, `loadThread`, collapse helpers, `messageBlock`, `chatRow`, styles | `newestOf` skips drafts outside Drafts; "Draft, not sent" bar with Edit draft; collapsed-row tag | D62 |
+| `src/lib/i18n/locales/en.json`, `src/styles/tokens.css` | `fork.reading.draft_unsent`, `fork.reading.edit_draft`; `--draft-ink`, `--draft-soft` | Label copy and a contrast-gated draft colour | D62 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.9 | Signed local release |

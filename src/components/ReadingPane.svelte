@@ -352,7 +352,7 @@
     if (newest && !draftOpen) focusedId = newest.id;
   }
   // Fork (v1.1.9): open an unsent draft from the conversation in a compose
-  // window. The Drafts view has its own editor, so it never shows this button.
+  // window.
   let draftOpening = $state(false);
   let draftError = $state<{ id: number; text: string } | null>(null);
   async function editDraft(messageId: number) {
@@ -759,7 +759,8 @@
     {#if message.isDraft}
       <div class="draft-bar" role="note">
         <span class="draft-label">{t("fork.reading.draft_unsent")}</span>
-        {#if mail.selectedFolder?.role !== "drafts"}
+        <!-- Never a second editor: Drafts and an open inline reply already have one. -->
+        {#if mail.selectedFolder?.role !== "drafts" && !(inlineReply.draftId !== null && inlineReply.threadId === detail?.id)}
           <button class="chip" disabled={draftOpening} onclick={() => editDraft(message.id)}>{t("fork.reading.edit_draft")}</button>
         {/if}
         {#if draftError?.id === message.id}<span class="draft-error" role="alert">{draftError.text}</span>{/if}
