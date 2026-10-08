@@ -4,7 +4,32 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-07.**
+**As of 2026-10-08.**
+
+## Version 1.1.9 (installed October 8)
+
+Patrick: drafts show in Sent and look as if they have been sent. A reply draft moved its conversation to the top of Sent with the draft's time, and the conversation opened on the draft, drawn like sent mail. Design and the rule in D62.
+
+- A draft no longer moves or re-dates a conversation in Inbox, Sent, Deals, On me, Waiting or reminders. Drafts still shows each draft at its own time.
+- Outside Drafts a conversation opens on its newest real message. A draft shows "Draft, not sent", expanded or collapsed, with Edit draft (opens it in a compose window; hidden in Drafts and while an inline reply is open).
+- A message is a draft only when every copy is in Drafts, so a reply sent a moment ago never shows as a draft. The plan critic caught that an any-copy rule would have offered Edit draft on sent mail.
+- MCP `get_thread` returns `draft` per message.
+
+Validation: 547 Rust tests passed, one existing ignored; all frontend tests; Clippy, fmt and Svelte check clean (the existing ComposeForm warning); 216 contrast ratios pass, including the new `--draft-ink` in all six themes. The three new tests in `src-tauri/src/fork/unsent_drafts.rs` fail with the fix reverted, and five semantic mutations (thread date, thread snippet, Drafts list date, any-copy rule, no-draft rule) each failed a named test and were restored byte-for-byte.
+
+`PROVE_TEST: status=PROVEN base=f3a37dafef6c reverted=14 tests=2 exit_without_fix=101 elapsed_s=12.7`
+
+That verdict comes from a compile failure (the new field is missing), so the mutation run above is the behavioural proof. `FLOOR_GUARD: blocking=0 warnings=0`.
+
+Signed Windows installer built from `a6b20da` by `build-install.ps1` with gates. Installed version 1.1.9, SHA256 `A95BEFA5DE29022354040E5F5A47DDFCE67551F3C80D19ACBFDB76AEEED1F73B`. Pre-install database/WAL/SHM backup: `C:/Users/Patrick/.skim-fork/backups/20261008-125820/`.
+
+Native installed check over CDP, with a test draft created through the MCP on Patrick's own self-addressed thread of September 18 (no recipient but himself, never sent): the top five Sent rows were identical before and after the draft; the thread stayed among the September 18 rows with its date unchanged; it opened on the September 18 message with the draft above it labelled "Draft, not sent"; expanded, the draft showed the label bar and Edit draft, which opened compose window 37 with the test text (closed without sending); Drafts listed it at 12:59 PM. The test draft was then deleted from Drafts, Gmail search no longer finds it, and the thread is back to its 12 messages. Skim relaunched without the debug port, running and responding.
+
+Not done: a folder's role changing does not recompute its threads (D62). Local `drafts` rows for deleted server drafts stay in the table (existing behaviour, invisible).
+
+## Version 1.1.8 (installed October 8)
+
+Compose window closes after send (`b06b754`): the 1.1.7 close handler needed window-destroy permission, and a save after the send wrote draft HTML for a removed draft row. Installed 09:01 SAST; this entry was added with 1.1.9.
 
 ## Version 1.1.7 (installed October 7)
 
