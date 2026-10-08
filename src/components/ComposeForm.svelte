@@ -624,7 +624,9 @@
     onLocalSave?.(value.draft);
   });
   async function saveLocal(){
-    if(!draft)return;
+    // A sent or discarded draft has no row left; a late save would hit the
+    // foreign key on fork_draft_html and pin the window open.
+    if(!draft||settled)return;
     if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
     await Promise.all([...attachmentTasks]);
     const at=revision;const snapshot=$state.snapshot(draft) as Draft;
@@ -632,7 +634,7 @@
     try{await persistSnapshot({draft:snapshot,html});if(revision===at)localStatus="saved";}
     catch(e){localStatus="error";error=errorMessage(e);throw e;}
   }
-  function scheduleSave(){markDirty();if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>{void saveLocal().catch(()=>{});},800);}
+  function scheduleSave(){if(settled)return;markDirty();if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>{void saveLocal().catch(()=>{});},800);}
 
   /** Persist to the server: for a Drafts-folder draft this queues the write-back
    *  to the IMAP Drafts folder; for a local-only draft it just saves locally. */
@@ -661,7 +663,7 @@
     sending = true;
     error = "";
     try {
-      if (saveTimer) clearTimeout(saveTimer);
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
       await saveLocal();
       // Fork (6.4): the hold. A scheduled send names its moment; a plain send
       // is held for the undo window (0 = straight out, as upstream).
@@ -744,6 +746,7 @@
   }
   async function close(){
     if(transferring)return;
+    if(settled){onClose?.();return;}
     try{
       if(edited() || attachmentBusy){await saveLocal();await flushServer();}
       else if(!committed && draft)await api.deleteDraft(draft.id);
