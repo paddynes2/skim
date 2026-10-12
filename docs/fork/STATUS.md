@@ -4,7 +4,11 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-08.**
+**As of 2026-10-12.**
+
+## Version 1.1.10 (October 12)
+
+Patrick: sent messages from him show in his inbox. His reply moved its conversation to the top of Inbox with the reply's time. Rows now date and sort by their newest message in that folder, and a thread's count no longer counts the Important copy of a message twice. Design in D63.
 
 ## Version 1.1.9 (installed October 8)
 

@@ -27,6 +27,7 @@ pub const FORK_MIGRATIONS: &[&str] = &[
     include_str!("migrations/f0008_unread_by_conversation.sql"),
     include_str!("migrations/f0009_clear_reminders.sql"),
     include_str!("migrations/f0010_calendar_options.sql"),
+    include_str!("migrations/f0011_count_distinct_messages.sql"),
 ];
 
 pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {

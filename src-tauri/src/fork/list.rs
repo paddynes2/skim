@@ -58,17 +58,17 @@ pub enum Shape {
     Flat,
 }
 
-/// The date a grouped row shows and sorts by. `t.last_date` skips drafts (see
-/// `threading::recompute_thread`), so a draft never moves a conversation; `m`
-/// is the row's newest in-folder message, which only in Drafts can be the
-/// draft, so the Drafts view keeps the draft's own time. Every other folder
-/// gets `t.last_date` unchanged, because its `m` is never newer.
-pub const ROW_DATE: &str = "max(t.last_date, m.date)";
+/// The date a grouped row shows and sorts by: `m`, the row's newest message
+/// in this folder (D63, v1.1.10). A reply Patrick sends is filed in Sent only,
+/// so it never moves or re-dates the conversation in Inbox; a draft lives in
+/// Drafts only, so it moves nothing outside Drafts, and the Drafts view keeps
+/// the draft's own time (D62).
+pub const ROW_DATE: &str = "m.date";
 
 /// Splice filter and order into a base list query.
 ///
 /// The base SQL must contain, for `Grouped`, ` GROUP BY t.id` and
-/// ` ORDER BY max(t.last_date, m.date) DESC` ([`ROW_DATE`]); for `Flat`,
+/// ` ORDER BY m.date DESC` ([`ROW_DATE`]); for `Flat`,
 /// ` ORDER BY m.date DESC, m.id DESC`.
 /// Those are the exact strings upstream's four queries carry; a missing marker
 /// is a programming error and panics in tests (see below).
@@ -143,7 +143,7 @@ mod tests {
     use super::*;
 
     const GROUPED: &str = "SELECT t.id FROM threads t JOIN messages m ON m.thread_id = t.id \
-        WHERE m.folder_id = ?1 GROUP BY t.id ORDER BY max(t.last_date, m.date) DESC LIMIT ?2 OFFSET ?3";
+        WHERE m.folder_id = ?1 GROUP BY t.id ORDER BY m.date DESC LIMIT ?2 OFFSET ?3";
     const FLAT: &str =
         "SELECT m.id FROM messages m WHERE m.folder_id = ?1 ORDER BY m.date DESC, m.id DESC LIMIT ?2 OFFSET ?3";
 
@@ -159,8 +159,8 @@ mod tests {
             GROUPED
                 .replace(" GROUP BY", &format!(" AND {hidden} GROUP BY"))
                 .replace(
-                    " ORDER BY max(t.last_date",
-                    &format!(" ORDER BY ({pinned}) DESC, max(t.last_date")
+                    " ORDER BY m.date",
+                    &format!(" ORDER BY ({pinned}) DESC, m.date")
                 )
         );
         let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
@@ -183,7 +183,7 @@ mod tests {
         assert!(sql.contains(
             "AND EXISTS (SELECT 1 FROM messages m3 WHERE m3.thread_id = t.id AND m3.folder_id IN (SELECT id FROM sel) AND m3.is_read = 0) GROUP BY t.id"
         ));
-        assert!(sql.ends_with(") DESC, max(t.last_date, m.date) DESC LIMIT ?2 OFFSET ?3"));
+        assert!(sql.ends_with(") DESC, m.date DESC LIMIT ?2 OFFSET ?3"));
     }
 
     #[test]
@@ -198,7 +198,7 @@ mod tests {
         );
         assert!(sql.contains(" AND t.starred = 1 GROUP BY t.id"));
         assert!(sql.contains(") DESC, (EXISTS (SELECT 1 FROM messages m3"));
-        assert!(sql.contains(") DESC, max(t.last_date, m.date) DESC LIMIT"));
+        assert!(sql.contains(") DESC, m.date DESC LIMIT"));
     }
 
     #[test]

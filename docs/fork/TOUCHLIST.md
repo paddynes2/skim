@@ -218,3 +218,6 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/components/ReadingPane.svelte` | `latest`, `loadThread`, collapse helpers, `messageBlock`, `chatRow`, styles | `newestOf` skips drafts outside Drafts; "Draft, not sent" bar with Edit draft; collapsed-row tag | D62 |
 | `src/lib/i18n/locales/en.json`, `src/styles/tokens.css` | `fork.reading.draft_unsent`, `fork.reading.edit_draft`; `--draft-ink`, `--draft-soft` | Label copy and a contrast-gated draft colour | D62 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.9 | Signed local release |
+| `src-tauri/src/db/queries.rs` | `LIST_THREADS_SQL`, `list_unified_threads_opts` | date column and ORDER BY `m.date` (`fork::list::ROW_DATE`), replacing D62's `max(t.last_date, m.date)` | A reply in Sent never moves the Inbox row (D63) |
+| `src-tauri/src/mail/threading.rs` | `recompute_thread` | `message_count` = distinct Message-IDs | Inbox and Important copies count once (D63) |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.10 | Signed local release |

@@ -230,10 +230,14 @@ fn merge_threads(conn: &Connection, target: i64, other: i64) -> rusqlite::Result
 /// outside a Drafts folder, so an unsent reply never moves or re-dates its
 /// conversation in Inbox, Sent or Deals. A thread of drafts only falls back to
 /// its newest draft.
+///
+/// Fork (v1.1.10, D63): `message_count` counts distinct Message-IDs, the way
+/// `bodies::get_thread` shows the conversation, so a message Gmail files
+/// under Inbox and Important counts once.
 pub fn recompute_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<bool> {
     let row: Option<(i64, i64, i64, i64)> = conn
         .query_row(
-            "SELECT count(*),
+            "SELECT count(DISTINCT COALESCE(m.message_id, 'pk:' || m.id)),
                     COALESCE(max(CASE WHEN f.role IS 'drafts' THEN NULL ELSE m.date END),
                              max(m.date)),
                     sum(m.is_read = 0), max(m.is_starred)

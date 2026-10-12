@@ -189,3 +189,43 @@ fn get_thread_marks_only_unsent_drafts() {
     })
     .unwrap();
 }
+
+/// Fork (v1.1.10, D63): a reply Patrick sends is filed in Sent only, so the
+/// Inbox row keeps the inbound message's time and order, and a message Gmail
+/// files under Inbox and Important counts once.
+#[test]
+fn a_sent_reply_does_not_move_the_inbox_row_and_copies_count_once() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|conn| {
+        seed(conn)?;
+        let (sent, _) = sent_and_drafts(conn)?;
+        conn.execute_batch(
+            "INSERT INTO folders (account_id, imap_name, role, display_name, unread_count, sort_order)
+             VALUES ('a1', '[Gmail]/Important', 'important', 'Important', 0, 12);",
+        )?;
+        let inbox = folder_id(conn, "a1", "INBOX");
+        let important = folder_id(conn, "a1", "[Gmail]/Important");
+        add_reply(conn, sent, 1, "<s1@x>", None, "Agents", 100);
+        add_reply(conn, inbox, 1, "<f1@x>", Some("<s1@x>"), "Re: Agents", 200);
+        add_reply(conn, important, 1, "<f1@x>", Some("<s1@x>"), "Re: Agents", 200);
+        add_reply(conn, inbox, 2, "<o1@x>", None, "Other", 300);
+        // Patrick's reply, newest of all, in Sent only.
+        add_reply(conn, sent, 2, "<s2@x>", Some("<f1@x>"), "Re: Agents", 400);
+
+        for rows in [
+            list_threads(conn, inbox, 0, 10)?,
+            list_unified_threads(conn, Some("inbox"), None, 0, 10)?,
+        ] {
+            let shape: Vec<_> = rows
+                .iter()
+                .map(|r| (r.subject.as_str(), r.date, r.message_count))
+                .collect();
+            assert_eq!(shape, [("Other", 300, 1), ("Re: Agents", 200, 3)]);
+        }
+        // Sent still shows the reply at its own time.
+        let rows = list_threads(conn, sent, 0, 10)?;
+        assert_eq!(rows[0].date, 400);
+        Ok(())
+    })
+    .unwrap();
+}
