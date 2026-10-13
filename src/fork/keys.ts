@@ -6,6 +6,7 @@ import { navHooks } from "./nav";
 import { goState } from "./stores/go.svelte";
 import { prefs } from "./stores/prefs.svelte";
 import { undo } from "./stores/undo.svelte";
+import { trainPriority } from "./priority/train";
 
 /** Where `g` can go. Order is the order the hint shows them in. */
 export const GO_TARGETS: { key: string; code: string; label: string; role?: string }[] = [
@@ -103,6 +104,16 @@ export function forkKey(e: KeyboardEvent): boolean {
     e.preventDefault();
     void mail.setListFilter(mail.listFilter === "starred" ? "all" : "starred");
     return true;
+  }
+  // v1.1.12 (D65): Gmail's keys for important / not important. The sender of
+  // the open conversation goes on the always or never list.
+  if ((e.key === "+" || e.key === "=" || e.key === "-") && mail.selectedThreadId !== null) {
+    const row = mail.threads.find((r) => r.id === mail.selectedThreadId);
+    if (row) {
+      e.preventDefault();
+      void trainPriority(row, e.key !== "-");
+      return true;
+    }
   }
   // i: CRM sidebar (Phase 9); m: Meet now (Phase 7). No-ops until registered.
   if (!e.shiftKey && e.code === "KeyI" && navHooks.crmToggle) {

@@ -25,6 +25,7 @@
   import { listLayout, listWindow } from "../fork/layout/mail-list";
   // Fork (v1.1.11, D64): the Inbox's Priority header.
   import { priority } from "../fork/priority/store.svelte";
+  import { priorityApi } from "../fork/priority/api";
   import { tick, untrack } from "svelte";
   import MessageMenu from "../fork/layout/MessageMenu.svelte";
   import type { ThreadRow } from "../lib/types";
@@ -124,6 +125,25 @@
     void mail.threads;
     if (inInbox) void priority.refresh();
   });
+  // Fork (v1.1.12, D65): download the first rows' bodies ahead, on the
+  // background connection, so opening one is a local read. Grouped lists
+  // only (a row is a conversation); asked once per distinct set of rows.
+  let prefetched = "";
+  $effect(() => {
+    if (!mail.groupThreads || mail.searching) return;
+    const ids = mail.threads.slice(0, 40).map((r) => r.id);
+    const key = ids.join(",");
+    if (!ids.length || key === prefetched) return;
+    prefetched = key;
+    const timer = setTimeout(() => void priorityApi.prefetch(ids).catch(() => {}), 1500);
+    return () => clearTimeout(timer);
+  });
+  /** The Priority tag a row shows: Deal or Always (a star already shows). */
+  function prioTag(thread: ThreadRow): string | null {
+    if (!inInbox || thread.messageId != null || !priority.section.has(thread.id)) return null;
+    const r = priority.reason(thread.id);
+    return r === "deal" ? t("fork.priority.tag_deal") : r === "always" ? t("fork.priority.tag_always") : null;
+  }
   const layout = $derived(listLayout(mail.threads, rowH, !mail.searching && !mail.courtView && prefs.listOrder === "date", nowSecs * 1000, inInbox ? priority.section : undefined));
   const range = $derived(listWindow(layout.items, scrollTop, viewH, OVERSCAN));
   const visibleItems = $derived(layout.items.slice(range.start, range.end));
@@ -295,10 +315,11 @@
         {@const thread = item.thread}
         {@const court = mail.courtView ? courtOf(thread) : null}
         {@const deal = mail.dealsView ? dealOf(thread) : null}
+        {@const tag = court || deal ? null : prioTag(thread)}
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:compact={prefs.density === "compact"}>
+        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"}>
           <MessageRow
             {thread}
             companyIdentity={deal !== null}
@@ -322,6 +343,8 @@
             <div class="court-badge-slot deal-logo-slot">
               <DealBadge {deal} domain={(thread as DealRow).dealDomain ?? null} onclick={() => dealsStore.openCompany(deal)} />
             </div>
+          {:else if tag}
+            <div class="court-badge-slot"><span class="prio-tag">{tag}</span></div>
           {/if}
         </div>
         {/if}
@@ -532,6 +555,9 @@
     padding-right: 0;
   }
   .date-section.priority-section { color: var(--text); }
+  .prio-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.02em; padding: 2px 7px; border-radius: 999px; color: var(--deal-ink); background: var(--deal-soft); }
+  .court-wrap.prio-tagged :global(.snippet) { padding-right: 64px; }
+  .court-wrap.prio-tagged.compact :global(.snippet) { padding-right: 52px; }
   .date-section { height: 28px; box-sizing: border-box; display: flex; align-items: center; padding: 0 24px; font-size: 11px; font-weight: 600; color: var(--text-dim); background: var(--surface); border-bottom: 1px solid var(--hairline); }
   /* One line has room for the age only; the reason stays in the tooltip. */
   .court-wrap.compact :global(.court-badge .sep),

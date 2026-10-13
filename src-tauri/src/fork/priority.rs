@@ -62,6 +62,12 @@ pub const SETTING_ON: &str = "fork_priority"; // on | off, default on
 pub const SETTING_THRESHOLD: &str = "fork_priority_threshold";
 pub const SETTING_EXCLUDE: &str = "fork_priority_exclude";
 pub const SETTING_ABOUT: &str = "fork_priority_about";
+/// v1.1.12 (D65): senders always in Priority when unread, one domain or
+/// address per line (the `+` key adds one).
+pub const SETTING_ALWAYS: &str = "fork_priority_always";
+/// v1.1.12 (D65): `on` = new-mail toasts and the taskbar count follow
+/// Priority instead of every unread Inbox message. Default off.
+pub const SETTING_ALERTS: &str = "fork_priority_alerts";
 /// Internal counter row: `"YYYY-MM-DD:N"`, messages charged so far today.
 const USED_KEY: &str = "fork_priority_used";
 
@@ -80,6 +86,10 @@ pub const SCORE_WINDOW_DAYS: i64 = 14;
 /// A message whose body has not arrived is scored without a preview once it
 /// is this old.
 pub const BODY_WAIT_SECS: i64 = 900;
+/// A conversation entering Priority toasts only for unread mail this recent,
+/// so switching alerts on, or a recompute after a restart, never toasts old
+/// mail.
+const ALERT_WINDOW_SECS: i64 = 2 * 3600;
 /// When messages are waiting for their bodies, look again this much later.
 const BODY_RECHECK: Duration = Duration::from_secs(45);
 /// Scores older than this are pruned; their mail is outside the window.
@@ -112,6 +122,7 @@ they can safely read later or never.";
 pub const REASON_DEAL: &str = "deal";
 pub const REASON_STARRED: &str = "starred";
 pub const REASON_JEV: &str = "jev";
+pub const REASON_ALWAYS: &str = "always";
 
 /// Calendar invitations and replies: Skim shows these as invite cards, and
 /// they read as personal mail to Jev (D64 measurement). Matched on the
@@ -261,28 +272,39 @@ pub struct Unread {
 
 fn rank(reason: &str) -> u8 {
     match reason {
-        REASON_DEAL => 3,
-        REASON_STARRED => 2,
+        REASON_DEAL => 4,
+        REASON_STARRED => 3,
+        REASON_ALWAYS => 2,
         _ => 1,
     }
 }
 
+/// The two sender lists Priority reads, parsed.
+#[derive(Debug, Default, Clone)]
+pub struct Lists {
+    pub exclude: Vec<String>,
+    pub always: Vec<String>,
+}
+
 /// Which conversations are in Priority, and why. Pure: the tests drive it.
-/// A deal or a star wins outright; a Jev score counts only at or above the
-/// threshold and only for a sender that is not excluded (the list may have
-/// grown since the message was scored).
+/// A deal or a star wins outright, then a sender on the always list; a Jev
+/// score counts only at or above the threshold and only for a sender that is
+/// not excluded (the list may have grown since the message was scored).
 pub fn decide(
     rows: &[Unread],
     deals: &HashSet<i64>,
     threshold: f64,
-    exclude: &[String],
+    lists: &Lists,
 ) -> BTreeMap<i64, &'static str> {
+    let exclude = &lists.exclude;
     let mut out: BTreeMap<i64, &'static str> = BTreeMap::new();
     for r in rows {
         let reason = if deals.contains(&r.thread_id) {
             REASON_DEAL
         } else if r.starred {
             REASON_STARRED
+        } else if excluded(&r.from_addr, &lists.always) {
+            REASON_ALWAYS
         } else if r.score.is_some_and(|s| s >= threshold)
             && !excluded(&r.from_addr, exclude)
             && !is_calendar(&r.subject, &r.from_addr)
@@ -433,13 +455,26 @@ fn unread_rows(conn: &Connection) -> rusqlite::Result<Vec<Unread>> {
     rows.collect()
 }
 
-/// Recompute the Priority set and store it. `true` when it changed.
-pub fn recompute(conn: &mut Connection, deals: &HashSet<i64>) -> rusqlite::Result<bool> {
+pub fn lists(conn: &Connection) -> rusqlite::Result<Lists> {
+    Ok(Lists {
+        exclude: parse_exclude(&queries::get_setting(conn, SETTING_EXCLUDE)?.unwrap_or_default()),
+        always: parse_exclude(&queries::get_setting(conn, SETTING_ALWAYS)?.unwrap_or_default()),
+    })
+}
+
+/// What a recompute did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Recomputed {
+    pub changed: bool,
+    /// Conversations that were not in Priority before this pass.
+    pub added: Vec<i64>,
+}
+
+/// Recompute the Priority set and store it.
+pub fn recompute(conn: &mut Connection, deals: &HashSet<i64>) -> rusqlite::Result<Recomputed> {
     let want = if enabled(conn)? {
         let threshold = parse_threshold(queries::get_setting(conn, SETTING_THRESHOLD)?.as_deref());
-        let exclude =
-            parse_exclude(&queries::get_setting(conn, SETTING_EXCLUDE)?.unwrap_or_default());
-        decide(&unread_rows(conn)?, deals, threshold, &exclude)
+        decide(&unread_rows(conn)?, deals, threshold, &lists(conn)?)
     } else {
         BTreeMap::new()
     };
@@ -453,8 +488,13 @@ pub fn recompute(conn: &mut Connection, deals: &HashSet<i64>) -> rusqlite::Resul
             .iter()
             .all(|(t, r)| have.get(t).map(String::as_str) == Some(*r));
     if same {
-        return Ok(false);
+        return Ok(Recomputed::default());
     }
+    let added = want
+        .keys()
+        .filter(|t| !have.contains_key(t))
+        .copied()
+        .collect();
     let tx = conn.transaction()?;
     tx.execute("DELETE FROM fork_priority", [])?;
     {
@@ -465,7 +505,10 @@ pub fn recompute(conn: &mut Connection, deals: &HashSet<i64>) -> rusqlite::Resul
         }
     }
     tx.commit()?;
-    Ok(true)
+    Ok(Recomputed {
+        changed: true,
+        added,
+    })
 }
 
 /// What a candidate scan found.
@@ -568,16 +611,96 @@ pub fn store_scores(
     tx.commit()
 }
 
+/// One Priority conversation and why it is there.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Member {
+    pub thread_id: i64,
+    pub reason: String,
+}
+
 /// Conversations in Priority that are still unread in an Inbox: the rows the
 /// Inbox list puts first.
-pub fn ids(conn: &Connection) -> rusqlite::Result<Vec<i64>> {
+pub fn members(conn: &Connection) -> rusqlite::Result<Vec<Member>> {
     let mut stmt = conn.prepare(
-        "SELECT p.thread_id FROM fork_priority p
+        "SELECT p.thread_id, p.reason FROM fork_priority p
          WHERE EXISTS (SELECT 1 FROM messages m JOIN folders f ON f.id = m.folder_id
                        WHERE m.thread_id = p.thread_id AND f.role = 'inbox' AND m.is_read = 0)",
     )?;
-    let rows = stmt.query_map([], |r| r.get(0))?;
+    let rows = stmt.query_map([], |r| {
+        Ok(Member {
+            thread_id: r.get(0)?,
+            reason: r.get(1)?,
+        })
+    })?;
     rows.collect()
+}
+
+pub fn ids(conn: &Connection) -> rusqlite::Result<Vec<i64>> {
+    Ok(members(conn)?.into_iter().map(|m| m.thread_id).collect())
+}
+
+/// Priority alerts are on (and Priority itself is).
+pub fn alerts_on(conn: &Connection) -> rusqlite::Result<bool> {
+    Ok(queries::get_setting(conn, SETTING_ALERTS)?.as_deref() == Some("on") && enabled(conn)?)
+}
+
+/// The taskbar count when Priority alerts are on; `None` keeps the upstream
+/// unread total.
+pub fn badge_count(conn: &Connection) -> rusqlite::Result<Option<i64>> {
+    if !alerts_on(conn)? {
+        return Ok(None);
+    }
+    Ok(Some(ids(conn)?.len() as i64))
+}
+
+/// The unread Inbox messages of conversations that just entered Priority,
+/// recent enough to toast for.
+pub fn alert_messages(conn: &Connection, threads: &[i64], now: i64) -> rusqlite::Result<Vec<i64>> {
+    if threads.is_empty() || !alerts_on(conn)? {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(
+        "SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id
+         WHERE m.thread_id = ?1 AND f.role = 'inbox' AND m.is_read = 0 AND m.date >= ?2
+         ORDER BY m.date",
+    )?;
+    let mut out = Vec::new();
+    for t in threads {
+        let rows = stmt.query_map(params![t, now - ALERT_WINDOW_SECS], |r| r.get(0))?;
+        for id in rows {
+            out.push(id?);
+        }
+    }
+    Ok(out)
+}
+
+/// Move one sender between the two lists: `Some(true)` puts it on the always
+/// list, `Some(false)` on the exclude list, `None` on neither (undo); it
+/// leaves the other list either way. Comments and other lines are kept.
+/// Returns the new (exclude, always).
+pub fn train_lists(
+    exclude: &str,
+    always: &str,
+    sender: &str,
+    important: Option<bool>,
+) -> (String, String) {
+    let sender = sender.trim().trim_start_matches('@').to_ascii_lowercase();
+    let drop = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter(|l| l.trim().trim_start_matches('@').to_ascii_lowercase() != sender)
+            .map(str::to_string)
+            .collect()
+    };
+    let (mut ex, mut al) = (drop(exclude), drop(always));
+    match important {
+        _ if sender.is_empty() => {}
+        Some(true) => al.push(sender),
+        Some(false) => ex.push(sender),
+        None => {}
+    }
+    let join = |v: Vec<String>| v.join("\n").trim_matches('\n').to_string();
+    (join(ex), join(al))
 }
 
 // ---- Jev ---------------------------------------------------------------------
@@ -740,9 +863,7 @@ pub fn schedule(app: AppHandle) {
         {
             let _guard = recompute_lock().lock().await;
             QUEUED.store(false, Ordering::SeqCst);
-            if recompute_with(&app).await {
-                let _ = app.emit(EVT_UPDATED, json!({}));
-            }
+            settle(&app, recompute_with(&app).await).await;
         }
         // One scoring pass at a time; a busy one will see this event's mail
         // on its own next look, or the next event's.
@@ -753,9 +874,7 @@ pub fn schedule(app: AppHandle) {
         let (scored, waiting) = score_new(&db).await;
         if scored > 0 {
             let _guard = recompute_lock().lock().await;
-            if recompute_with(&app).await {
-                let _ = app.emit(EVT_UPDATED, json!({}));
-            }
+            settle(&app, recompute_with(&app).await).await;
         }
         if waiting && !RECHECK_ARMED.swap(true, Ordering::SeqCst) {
             let app = app.clone();
@@ -768,7 +887,37 @@ pub fn schedule(app: AppHandle) {
     });
 }
 
-async fn recompute_with(app: &AppHandle) -> bool {
+/// After a recompute: tell the list, repaint the badge, and toast for mail
+/// that just entered Priority (only with Priority alerts on, once per message).
+async fn settle(app: &AppHandle, r: Recomputed) {
+    if !r.changed {
+        return;
+    }
+    let _ = app.emit(EVT_UPDATED, json!({}));
+    crate::badge::refresh(app).await;
+    if r.added.is_empty() {
+        return;
+    }
+    let db = app.state::<AppState>().db.clone();
+    let now = now_ts();
+    let found = db
+        .call(move |conn| alert_messages(conn, &r.added, now))
+        .await
+        .unwrap_or_default();
+    let fresh: Vec<i64> = match alerted().lock() {
+        Ok(mut seen) => found.into_iter().filter(|id| seen.insert(*id)).collect(),
+        Err(_) => Vec::new(),
+    };
+    crate::notify::notify_priority_mail(app, &db, &fresh).await;
+}
+
+/// Messages already toasted for this run of the app.
+fn alerted() -> &'static Mutex<HashSet<i64>> {
+    static S: OnceLock<Mutex<HashSet<i64>>> = OnceLock::new();
+    S.get_or_init(Mutex::default)
+}
+
+async fn recompute_with(app: &AppHandle) -> Recomputed {
     let state = app.state::<AppState>();
     let cache = state.fork.deals.clone();
     let out = state
@@ -779,10 +928,10 @@ async fn recompute_with(app: &AppHandle) -> bool {
         })
         .await;
     match out {
-        Ok(changed) => changed,
+        Ok(r) => r,
         Err(e) => {
             tracing::warn!(error = %e, "priority pass failed");
-            false
+            Recomputed::default()
         }
     }
 }
@@ -866,6 +1015,8 @@ pub struct Status {
     pub threshold: f64,
     pub exclude: String,
     pub about: String,
+    pub always: String,
+    pub alerts: bool,
     pub scored_today: i64,
     pub cap: i64,
     pub count: usize,
@@ -889,6 +1040,8 @@ pub async fn fork_priority_status(state: State<'_, AppState>) -> Result<Status> 
                 ),
                 exclude: queries::get_setting(conn, SETTING_EXCLUDE)?.unwrap_or_default(),
                 about: queries::get_setting(conn, SETTING_ABOUT)?.unwrap_or_default(),
+                always: queries::get_setting(conn, SETTING_ALWAYS)?.unwrap_or_default(),
+                alerts: alerts_on(conn)?,
                 scored_today: used_today(conn, &day)?,
                 cap: DAILY_CAP,
                 count: ids(conn)?.len(),
@@ -901,6 +1054,44 @@ pub async fn fork_priority_status(state: State<'_, AppState>) -> Result<Status> 
 #[tauri::command]
 pub async fn fork_priority_ids(state: State<'_, AppState>) -> Result<Vec<i64>> {
     state.db.read("fork_priority_ids", |conn| ids(conn)).await
+}
+
+/// The Priority conversations with their reasons, for the row tags.
+#[tauri::command]
+pub async fn fork_priority_members(state: State<'_, AppState>) -> Result<Vec<Member>> {
+    state
+        .db
+        .read("fork_priority_members", |conn| members(conn))
+        .await
+}
+
+/// The `+` / `-` keys: always (or never) put this sender in Priority;
+/// `important: null` takes it off both lists (the toast's Undo).
+#[tauri::command]
+pub async fn fork_priority_train(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    sender: String,
+    important: Option<bool>,
+) -> Result<()> {
+    if !sender.contains('@') {
+        return Err(SkimError::other(
+            "priority",
+            "No sender address to train on",
+        ));
+    }
+    state
+        .db
+        .call(move |conn| {
+            let exclude = queries::get_setting(conn, SETTING_EXCLUDE)?.unwrap_or_default();
+            let always = queries::get_setting(conn, SETTING_ALWAYS)?.unwrap_or_default();
+            let (exclude, always) = train_lists(&exclude, &always, &sender, important);
+            queries::set_setting(conn, SETTING_EXCLUDE, &exclude)?;
+            queries::set_setting(conn, SETTING_ALWAYS, &always)
+        })
+        .await?;
+    schedule(app);
+    Ok(())
 }
 
 /// Save (or, when empty, remove) the TypeSafe key. A key is checked with one
@@ -1059,7 +1250,10 @@ mod tests {
     #[test]
     fn decide_ranks_deal_over_star_over_score_and_applies_the_rules() {
         let deals: HashSet<i64> = [1].into();
-        let ex = parse_exclude("warm.example");
+        let lists = Lists {
+            exclude: parse_exclude("warm.example"),
+            always: parse_exclude("boss@x.example\nfavourite.example"),
+        };
         let rows = [
             u(1, "cfo@client.example", "Memo", false, Some(0.1)),
             u(2, "jo@x.example", "Hello", true, None),
@@ -1076,14 +1270,23 @@ mod tests {
             u(9, "a@x.example", "both", true, None),
             // Excluded sender on a deal thread: the deal wins.
             u(1, "a@warm.example", "fwd", false, None),
+            // Always-list senders need no score, and outrank one.
+            u(10, "boss@x.example", "Call me", false, None),
+            u(11, "a@mail.favourite.example", "Hi", false, Some(0.9)),
+            // A scored message and an always-list one in one thread: always.
+            u(12, "x@y.example", "a", false, Some(0.9)),
+            u(12, "boss@x.example", "b", false, None),
         ];
-        let got = decide(&rows, &deals, 0.35, &ex);
+        let got = decide(&rows, &deals, 0.35, &lists);
         let want: BTreeMap<i64, &str> = [
             (1, REASON_DEAL),
             (2, REASON_STARRED),
             (3, REASON_JEV),
             (8, REASON_JEV),
             (9, REASON_STARRED),
+            (10, REASON_ALWAYS),
+            (11, REASON_ALWAYS),
+            (12, REASON_ALWAYS),
         ]
         .into();
         assert_eq!(got, want);
@@ -1092,9 +1295,29 @@ mod tests {
             &[u(3, "ivo@x.example", "x", false, Some(0.35))],
             &HashSet::new(),
             0.35,
-            &[],
+            &Lists::default(),
         );
         assert_eq!(at.get(&3), Some(&REASON_JEV));
+    }
+
+    #[test]
+    fn training_moves_a_sender_between_the_lists_and_keeps_the_rest() {
+        let (ex, al) = train_lists("# alerts\nwarm.example", "", "Jo@X.example", Some(true));
+        assert_eq!(
+            (ex.as_str(), al.as_str()),
+            ("# alerts\nwarm.example", "jo@x.example")
+        );
+        let (ex, al) = train_lists(&ex, &al, "jo@x.example", Some(false));
+        assert_eq!(
+            (ex.as_str(), al.as_str()),
+            ("# alerts\nwarm.example\njo@x.example", "")
+        );
+        // Training the same way twice does not duplicate it.
+        let (ex2, _) = train_lists(&ex, &al, "jo@x.example", Some(false));
+        assert_eq!(ex2, ex);
+        // Undo takes it off both lists and keeps everything else.
+        let (ex3, al3) = train_lists(&ex, &al, "jo@x.example", None);
+        assert_eq!((ex3.as_str(), al3.as_str()), ("# alerts\nwarm.example", ""));
     }
 
     #[test]
@@ -1368,7 +1591,7 @@ mod tests {
             assert_eq!(used_today(conn, "2026-10-13")?, 1);
             assert!(candidates(conn, 0, now, 10)?.candidates.is_empty());
             assert!(
-                !recompute(conn, &HashSet::new())?,
+                !recompute(conn, &HashSet::new())?.changed,
                 "no score is not Priority"
             );
             Ok(())
@@ -1459,9 +1682,10 @@ mod tests {
                 "d",
                 1,
             )?;
-            assert!(recompute(conn, &HashSet::new())?);
-            assert!(
-                !recompute(conn, &HashSet::new())?,
+            assert_eq!(recompute(conn, &HashSet::new())?.added, [old]);
+            assert_eq!(
+                recompute(conn, &HashSet::new())?,
+                Recomputed::default(),
                 "an unchanged set is not rewritten"
             );
             assert_eq!(ids(conn)?, [old]);
@@ -1506,12 +1730,31 @@ mod tests {
             assert!(ids(conn)?.is_empty());
 
             // A deal conversation is in without a score; switching off empties it.
-            assert!(recompute(conn, &[new].into())?);
+            assert_eq!(recompute(conn, &[new].into())?.added, [new]);
             assert_eq!(ids(conn)?, [new]);
+            assert_eq!(
+                members(conn)?,
+                [Member {
+                    thread_id: new,
+                    reason: REASON_DEAL.into()
+                }]
+            );
+            // Alerts: off by default; on, the badge counts Priority and the
+            // toast list holds only recent unread mail of the new arrivals.
+            assert_eq!(badge_count(conn)?, None);
+            assert!(alert_messages(conn, &[new], 200)?.is_empty());
+            queries::set_setting(conn, SETTING_ALERTS, "on")?;
+            assert_eq!(badge_count(conn)?, Some(1));
+            assert_eq!(
+                alert_messages(conn, &[new], 200 + ALERT_WINDOW_SECS)?.len(),
+                1
+            );
+            assert!(alert_messages(conn, &[new], 201 + ALERT_WINDOW_SECS)?.is_empty());
             queries::set_setting(conn, SETTING_ON, "off")?;
             assert!(!opts_for_folder(conn, 1, ListOpts::default())?.priority);
-            assert!(recompute(conn, &[new].into())?);
+            assert!(recompute(conn, &[new].into())?.changed);
             assert!(ids(conn)?.is_empty());
+            assert_eq!(badge_count(conn)?, None, "alerts follow Priority off");
             Ok(())
         })
         .unwrap();

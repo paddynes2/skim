@@ -107,6 +107,17 @@ fn mark_read_label(locale: &str) -> &'static str {
 
 /// Show a toast for freshly arrived inbox messages.
 pub async fn notify_new_mail(app: &AppHandle, db: &Db, message_pks: &[i64]) {
+    notify(app, db, message_pks, false).await
+}
+
+/// Fork (v1.1.12, D65): the toast for mail that just entered Priority. With
+/// Priority alerts on, this is the only new-mail toast; it comes once Jev has
+/// judged the message, not when its headers arrive.
+pub async fn notify_priority_mail(app: &AppHandle, db: &Db, message_pks: &[i64]) {
+    notify(app, db, message_pks, true).await
+}
+
+async fn notify(app: &AppHandle, db: &Db, message_pks: &[i64], priority: bool) {
     if message_pks.is_empty() {
         return;
     }
@@ -124,6 +135,15 @@ pub async fn notify_new_mail(app: &AppHandle, db: &Db, message_pks: &[i64]) {
         .await
         .unwrap_or((true, "en".into()));
     if !enabled {
+        return;
+    }
+    // Fork (D65): with Priority alerts on, arrival toasts wait for the pass.
+    if !priority
+        && db
+            .call(|conn| crate::fork::priority::alerts_on(conn))
+            .await
+            .unwrap_or(false)
+    {
         return;
     }
 

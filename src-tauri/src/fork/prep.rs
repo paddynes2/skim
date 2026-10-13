@@ -162,8 +162,9 @@ pub fn guest_threads(
 ) -> rusqlite::Result<Vec<PrepThread>> {
     let (hit, mut params) = thread_query(email, since);
     params.push(SqlValue::Integer(limit.clamp(0, 50)));
+    // MATERIALIZED: see `search_query::search_threads` (D65).
     let sql = format!(
-        "WITH hit AS ({hit})
+        "WITH hit AS MATERIALIZED ({hit})
          SELECT t.id, m.from_name, m.from_addr, m.subject, m.snippet, m.date,
                 (NOT EXISTS (SELECT 1 FROM messages m3
                              WHERE m3.thread_id = t.id AND m3.is_read = 0)),

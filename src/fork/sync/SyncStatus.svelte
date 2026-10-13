@@ -6,6 +6,7 @@
   import { syncStatusApi, type QueueStatus } from "./api";
   import { api } from "../../lib/api";
   import { ui } from "../../lib/stores/ui.svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   async function openMessage(location: {folderId:number;threadId:number|null;messageId:number}) { ui.showMail(); await mail.openLocation(location.folderId, location.threadId, location.messageId); mail.selectedMessageId=location.messageId; }
   let queue=$state<QueueStatus|null>(null), error=$state(""), expanded=$state(false), busy=$state(false);
   let request=0;
@@ -14,6 +15,7 @@
   onMount(()=>{let dead=false;const stops:UnlistenFn[]=[];for(const event of ["ops:failed","sync:status","mail:updated"]){void listen(event,()=>void refresh()).then(stop=>{if(dead)stop();else stops.push(stop);});}const timer=setInterval(()=>void refresh(),15000);return()=>{dead=true;request++;clearInterval(timer);stops.forEach(stop=>stop());};});
   const label=$derived(mail.syncState==="syncing"?t("fork.sync.refreshing"):mail.syncState==="offline"?t("fork.sync.offline"):mail.syncState==="error"?t("fork.sync.trouble"):queue?.failed?t("fork.sync.failed",{n:queue.failed}):queue?.pending?t("fork.sync.pending",{n:queue.pending}):!queue?t("fork.sync.checking"):t("fork.sync.ready"));
   async function retry(id:number){busy=true;error="";try{await syncStatusApi.retry(id);await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
+  async function dismiss(id:number){busy=true;error="";try{await syncStatusApi.dismiss(id);await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
   async function sync(){busy=true;error="";try{await mail.syncNow();await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
   const known=new Set(["read","unread","star","unstar","send","rsvp","unsubscribe","save_draft","move","delete","archive","junk","rename_folder","delete_folder"]);
   function action(value:string){return known.has(value)?t(`fork.sync.action_${value}`):value.replaceAll("_"," ");}
@@ -28,7 +30,7 @@
         {#if queue.pending}<p>{t("fork.sync.pending",{n:queue.pending})}</p>{/if}
         {#if queue.scheduled}<p>{t("fork.sync.scheduled",{n:queue.scheduled})}</p>{/if}
         {#if queue.failed}<p class="failure-count">{t("fork.sync.failed",{n:queue.failed})}</p>{/if}
-        {#each queue.failures as item (item.id)}<div class="failure"><strong>{action(item.action)}</strong><span>{item.accountEmail}</span><span>{new Date(item.createdAt*1000).toLocaleString()}</span>{#if item.draftId}<button onclick={()=>void api.openComposeWindow(item.draftId!)}>{t("fork.sync.open_draft")}</button>{/if}{#each item.locations ?? [] as location}<button class="source-message" onclick={()=>void openMessage(location)}>{location.subject || t("fork.row.no_subject")}</button>{/each}{#if !item.draftId && !(item.locations?.length)}<span>{t("fork.sync.source_unavailable")}</span>{/if}{#if item.retryable}<button disabled={busy} onclick={()=>void retry(item.id)}>{t("fork.sync.retry_action")}</button>{:else}<span>{t("fork.sync.manual_review")}</span>{/if}</div>{/each}
+        {#each queue.failures as item (item.id)}<div class="failure"><strong>{action(item.action)}</strong><span>{item.accountEmail}</span><span>{new Date(item.createdAt*1000).toLocaleString()}</span>{#if item.draftId}<button onclick={()=>void api.openComposeWindow(item.draftId!)}>{t("fork.sync.open_draft")}</button>{/if}{#each item.locations ?? [] as location}<button class="source-message" onclick={()=>void openMessage(location)}>{location.subject || t("fork.row.no_subject")}</button>{/each}{#if !item.draftId && !(item.locations?.length)}<span>{t("fork.sync.source_unavailable")}</span>{/if}{#if item.link}<button onclick={()=>void openUrl(item.link!)}>{t("fork.sync.open_unsubscribe")}</button>{/if}{#if item.retryable}<button disabled={busy} onclick={()=>void retry(item.id)}>{t("fork.sync.retry_action")}</button>{:else if !item.link}<span>{t("fork.sync.manual_review")}</span>{/if}<button disabled={busy} onclick={()=>void dismiss(item.id)}>{t("fork.sync.dismiss")}</button></div>{/each}
         {#if queue.failed>queue.failures.length}<p>{t("fork.sync.first_failures")}</p>{/if}
       {/if}
       {#if error}<p role="alert" class="error">{error}</p>{/if}

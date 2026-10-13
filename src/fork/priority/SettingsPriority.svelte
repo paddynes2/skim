@@ -11,12 +11,13 @@
   let key = $state("");
   let exclude = $state("");
   let about = $state("");
+  let always = $state("");
   let threshold = $state(0.35);
   let busy = $state(false);
   let keyMsg = $state("");
   let keyErr = $state("");
   let saved = $state(false);
-  const dirty = $derived(status !== null && (exclude !== status.exclude || threshold !== status.threshold || about !== status.about));
+  const dirty = $derived(status !== null && (exclude !== status.exclude || threshold !== status.threshold || about !== status.about || always !== status.always));
 
   async function load() {
     try {
@@ -25,6 +26,7 @@
       exclude = s.exclude;
       threshold = s.threshold;
       about = s.about;
+      always = s.always;
     } catch {
       status = null;
     }
@@ -37,6 +39,12 @@
     if (!status) return;
     await api.setSetting("fork_priority", status.enabled ? "off" : "on").catch(() => {});
     await priorityApi.recompute().catch(() => {});
+    await load();
+  }
+
+  async function toggleAlerts() {
+    if (!status) return;
+    await api.setSetting("fork_priority_alerts", status.alerts ? "off" : "on").catch(() => {});
     await load();
   }
 
@@ -63,6 +71,7 @@
       await api.setSetting("fork_priority_threshold", String(threshold));
       await api.setSetting("fork_priority_exclude", exclude);
       await api.setSetting("fork_priority_about", about.trim());
+      await api.setSetting("fork_priority_always", always);
       await priorityApi.recompute();
       saved = true;
       await load();
@@ -82,6 +91,14 @@
       </button>
     </div>
     <p class="note">{t("fork.priority.note")}</p>
+
+    <div class="toggle-row">
+      <span class="microlabel">{t("fork.priority.alerts")}</span>
+      <button type="button" class="switch" class:on={status.alerts} role="switch" aria-checked={status.alerts} aria-label={t("fork.priority.alerts")} onclick={() => void toggleAlerts()} disabled={!status.enabled}>
+        <span class="knob"></span>
+      </button>
+    </div>
+    <p class="note">{t("fork.priority.alerts_note")}</p>
 
     <div class="field">
       <label class="label" for="fork-priority-key">{t("fork.priority.key")}</label>
@@ -111,6 +128,12 @@
       <span class="label">{t("fork.priority.about")}</span>
       <input id="fork-priority-about" class="wide" type="text" spellcheck="false" bind:value={about} oninput={() => (saved = false)} disabled={busy} placeholder={t("fork.priority.about_placeholder")} />
       <span class="note">{t("fork.priority.about_note")}</span>
+    </label>
+
+    <label class="stack" for="fork-priority-always">
+      <span class="label">{t("fork.priority.always")}</span>
+      <textarea id="fork-priority-always" rows="3" spellcheck="false" bind:value={always} oninput={() => (saved = false)} disabled={busy} placeholder={"person@example.com\nclient.example"}></textarea>
+      <span class="note">{t("fork.priority.always_note")}</span>
     </label>
 
     <label class="stack" for="fork-priority-exclude">

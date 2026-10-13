@@ -47,6 +47,8 @@ const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 // must stay instant. A minute is far below any server's idle timeout and above
 // any pause between two clicks.
 const PROBE_AFTER_IDLE: std::time::Duration = std::time::Duration::from_secs(60);
+/// Fork (v1.1.12): bodies per prefetch pass on the background connection.
+const PREFETCH_BATCH: usize = 5;
 // Everything one FetchBody may spend on the wire: probe, login, SELECT, FETCH
 // and the one retry. Stays under BODY_FETCH_WAIT so the worker's own error
 // always beats the caller's timeout to the reading pane.
@@ -101,6 +103,10 @@ pub struct SyncHandle {
     // A separate connection dedicated to interactive body fetches, so opening a
     // message never queues behind a long background sync on the main one.
     pub fetch_tx: mpsc::UnboundedSender<SyncCommand>,
+    /// Fork (v1.1.12, D65): a third connection for downloading bodies ahead
+    /// (arrival prefetch and the rows on screen), so a click never queues
+    /// behind a prefetch on the fetch connection.
+    pub bg_tx: mpsc::UnboundedSender<SyncCommand>,
 }
 
 impl SyncHandle {
@@ -117,6 +123,14 @@ impl SyncHandle {
     pub fn stop(&self) {
         let _ = self.tx.send(SyncCommand::Stop);
         let _ = self.fetch_tx.send(SyncCommand::Stop);
+        let _ = self.bg_tx.send(SyncCommand::Stop);
+    }
+    /// Fork (v1.1.12): download these bodies ahead on the background
+    /// connection. Already cached or oversized ones are skipped there.
+    pub fn prefetch(&self, message_pks: Vec<i64>) {
+        if !message_pks.is_empty() {
+            let _ = self.bg_tx.send(SyncCommand::PrefetchBodies { message_pks });
+        }
     }
     /// Wake the fetch connection now, so the click it is waiting for doesn't
     /// have to pay for a login. Free when the connection is already warm.
@@ -220,9 +234,11 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
         .is_some_and(|w| w.is_visible().unwrap_or(false));
     let (tx, mut rx) = mpsc::unbounded_channel::<SyncCommand>();
     let (fetch_tx, mut fetch_rx) = mpsc::unbounded_channel::<SyncCommand>();
+    let (bg_tx, mut bg_rx) = mpsc::unbounded_channel::<SyncCommand>();
     let handle = SyncHandle {
         tx: tx.clone(),
         fetch_tx: fetch_tx.clone(),
+        bg_tx: bg_tx.clone(),
     };
 
     // One OAuth token cache, shared by every connection this account owns.
@@ -334,6 +350,38 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
         });
     }
 
+    // Fork (v1.1.12, D65): the background body connection. Prefetch only, in
+    // batches of PREFETCH_BATCH so a long list never holds one session for
+    // minutes; it logs in on first use and is left to idle out after.
+    {
+        let mut prefetcher = Engine {
+            app: app.clone(),
+            db: db.clone(),
+            account: account.clone(),
+            data_dir: data_dir.clone(),
+            session: None,
+            selected: None,
+            oauth_token: oauth.clone(),
+            last_ok: std::time::Instant::now(),
+            prefetch_tx: None,
+            last_cred_ms: 0,
+        };
+        tauri::async_runtime::spawn(async move {
+            while let Some(cmd) = bg_rx.recv().await {
+                match cmd {
+                    SyncCommand::Stop => break,
+                    SyncCommand::PrefetchBodies { message_pks } => {
+                        for batch in message_pks.chunks(PREFETCH_BATCH) {
+                            prefetcher.prefetch_bodies(batch).await;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            prefetcher.logout().await;
+        });
+    }
+
     tauri::async_runtime::spawn(async move {
         let mut engine = Engine {
             app,
@@ -344,7 +392,9 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
             selected: None,
             oauth_token: oauth,
             last_ok: std::time::Instant::now(),
-            prefetch_tx: Some(fetch_tx.clone()),
+            // Fork (v1.1.12): arrival prefetch goes to the background
+            // connection, never ahead of a click on the fetch connection.
+            prefetch_tx: Some(bg_tx.clone()),
             last_cred_ms: 0,
         };
 
@@ -2376,6 +2426,13 @@ impl Engine {
                 let (target, addrs) = crate::net::vet_public_url(url, true, "unsubscribe").await?;
                 let host = target.host_str().unwrap_or_default().to_string();
                 let client = reqwest::Client::builder()
+                    // Fork (v1.1.12, D65): Cloudflare refuses a request with
+                    // no User-Agent outright (error 1010, seen on Kit).
+                    .user_agent(concat!(
+                        "Skim/",
+                        env!("CARGO_PKG_VERSION"),
+                        " (one-click unsubscribe)"
+                    ))
                     // A redirect could hop from the vetted https host to an
                     // internal one; RFC 8058 expects a direct 2xx anyway.
                     .redirect(reqwest::redirect::Policy::none())

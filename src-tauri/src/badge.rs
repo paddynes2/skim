@@ -18,13 +18,17 @@ const BADGE_RGB: [u8; 3] = [0xE5, 0x48, 0x4D];
 
 /// Recompute the inbox unread total and repaint the taskbar overlay + tray
 /// icon. Cheap (one indexed `SUM` plus a tiny raster), so it is safe to call on
-/// every mail change.
+/// every mail change. Fork (v1.1.12, D65): with Priority alerts on, the count
+/// is the Priority conversations instead.
 pub async fn refresh(app: &AppHandle) {
     let count = {
         let state = app.state::<crate::state::AppState>();
         state
             .db
-            .call(|conn| crate::db::queries::total_inbox_unread(conn))
+            .call(|conn| match crate::fork::priority::badge_count(conn)? {
+                Some(n) => Ok(n),
+                None => crate::db::queries::total_inbox_unread(conn),
+            })
             .await
             .unwrap_or(0)
             .max(0)

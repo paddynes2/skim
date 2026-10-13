@@ -5,6 +5,8 @@
   import { act, archiveOffered, type Action } from "../actions";
   import { mail } from "../../lib/stores/mail.svelte";
   import { dealsStore } from "../deals/store.svelte";
+  import { trainPriority } from "../priority/train";
+  const inbox = $derived(mail.selectedFolder?.role === "inbox");
   let { thread, x, y, onclose }: { thread: ThreadRow; x: number; y: number; onclose: () => void } = $props();
   let menu: HTMLDivElement;
   $effect(() => { void tick().then(() => menu?.querySelector<HTMLButtonElement>("button")?.focus()); });
@@ -43,6 +45,10 @@
   <button role="menuitem" onclick={() => run("toggle_star")}>{t(thread.isStarred ? "reading.unstar" : "reading.star")}<kbd>S</kbd></button>
   <button role="menuitem" onclick={() => run("toggle_read")}>{t(thread.isRead ? "reading.mark_unread" : "reading.mark_read")}<kbd>U</kbd></button>
   {#if archiveOffered(mail.selectedFolder?.role)}<button role="menuitem" onclick={() => run("archive")}>{t("reading.archive")}<kbd>E</kbd></button>{/if}
+  {#if inbox}
+    <button role="menuitem" onclick={() => { const target = thread; close(); void trainPriority(target, true); }}>{t("fork.priority.menu_always")}<kbd>+</kbd></button>
+    <button role="menuitem" onclick={() => { const target = thread; close(); void trainPriority(target, false); }}>{t("fork.priority.menu_never")}<kbd>-</kbd></button>
+  {/if}
   <button role="menuitem" onclick={() => run("delete")}>{t("reading.delete")}<kbd>Del</kbd></button>
 </div>
 <style>

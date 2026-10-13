@@ -25,6 +25,20 @@ pub struct Failure {
     pub retryable: bool,
     pub locations: Vec<FailureLocation>,
     pub draft_id: Option<i64>,
+    /// v1.1.12 (D65): for a failed one-click unsubscribe, its https page, so
+    /// the user can finish it in the browser.
+    pub link: Option<String>,
+}
+
+/// The page a failed one-click unsubscribe can be finished on: its https URL
+/// only (the sender chose it; the browser, not Skim, opens it).
+pub fn unsubscribe_link(kind: &str, payload: &str) -> Option<String> {
+    if kind != "unsubscribe" {
+        return None;
+    }
+    let v: Value = serde_json::from_str(payload).ok()?;
+    let url = v.get("url")?.as_str()?;
+    url.starts_with("https://").then(|| url.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -121,6 +135,7 @@ pub fn status(conn: &Connection, account_id: Option<&str>) -> rusqlite::Result<Q
                 id: r.get(0)?,
                 action: action.unwrap_or(&kind).to_string(),
                 retryable: action.is_some(),
+                link: unsubscribe_link(&kind, &payload),
                 kind,
                 account_email: r.get(3)?,
                 created_at: r.get(4)?,
@@ -135,6 +150,27 @@ pub fn status(conn: &Connection, account_id: Option<&str>) -> rusqlite::Result<Q
         failed,
         failures,
     })
+}
+
+/// v1.1.12 (D65): forget a failed operation. Only a row still marked failed
+/// is removed; a pending or running one is never touched.
+pub fn dismiss_failed(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
+    Ok(conn.execute(
+        "DELETE FROM pending_ops WHERE id=?1 AND state='failed'",
+        [id],
+    )? == 1)
+}
+
+#[tauri::command]
+pub async fn fork_mail_dismiss_failed(state: State<'_, AppState>, id: i64) -> Result<()> {
+    let gone = state.db.call(move |conn| dismiss_failed(conn, id)).await?;
+    if !gone {
+        return Err(SkimError::other(
+            "queue_changed",
+            "This failed action is no longer available.",
+        ));
+    }
+    Ok(())
 }
 
 /// Re-check the operation inside the transaction. An unknown or changed row stays untouched.
@@ -218,6 +254,36 @@ pub async fn fork_mail_retry_flag(state: State<'_, AppState>, id: i64) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_a_failed_row_is_dismissed_and_only_https_unsubscribes_get_a_link() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            conn.execute_batch("INSERT INTO accounts(id,email,provider,imap_host,smtp_host,created_at) VALUES('a','a@example.com','custom','i','s',0);
+                INSERT INTO pending_ops(id,account_id,kind,payload,created_at,attempts,state) VALUES
+                  (1,'a','unsubscribe','{}',0,4,'failed'),(2,'a','set_flag','{}',0,0,'pending');")?;
+            assert!(dismiss_failed(conn, 1)?);
+            assert!(!dismiss_failed(conn, 1)?, "already gone");
+            assert!(!dismiss_failed(conn, 2)?, "a pending op stays");
+            let n: i64 = conn.query_row("SELECT count(*) FROM pending_ops", [], |r| r.get(0))?;
+            assert_eq!(n, 1);
+            Ok(())
+        })
+        .unwrap();
+        let post = r#"{"method":"post","url":"https://list.example/u?x=1"}"#;
+        assert_eq!(
+            unsubscribe_link("unsubscribe", post).as_deref(),
+            Some("https://list.example/u?x=1")
+        );
+        assert_eq!(
+            unsubscribe_link("unsubscribe", r#"{"url":"http://list.example/u"}"#),
+            None
+        );
+        assert_eq!(
+            unsubscribe_link("unsubscribe", r#"{"method":"mail","to":"u@x"}"#),
+            None
+        );
+        assert_eq!(unsubscribe_link("set_flag", post), None);
+    }
     #[test]
     fn failure_links_stay_in_the_operation_account_and_survive_missing_sources() {
         let db = crate::db::Db::open_in_memory().unwrap();

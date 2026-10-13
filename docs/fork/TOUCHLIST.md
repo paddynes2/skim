@@ -227,3 +227,9 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/components/MessageList.svelte` | layout, date-section class | Priority header for the leading Priority rows; ids refreshed after each list load | D64 |
 | `src/lib/i18n/locales/en.json` | `fork.list.date_priority`, `fork.priority.*` | Priority header and settings copy | D64 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.11 | Signed local release |
+| `src-tauri/src/mail/sync.rs` | `SyncHandle`, `spawn`, `execute_unsubscribe` | `bg_tx` + third connection for prefetch, `prefetch()`, arrival prefetch routed to it; one-click User-Agent | D65 |
+| `src-tauri/src/notify.rs` | `notify_new_mail` | split into `notify(..., priority)`; `notify_priority_mail`; arrival toasts wait when Priority alerts are on | D65 |
+| `src-tauri/src/badge.rs` | `refresh` | Priority count when Priority alerts are on | D65 |
+| `src-tauri/src/lib.rs` | `invoke_handler` | `fork_priority_members`, `fork_priority_train`, `fork_prefetch_threads`, `fork_mail_dismiss_failed` | D65 |
+| `src/components/MessageList.svelte` | script, row markup, styles | Priority row tags; download-ahead of the first 40 rows | D65 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.12 | Signed local release |

@@ -55,6 +55,9 @@ pub const ALLOWED: &[&str] = &[
     "fork_priority_threshold", // Jev yes-probability, default 0.35
     "fork_priority_exclude",   // one domain or address per line, never in Priority
     "fork_priority_about",     // first sentence of the Jev question (who the recipient is)
+    // v1.1.12
+    "fork_priority_always", // one domain or address per line, always in Priority when unread
+    "fork_priority_alerts", // on | off; toasts and taskbar count follow Priority
 ];
 
 #[cfg(test)]

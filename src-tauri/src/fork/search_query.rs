@@ -464,6 +464,29 @@ pub async fn fork_search_threads(
         .await
 }
 
+/// One row per thread, shaped by its newest matching message; unread and
+/// attachment state read over the whole thread, as the list does.
+/// MATERIALIZED (v1.1.12, D65): without it SQLite re-ran the full-text match
+/// inside the per-thread subquery; a very common word (29,666 hits) took
+/// 597 s instead of 0.17 s on the owner's mailbox.
+pub(crate) fn threads_sql(hit: &str) -> String {
+    format!(
+        "WITH hit AS MATERIALIZED ({hit})
+         SELECT t.id, m.from_name, m.from_addr, m.subject, m.snippet, m.date,
+                (NOT EXISTS (SELECT 1 FROM messages m3
+                             WHERE m3.thread_id = t.id AND m3.is_read = 0)),
+                t.starred, max(m2.has_attachments), t.message_count, t.account_id, m.id
+         FROM threads t
+         JOIN hit h ON h.thread_id = t.id
+         JOIN messages m ON m.id = h.id
+         JOIN messages m2 ON m2.thread_id = t.id
+         WHERE h.id = (SELECT h2.id FROM hit h2 WHERE h2.thread_id = t.id ORDER BY h2.date DESC, h2.id DESC LIMIT 1)
+         GROUP BY t.id
+         ORDER BY m.date DESC, t.id DESC
+         LIMIT ? OFFSET ?"
+    )
+}
+
 /// The query behind [`fork_search_threads`], split out for tests.
 pub fn search_threads(
     conn: &rusqlite::Connection,
@@ -499,23 +522,7 @@ pub fn search_threads(
     params.push(SqlValue::Integer(limit.clamp(0, 500)));
     params.push(SqlValue::Integer(offset.max(0)));
 
-    // One row per thread, shaped by its newest matching message; unread and
-    // attachment state read over the whole thread, as the list does.
-    let sql = format!(
-        "WITH hit AS ({hit})
-         SELECT t.id, m.from_name, m.from_addr, m.subject, m.snippet, m.date,
-                (NOT EXISTS (SELECT 1 FROM messages m3
-                             WHERE m3.thread_id = t.id AND m3.is_read = 0)),
-                t.starred, max(m2.has_attachments), t.message_count, t.account_id, m.id
-         FROM threads t
-         JOIN hit h ON h.thread_id = t.id
-         JOIN messages m ON m.id = h.id
-         JOIN messages m2 ON m2.thread_id = t.id
-         WHERE h.id = (SELECT h2.id FROM hit h2 WHERE h2.thread_id = t.id ORDER BY h2.date DESC, h2.id DESC LIMIT 1)
-         GROUP BY t.id
-         ORDER BY m.date DESC, t.id DESC
-         LIMIT ? OFFSET ?"
-    );
+    let sql = threads_sql(&hit);
     let mut stmt = conn.prepare(&sql)?;
     let mut rows = stmt
         .query_map(rusqlite::params_from_iter(params.iter()), |r| {
@@ -622,6 +629,33 @@ pub async fn fork_search_coverage(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// D65: the matches are computed once (MATERIALIZE), not re-run for every
+    /// thread the per-thread subquery looks at.
+    #[test]
+    fn search_matches_are_materialized_once() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            let hit = "SELECT m.id, m.thread_id, m.date FROM messages_fts \
+                       JOIN messages m ON m.id = messages_fts.rowid \
+                       WHERE messages_fts MATCH ? AND (? IS NULL OR m.account_id = ?)";
+            let plan: Vec<String> = conn
+                .prepare(&format!("EXPLAIN QUERY PLAN {}", threads_sql(hit)))?
+                .query_map(
+                    rusqlite::params!["x", None::<String>, None::<String>, 10, 0],
+                    |r| r.get::<_, String>(3),
+                )?
+                .collect::<rusqlite::Result<_>>()?;
+            assert!(
+                plan.iter().any(|s| s.starts_with("MATERIALIZE hit")),
+                "{plan:#?}"
+            );
+            let scans = plan.iter().filter(|s| s.contains("messages_fts")).count();
+            assert_eq!(scans, 1, "one full-text match per search: {plan:#?}");
+            Ok(())
+        })
+        .unwrap();
+    }
 
     fn now() -> DateTime<Local> {
         Local.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap()

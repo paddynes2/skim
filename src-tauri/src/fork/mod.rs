@@ -18,6 +18,7 @@ pub mod gmail;
 pub mod google;
 pub mod list;
 pub mod mcp;
+pub mod prefetch;
 pub mod prep;
 pub mod priority;
 pub mod reminders;
@@ -59,6 +60,8 @@ pub fn start(app: AppHandle) {
     court::full_pass(app.clone(), db.clone());
     // v1.1.11 (D64): the Priority pass at startup and after each mail change.
     priority::schedule(app.clone());
+    // v1.1.12 (D65): keep the fetch connections awake while the window shows.
+    prefetch::start(app.clone());
     let app2 = app.clone();
     app.listen("mail:updated", move |e| {
         let touched = serde_json::from_str::<serde_json::Value>(e.payload())

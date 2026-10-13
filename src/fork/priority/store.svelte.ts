@@ -1,15 +1,19 @@
 // The conversations the Inbox list shows under its Priority header. The list
 // query already puts them first; this set only tells the layout where the
 // section ends. Read after every list load so the two never drift for long.
-import { priorityApi } from "./api";
+import { priorityApi, type PriorityMember } from "./api";
 
-const state = $state({ ids: new Set<number>(), held: null as number | null });
+const state = $state({ ids: new Set<number>(), reasons: new Map<number, PriorityMember["reason"]>(), held: null as number | null });
 let inflight: Promise<void> | null = null;
 let again = false;
 
 export const priority = {
   get ids(): ReadonlySet<number> {
     return state.ids;
+  },
+  /** Why a conversation is in Priority (v1.1.12 row tags). */
+  reason(id: number): PriorityMember["reason"] | undefined {
+    return state.reasons.get(id);
   },
   /** The open conversation kept in the Priority section after it was read
    *  (`sticky.ts`); drawn under the Priority header until another opens. */
@@ -30,10 +34,15 @@ export const priority = {
       return inflight;
     }
     inflight = priorityApi
-      .ids()
-      .then((ids) => {
-        const next = new Set(ids);
-        if (next.size !== state.ids.size || [...next].some((id) => !state.ids.has(id))) state.ids = next;
+      .members()
+      .then((members) => {
+        const next = new Set(members.map((m) => m.threadId));
+        const reasons = new Map(members.map((m) => [m.threadId, m.reason] as const));
+        const same = next.size === state.ids.size && members.every((m) => state.reasons.get(m.threadId) === m.reason);
+        if (!same) {
+          state.ids = next;
+          state.reasons = reasons;
+        }
       })
       .catch(() => {})
       .finally(() => {

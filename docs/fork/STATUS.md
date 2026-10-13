@@ -6,6 +6,12 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-13.**
 
+## Version 1.1.12 (October 13)
+
+The owner's "do all" after 1.1.11. Search is fast again (a common word went from 597 s to 0.17 s); bodies download ahead on a third connection and the fetch connection is kept awake; Priority gains an always list, the `+` / `-` keys, Deal and Always row tags and Priority-only alerts; failed actions get Dismiss, and a failed one-click unsubscribe gets "Open unsubscribe page". Design and measurements in D65.
+
+Validation: 571 Rust tests, all frontend tests, Clippy, fmt and Svelte check (the existing ComposeForm warning). Eleven deliberate faults in the new logic each failed a named test; one first needed a new test (a thread with both an always-list and a scored message).
+
 ## Version 1.1.11 (October 13)
 
 The owner asked for important unread mail at the top of the Inbox, judged by TypeSafe Jev. Unread Deals and starred conversations, and unread mail Jev scores at 0.35 or above, sit under a "Priority" header at the top of the Inbox. Settings, Priority holds the on/off switch, the TypeSafe key (Credential Manager `fork:typesafe`), the threshold, an "About you" sentence and the never-in-Priority list. Design, measurement and review in D64. Also: Rebound sign-in by refresh token (`fork_crm_connect_token`).
