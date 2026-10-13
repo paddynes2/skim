@@ -23,6 +23,8 @@
   import { calendar } from "../fork/calendar/store.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listLayout, listWindow } from "../fork/layout/mail-list";
+  // Fork (v1.1.11, D64): the Inbox's Priority header.
+  import { priority } from "../fork/priority/store.svelte";
   import { tick, untrack } from "svelte";
   import MessageMenu from "../fork/layout/MessageMenu.svelte";
   import type { ThreadRow } from "../lib/types";
@@ -117,7 +119,12 @@
   let viewH = $state(0);
   let rowH = $state(76);
 
-  const layout = $derived(listLayout(mail.threads, rowH, !mail.searching && !mail.courtView && prefs.listOrder === "date", nowSecs * 1000));
+  const inInbox = $derived(mail.selectedFolder?.role === "inbox" && !mail.searching);
+  $effect(() => {
+    void mail.threads;
+    if (inInbox) void priority.refresh();
+  });
+  const layout = $derived(listLayout(mail.threads, rowH, !mail.searching && !mail.courtView && prefs.listOrder === "date", nowSecs * 1000, inInbox ? priority.section : undefined));
   const range = $derived(listWindow(layout.items, scrollTop, viewH, OVERSCAN));
   const visibleItems = $derived(layout.items.slice(range.start, range.end));
   const visible = $derived(visibleItems.flatMap(item => item.thread ? [item.thread] : []));
@@ -283,7 +290,7 @@
       <div class="spacer" style="height: {layout.items[range.start]?.top ?? 0}px"></div>
       {#each visibleItems as item (item.key)}
         {#if !item.thread}
-          <div class="date-section">{t(`fork.list.date_${item.bucket}`)}</div>
+          <div class="date-section" class:priority-section={item.bucket === "priority"}>{t(`fork.list.date_${item.bucket}`)}</div>
         {:else}
         {@const thread = item.thread}
         {@const court = mail.courtView ? courtOf(thread) : null}
@@ -524,6 +531,7 @@
   .court-wrap.deal :global(.subject) {
     padding-right: 0;
   }
+  .date-section.priority-section { color: var(--text); }
   .date-section { height: 28px; box-sizing: border-box; display: flex; align-items: center; padding: 0 24px; font-size: 11px; font-weight: 600; color: var(--text-dim); background: var(--surface); border-bottom: 1px solid var(--hairline); }
   /* One line has room for the age only; the reason stays in the tooltip. */
   .court-wrap.compact :global(.court-badge .sep),

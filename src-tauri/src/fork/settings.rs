@@ -50,6 +50,11 @@ pub const ALLOWED: &[&str] = &[
     "fork_labels_hidden",    // JSON list of label paths hidden from the sidebar
     // v1.1.3
     "fork_deals", // one deal per line, "Name: domain, person@address" (fork::deals)
+    // v1.1.11
+    "fork_priority",           // on | off; Inbox Priority section (fork::priority)
+    "fork_priority_threshold", // Jev yes-probability, default 0.35
+    "fork_priority_exclude",   // one domain or address per line, never in Priority
+    "fork_priority_about",     // first sentence of the Jev question (who the recipient is)
 ];
 
 #[cfg(test)]

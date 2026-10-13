@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 import ts from "typescript";
 import {compileModule} from "svelte/compiler";
 import {withoutPending,insertAt} from "../undo-filter.ts";
+import {keepOpenInPriority} from "../priority/sticky.ts";
 
 // Compile the actual store with Svelte's server transform. Reactive rendering is
 // covered by the browser suite. This exercises the store's async control flow,
@@ -34,7 +35,7 @@ async function store(){
     prefs,searchApi:{searchThreads:call("search")},SEARCH_FOLDER_ID:-900,withoutToken:(q,t)=>q.replace(t,""),
     COURT_UPDATED:"court",courtApi:{list:call("court")},VF_ON_ME:-920,VF_WAITING:-921,courtCounts:{refresh:async()=>{}},
     dealsApi:{list:call("deals")},VF_DEALS:-924,dealsStore:{get selectedCompany(){return control.company;}},dealsCount:{refresh:async()=>{}},
-    undo:{pendingKeys:new Set()},insertAt,withoutPending,folderSelected:async()=>{},SCHEDULED_FOLDER_ID:-999,
+    undo:{pendingKeys:new Set()},insertAt,withoutPending,PRIORITY_UPDATED:"priority",priority:{ids:new Set(),section:new Set(),held:null},keepOpenInPriority,folderSelected:async()=>{},SCHEDULED_FOLDER_ID:-999,
   };
   const key=`__skimStoreTest${++serial}`;globalThis[key]=stubs;
   const text=`const {${importNames.join(",")}} = globalThis[${JSON.stringify(key)}];\n${compiled}\n// instance ${serial}`;

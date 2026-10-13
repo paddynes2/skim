@@ -823,6 +823,44 @@ pub async fn fork_crm_connect(
     Ok(st)
 }
 
+/// Sign in with a Rebound refresh token instead of a password (v1.1.11): an
+/// administrator can issue one for the user's own account, so a user who
+/// does not know the password is connected without changing it. The token is
+/// exchanged once and only the rotated token it returns is kept.
+#[tauri::command]
+pub async fn fork_crm_connect_token(
+    state: State<'_, AppState>,
+    refresh_token: String,
+) -> Result<CrmStatus> {
+    let (cfg, _) = load(&state).await?;
+    let cfg = cfg.ok_or_else(not_configured)?;
+    let rt = refresh_token.trim().to_string();
+    if rt.is_empty() {
+        return Err(SkimError::other("crm_auth", "A refresh token is required"));
+    }
+    let token = refresh_login(&cfg, &rt).await?;
+    if token.refresh_token.as_deref().unwrap_or("").is_empty() {
+        return Err(SkimError::other(
+            "crm_auth",
+            "Sign-in returned no refresh token",
+        ));
+    }
+    let s = adopt(&token)?;
+    cache_clear();
+    let mut st = status_for(&state, true).await?;
+    st.email = s.email;
+    if st.workspace_id.is_none() {
+        if let Some(ws) = st.workspaces.as_ref() {
+            if ws.len() == 1 {
+                let only = ws[0].id.clone();
+                save_workspace(&state, Some(only.clone())).await?;
+                st.workspace_id = Some(only);
+            }
+        }
+    }
+    Ok(st)
+}
+
 #[tauri::command]
 pub async fn fork_crm_pick_workspace(state: State<'_, AppState>, id: String) -> Result<CrmStatus> {
     let id = id.trim().to_string();

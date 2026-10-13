@@ -122,6 +122,8 @@ pub async fn list_threads(
     state
         .db
         .read("list_threads", move |conn| {
+            // Fork (v1.1.11, D64): the Inbox puts Priority first.
+            let opts = crate::fork::priority::opts_for_folder(conn, folder_id, opts)?;
             queries::list_threads_opts(conn, folder_id, offset, limit.clamp(1, 200), opts)
         })
         .await
@@ -173,6 +175,8 @@ pub async fn list_unified_threads(
     state
         .db
         .read("list_unified_threads", move |conn| {
+            // Fork (v1.1.11, D64): the Inbox puts Priority first.
+            let opts = crate::fork::priority::opts_for_role(conn, role.as_deref(), opts)?;
             queries::list_unified_threads_opts(
                 conn,
                 role.as_deref(),

@@ -11,11 +11,15 @@ export function dateBucket(unix: number, now = Date.now()) {
   return unix * 1000 >= day.getTime() ? "today" : unix * 1000 >= yesterday.getTime() ? "yesterday" : "earlier";
 }
 
-export function listLayout(rows: ThreadRow[], rowHeight: number, grouped: boolean, now: number) {
-  let offset = 0, previous = "";
+/** `priority`: the Inbox's Priority conversations (v1.1.11, D64). The list
+ *  query sorts them first, so the section is the leading run of rows in the
+ *  set; the date sections start again after it. */
+export function listLayout(rows: ThreadRow[], rowHeight: number, grouped: boolean, now: number, priority: ReadonlySet<number> = new Set()) {
+  let offset = 0, previous = "", leading = priority.size > 0;
   const items: ListItem[] = [];
   for (const row of rows) {
-    const bucket = dateBucket(row.date, now);
+    leading = leading && row.messageId == null && priority.has(row.id);
+    const bucket = leading ? "priority" : dateBucket(row.date, now);
     if (grouped && bucket !== previous) {
       items.push({ key: `date:${bucket}:${row.messageId ?? row.id}`, bucket, thread: null, top: offset, height: 28 });
       offset += 28; previous = bucket;

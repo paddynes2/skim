@@ -27,6 +27,10 @@ pub enum Order {
 pub struct ListOpts {
     pub filter: Filter,
     pub order: Order,
+    /// v1.1.11 (D64): the Inbox puts its Priority conversations first. Never
+    /// parsed from the IPC strings: `fork::priority::opts_for_*` sets it from
+    /// the folder's role, so no other folder can turn it on.
+    pub priority: bool,
 }
 
 impl ListOpts {
@@ -43,6 +47,7 @@ impl ListOpts {
                 Some("unread_first") => Order::UnreadFirst,
                 _ => Order::Date,
             },
+            priority: false,
         }
     }
 }
@@ -87,10 +92,22 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
                 Filter::Unread => format!(" AND {hidden} AND {unread}"),
                 Filter::Starred => format!(" AND {hidden} AND t.starred = 1"),
             };
+            // v1.1.11 (D64): a Priority conversation sorts first, ahead even of
+            // a due reminder, so the Priority header always heads the list.
+            // Only while it is still unread here: reading it drops it back to
+            // its date at once, before the next priority pass runs.
+            let first = if opts.priority {
+                format!(
+                    "({} AND {unread}) DESC, ",
+                    crate::fork::priority::member_pred("t.id")
+                )
+            } else {
+                String::new()
+            };
             let order = match opts.order {
-                Order::Date => format!(" ORDER BY ({pinned}) DESC, {ROW_DATE} DESC"),
+                Order::Date => format!(" ORDER BY {first}({pinned}) DESC, {ROW_DATE} DESC"),
                 Order::UnreadFirst => {
-                    format!(" ORDER BY ({pinned}) DESC, ({unread}) DESC, {ROW_DATE} DESC")
+                    format!(" ORDER BY {first}({pinned}) DESC, ({unread}) DESC, {ROW_DATE} DESC")
                 }
             };
             let marker = " GROUP BY t.id";
@@ -127,12 +144,19 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
     }
 }
 
-/// Every (filter, order) combination, for plan tests and exhaustive checks.
+/// Every (filter, order, priority) combination, for plan tests and
+/// exhaustive checks.
 pub fn all_opts() -> Vec<ListOpts> {
     let mut out = Vec::new();
     for filter in [Filter::All, Filter::Unread, Filter::Starred] {
         for order in [Order::Date, Order::UnreadFirst] {
-            out.push(ListOpts { filter, order });
+            for priority in [false, true] {
+                out.push(ListOpts {
+                    filter,
+                    order,
+                    priority,
+                });
+            }
         }
     }
     out
@@ -227,10 +251,10 @@ mod tests {
     #[test]
     fn every_combination_is_enumerated_once() {
         let all = all_opts();
-        assert_eq!(all.len(), 6);
+        assert_eq!(all.len(), 12);
         let mut seen = std::collections::HashSet::new();
         for o in all {
-            assert!(seen.insert((o.filter as u8, o.order as u8)));
+            assert!(seen.insert((o.filter as u8, o.order as u8, o.priority)));
         }
     }
 }

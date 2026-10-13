@@ -16,6 +16,9 @@ import type { CourtState } from "../../fork/court/types";
 import { dealsApi, VF_DEALS } from "../../fork/deals/api";
 import { dealsStore } from "../../fork/deals/store.svelte";
 import { dealsCount } from "../../fork/deals/count.svelte";
+import { PRIORITY_UPDATED } from "../../fork/priority/api";
+import { priority } from "../../fork/priority/store.svelte";
+import { keepOpenInPriority } from "../../fork/priority/sticky";
 import { undo } from "../../fork/stores/undo.svelte";
 import { insertAt, withoutPending } from "../../fork/undo-filter";
 import { folderSelected } from "../../fork/freshness";
@@ -152,6 +155,10 @@ async function attachListeners() {
     if (courtStateOf(state.selectedFolderId) !== null) void refreshThreads();
     void courtCounts.refresh();
   });
+  // Fork (v1.1.11, D64): the Priority set moved; only the Inbox orders by it.
+  await listen(PRIORITY_UPDATED, () => {
+    if (mail.selectedFolder?.role === "inbox") void refreshThreads();
+  });
   // Back from the tray. Hiding the window only hides the webview, so nothing
   // here re-runs on its own — and a view left empty by a failed read would
   // stay empty however many times the user reopened it. Cheap local queries,
@@ -236,7 +243,14 @@ async function guard<T>(read: () => Promise<T>): Promise<T | null> {
  *  wrong before, the view is honest again. */
 function shown(rows: ThreadRow[]) {
   // Fork (3.2): a refresh must not resurrect a row held for removal.
-  state.threads = withoutPending(rows, undo.pendingKeys);
+  const next = withoutPending(rows, undo.pendingKeys);
+  // Fork (v1.1.11, D64): the open Priority conversation keeps its place.
+  const inbox = state.folders.find((f) => f.id === state.selectedFolderId)?.role === "inbox";
+  const kept = inbox
+    ? keepOpenInPriority(state.threads, next, state.selectedThreadId, priority.section)
+    : { rows: next, held: null };
+  priority.held = kept.held;
+  state.threads = kept.rows;
   state.fetched = rows.length;
   state.loadFailed = false;
 }
@@ -679,6 +693,11 @@ export const mail = {
   },
   set selectedThreadId(id: number | null) {
     state.selectedThreadId = id;
+    // Fork (v1.1.11, D64): moving on releases a held Priority row.
+    if (priority.held !== null && id !== priority.held) {
+      priority.held = null;
+      void refreshThreads();
+    }
   },
   get selectedMessageId() {
     return state.selectedMessageId;

@@ -10,6 +10,7 @@
   import { loadSmellSettings, unignoreRule, type SmellSettings } from "./smell/api";
   import SettingsCourt from "./court/SettingsCourt.svelte";
   import SettingsDeals from "./deals/SettingsDeals.svelte";
+  import SettingsPriority from "./priority/SettingsPriority.svelte";
   import SettingsCalendar from "./calendar/SettingsCalendar.svelte";
 
   const zoomPct = $derived(Math.round(prefs.zoom * 100));
@@ -156,6 +157,7 @@
 </section>
 
 <SettingsDeals />
+<SettingsPriority />
 <SettingsCourt />
 <SettingsCalendar />
 

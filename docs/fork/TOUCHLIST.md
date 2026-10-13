@@ -221,3 +221,9 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/db/queries.rs` | `LIST_THREADS_SQL`, `list_unified_threads_opts` | date column and ORDER BY `m.date` (`fork::list::ROW_DATE`), replacing D62's `max(t.last_date, m.date)` | A reply in Sent never moves the Inbox row (D63) |
 | `src-tauri/src/mail/threading.rs` | `recompute_thread` | `message_count` = distinct Message-IDs | Inbox and Important copies count once (D63) |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.10 | Signed local release |
+| `src-tauri/src/commands/mail.rs` | `list_threads`, `list_unified_threads` | `fork::priority::opts_for_folder` / `opts_for_role` before the query | The Inbox orders Priority first (D64) |
+| `src-tauri/src/lib.rs` | `invoke_handler` | `fork_priority_*` (4) and `fork_crm_connect_token` | D64 |
+| `src/lib/stores/mail.svelte.ts` | imports, listeners, `shown`, `selectedThreadId` setter | reload on `priority:updated`; keep the open Priority row in place until another opens | D64 |
+| `src/components/MessageList.svelte` | layout, date-section class | Priority header for the leading Priority rows; ids refreshed after each list load | D64 |
+| `src/lib/i18n/locales/en.json` | `fork.list.date_priority`, `fork.priority.*` | Priority header and settings copy | D64 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.11 | Signed local release |

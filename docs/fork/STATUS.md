@@ -4,7 +4,13 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-12.**
+**As of 2026-10-13.**
+
+## Version 1.1.11 (October 13)
+
+The owner asked for important unread mail at the top of the Inbox, judged by TypeSafe Jev. Unread Deals and starred conversations, and unread mail Jev scores at 0.35 or above, sit under a "Priority" header at the top of the Inbox. Settings, Priority holds the on/off switch, the TypeSafe key (Credential Manager `fork:typesafe`), the threshold, an "About you" sentence and the never-in-Priority list. Design, measurement and review in D64. Also: Rebound sign-in by refresh token (`fork_crm_connect_token`).
+
+Validation: 567 Rust tests, all frontend tests, Clippy, fmt and Svelte check (the existing ComposeForm warning). Thirty-two deliberate faults across the rules, the list order, the score key, the unscored path and the keep-in-place logic each failed a named test and were restored; one first needed a new test (the unscored path, now the pure function absorb).
 
 ## Version 1.1.10 (October 12)
 

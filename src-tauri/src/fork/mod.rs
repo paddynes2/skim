@@ -19,6 +19,7 @@ pub mod google;
 pub mod list;
 pub mod mcp;
 pub mod prep;
+pub mod priority;
 pub mod reminders;
 pub mod restore;
 pub mod scheduler;
@@ -56,6 +57,8 @@ pub fn start(app: AppHandle) {
     // 10: full ball-in-court pass at startup, then a pass per `mail:updated`.
     let db = app.state::<crate::state::AppState>().db.clone();
     court::full_pass(app.clone(), db.clone());
+    // v1.1.11 (D64): the Priority pass at startup and after each mail change.
+    priority::schedule(app.clone());
     let app2 = app.clone();
     app.listen("mail:updated", move |e| {
         let touched = serde_json::from_str::<serde_json::Value>(e.payload())
@@ -64,6 +67,7 @@ pub fn start(app: AppHandle) {
             .map(|f| vec![f])
             .unwrap_or_default();
         court::on_mail_updated(app2.clone(), db.clone(), touched);
+        priority::schedule(app2.clone());
     });
 }
 
