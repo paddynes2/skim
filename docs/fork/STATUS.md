@@ -6,6 +6,10 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-13.**
 
+## Version 1.1.13 (October 13)
+
+Download-ahead now covers the large bodies that were slow to open (4 MiB per body, five per pass, 60 s), since it no longer shares the click's connection (D65 addendum). Live-verified on 1.1.12 before this: in-app search 210 ms for a very common word, Priority training and Undo, Dismiss, and the first real Google Calendar writes from Skim (create, move, delete of a guest-free test event, checked on Google at each step).
+
 ## Version 1.1.12 (October 13)
 
 The owner's "do all" after 1.1.11. Search is fast again (a common word went from 597 s to 0.17 s); bodies download ahead on a third connection and the fetch connection is kept awake; Priority gains an always list, the `+` / `-` keys, Deal and Always row tags and Priority-only alerts; failed actions get Dismiss, and a failed one-click unsubscribe gets "Open unsubscribe page". Design and measurements in D65.

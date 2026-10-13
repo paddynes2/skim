@@ -60,21 +60,19 @@ const SLOW_FETCH_LOG: std::time::Duration = std::time::Duration::from_secs(3);
 // request — longer than FETCH_REQUEST_BUDGET so the worker's own error wins, but
 // still bounded in case the worker is stuck on some other un-timed op.
 const BODY_FETCH_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
-// A body worth pulling the moment it lands. Ordinary correspondence and HTML
-// newsletters fit; anything larger is attachment-bearing mail, where a short
-// wait on open is expected anyway and where writing files to disk for a message
-// nobody may ever open is a real cost.
-const PREFETCH_MAX_BYTES: i64 = 256 * 1024;
-// Bodies per arrival. IDLE fires per message, so a normal batch is one or two;
-// the cap only bites after a reconnect that swept up a burst, where the newest
-// few are the ones about to be read. A click can queue behind the batch, so
-// keep it short.
-const PREFETCH_MAX_MESSAGES: usize = 3;
-// Everything one arrival's prefetch may spend on the wire, batch included.
-// This is the whole risk the feature carries: the batch holds the fetch
-// connection, so a click landing mid-batch waits this long at worst — which is
-// why it is a budget for the batch and not a leash per message.
-const PREFETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+// A body worth pulling before it is opened. Fork (v1.1.13, D65): raised from
+// 256 KiB, because prefetch now runs on its own connection (`bg_tx`) and no
+// click ever waits behind it, and because the slow opens measured on the
+// owner's machine were exactly the 250 KiB to 2.5 MiB bodies the old cap
+// skipped. Larger mail (big attachments) still loads on open.
+const PREFETCH_MAX_BYTES: i64 = 4 * 1024 * 1024;
+// Bodies per prefetch pass: one batch of `PREFETCH_BATCH` from the list, or
+// one arrival. Fork (v1.1.13): was 3 while a click could queue behind it.
+const PREFETCH_MAX_MESSAGES: usize = PREFETCH_BATCH;
+// Everything one pass may spend on the wire, batch included. On the
+// background connection this bounds how stale a queued pass can get, not a
+// click's wait (v1.1.13: was 15 s on the shared fetch connection).
+const PREFETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 pub enum SyncCommand {
     SyncAll,
@@ -3504,11 +3502,12 @@ mod fetch_tests {
         assert!(oauth::HTTP_TIMEOUT < BODY_FETCH_TIMEOUT);
     }
 
-    /// States the wire cost of one arrival, so raising either cap has to be a
-    /// deliberate decision rather than a quiet one.
+    /// States the wire cost of one pass, so raising either cap has to be a
+    /// deliberate decision rather than a quiet one. Fork (v1.1.13, D65): 20 MiB,
+    /// decided when prefetch moved off the click's connection.
     #[test]
-    fn one_prefetch_batch_stays_under_a_megabyte() {
-        assert!(PREFETCH_MAX_MESSAGES as i64 * PREFETCH_MAX_BYTES <= 1024 * 1024);
+    fn one_prefetch_batch_stays_under_twenty_megabytes() {
+        assert!(PREFETCH_MAX_MESSAGES as i64 * PREFETCH_MAX_BYTES <= 20 * 1024 * 1024);
     }
 
     #[test]
@@ -3531,7 +3530,8 @@ mod fetch_tests {
             (1..=8).map(|i| (i, i as u32 + 100, Some(2048))).collect();
         let picked = prefetch_targets(&candidates);
         assert_eq!(picked.len(), PREFETCH_MAX_MESSAGES);
-        assert_eq!(picked, vec![8, 7, 6]);
+        let newest: Vec<i64> = (1..=8).rev().take(PREFETCH_MAX_MESSAGES).collect();
+        assert_eq!(picked, newest);
     }
 
     #[test]
