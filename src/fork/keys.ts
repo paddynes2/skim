@@ -105,6 +105,12 @@ export function forkKey(e: KeyboardEvent): boolean {
     void mail.setListFilter(mail.listFilter === "starred" ? "all" : "starred");
     return true;
   }
+  // v1.1.17 (D68): Shift+H, the Hot filter.
+  if (e.shiftKey && e.code === "KeyH") {
+    e.preventDefault();
+    void mail.setListFilter(mail.listFilter === "hot" ? "all" : "hot");
+    return true;
+  }
   // v1.1.12 (D65): Gmail's keys for important / not important. The sender of
   // the open conversation goes on the always or never list.
   if ((e.key === "+" || e.key === "=" || e.key === "-") && mail.selectedThreadId !== null) {

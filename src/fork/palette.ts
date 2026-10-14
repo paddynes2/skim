@@ -40,6 +40,12 @@ export function forkCommands(): ForkCommand[] {
       run: () => void mail.setListFilter(mail.listFilter === "starred" ? "all" : "starred"),
     },
     {
+      id: "fork-filter-hot",
+      label: t("fork.shortcuts.filter_hot"),
+      hint: "Shift H",
+      run: () => void mail.setListFilter(mail.listFilter === "hot" ? "all" : "hot"),
+    },
+    {
       id: "fork-zoom-in",
       label: t("fork.shortcuts.zoom_in"),
       hint: "Ctrl +",

@@ -277,6 +277,16 @@
           >
             {t("fork.list.starred")}
           </button>
+          <!-- Fork (v1.1.17, D68): Hot, the mint and seafoam rows. -->
+          <button
+            class="chip hot"
+            class:active={mail.listFilter === "hot"}
+            aria-pressed={mail.listFilter === "hot"}
+            title="{t('fork.list.hot_hint')}  Shift H"
+            onclick={() => void mail.setListFilter(mail.listFilter === "hot" ? "all" : "hot")}
+          >
+            <span class="hot-dot" aria-hidden="true"></span>{t("fork.list.hot")}
+          </button>
         </div>
         {#if mail.threads.length > 0}
           <span class="nav-hint" title="{t('shortcuts.next')} · {t('shortcuts.prev')}">
@@ -426,6 +436,16 @@
   .chip .n {
     color: var(--unread);
     font-weight: 600;
+  }
+  /* The Hot chip's dot is the heat ramp's hot end. */
+  .hot-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgb(160, 232, 214), rgb(150, 244, 190));
+  }
+  :global(:root[data-theme$="-light"]) .hot-dot {
+    background: linear-gradient(135deg, rgb(40, 170, 150), rgb(30, 175, 105));
   }
   /* Sits right after the folder name, quiet until the header is hovered —
      it is a rare action and shouldn't compete with the title. */

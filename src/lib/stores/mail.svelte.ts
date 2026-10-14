@@ -25,7 +25,7 @@ import { folderSelected } from "../../fork/freshness";
 import { SCHEDULED_FOLDER_ID } from "../../fork/compose/api";
 
 /** Fork (3.1): which rows the list shows. */
-export type ListFilter = "all" | "unread" | "starred";
+export type ListFilter = "all" | "unread" | "starred" | "hot";
 
 const PAGE = 100;
 

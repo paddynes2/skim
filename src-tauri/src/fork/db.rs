@@ -30,6 +30,7 @@ pub const FORK_MIGRATIONS: &[&str] = &[
     include_str!("migrations/f0011_count_distinct_messages.sql"),
     include_str!("migrations/f0012_priority.sql"),
     include_str!("migrations/f0013_priority_always.sql"),
+    include_str!("migrations/f0014_priority_rescore.sql"),
 ];
 
 pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {

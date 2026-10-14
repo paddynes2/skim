@@ -10,7 +10,9 @@
 //! - otherwise no heat yet (not scored, or older than the scoring window):
 //!   the row stays untinted.
 //!
-//! The user's own messages never count either way.
+//! v1.1.17 (D68): a conversation the user has replied to is at least
+//! [`REPLIED_FLOOR`] (light seafoam), and a sender on the exclude list (the
+//! `-` key) is cold whatever Jev said. The user's own messages carry no score.
 
 use crate::error::Result;
 use crate::fork::priority::{authenticated, excluded, is_calendar, is_sensitive, lists};
@@ -25,6 +27,10 @@ pub const EVT_HEAT: &str = "heat:updated";
 
 /// At most this many conversations per call: the shown rows and some.
 const MAX_IDS: usize = 400;
+
+/// The least heat of a conversation the user replied to: on the ramp, between
+/// clear and seafoam, and under the Hot filter's 0.5.
+pub const REPLIED_FLOOR: f64 = 0.45;
 
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -68,14 +74,24 @@ pub fn decide(
 ) -> BTreeMap<i64, f64> {
     let mut best: BTreeMap<i64, f64> = BTreeMap::new();
     let mut cold: HashSet<i64> = HashSet::new();
+    let mut replied: HashSet<i64> = HashSet::new();
+    // Conversations with someone other than the user who is not excluded.
+    let mut open: HashSet<i64> = HashSet::new();
     for m in msgs {
         if own.contains(&m.from_addr.trim().to_ascii_lowercase()) {
+            replied.insert(m.thread_id);
             continue;
         }
         if deals.contains(&m.thread_id) || excluded(&m.from_addr, always) {
             best.insert(m.thread_id, 1.0);
+            open.insert(m.thread_id);
             continue;
         }
+        if excluded(&m.from_addr, exclude) {
+            cold.insert(m.thread_id);
+            continue;
+        }
+        open.insert(m.thread_id);
         match m.score {
             Some(Some(s)) => {
                 let slot = best.entry(m.thread_id).or_insert(s);
@@ -88,6 +104,14 @@ pub fn decide(
                 if cold_by_rule(m, exclude) {
                     cold.insert(m.thread_id);
                 }
+            }
+        }
+    }
+    for t in replied {
+        if open.contains(&t) {
+            let slot = best.entry(t).or_insert(REPLIED_FLOOR);
+            if *slot < REPLIED_FLOOR {
+                *slot = REPLIED_FLOOR;
             }
         }
     }
@@ -113,7 +137,7 @@ coalesce(nullif(m.message_id, ''), 'id:' || m.id)";
          JOIN folders f ON f.id = m.folder_id
          LEFT JOIN fork_priority_score s ON s.msg_key = {key}
          WHERE m.thread_id IN ({marks})
-           AND coalesce(f.role, '') NOT IN ('sent', 'drafts', 'trash', 'spam', 'junk')"
+           AND coalesce(f.role, '') NOT IN ('drafts', 'trash', 'spam', 'junk')"
     ))?;
     let rows = stmt.query_map(params_from_iter(ids.iter()), |r| {
         let asked: bool = r.get(8)?;
@@ -198,6 +222,25 @@ mod tests {
     #[test]
     fn own_mail_never_counts() {
         assert!(run(&[msg(1, "me@x.com", Some(Some(0.9)))]).is_empty());
+    }
+
+    #[test]
+    fn a_reply_lifts_a_conversation_to_the_floor_never_down() {
+        let low = run(&[msg(1, "a@b.com", Some(Some(0.1))), msg(1, "me@x.com", None)]);
+        assert_eq!(low.get(&1), Some(&REPLIED_FLOOR));
+        let high = run(&[msg(1, "a@b.com", Some(Some(0.7))), msg(1, "me@x.com", None)]);
+        assert_eq!(high.get(&1), Some(&0.7));
+        let unscored = run(&[msg(1, "a@b.com", None), msg(1, "me@x.com", None)]);
+        assert_eq!(unscored.get(&1), Some(&REPLIED_FLOOR));
+    }
+
+    #[test]
+    fn an_excluded_sender_is_cold_even_with_a_score_or_a_reply() {
+        let out = run(&[
+            msg(1, "x@alerts.com", Some(Some(0.9))),
+            msg(1, "me@x.com", None),
+        ]);
+        assert_eq!(out.get(&1), Some(&0.0));
     }
 
     #[test]

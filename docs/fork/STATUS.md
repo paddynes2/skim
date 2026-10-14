@@ -6,6 +6,10 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-14.**
 
+## Version 1.1.17 (October 14)
+
+Heat accuracy: Jev reads the start of each body (one-time re-score of 90 days), your replies lift a conversation to light seafoam, `-` makes a sender cold everywhere, a Hot chip and Shift+H filter to mint and seafoam rows, and the release is published (D68).
+
 ## Version 1.1.16 (October 14)
 
 A selected or hovered row keeps its heat colour instead of turning navy (D67 addendum).

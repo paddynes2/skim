@@ -97,8 +97,9 @@ const BODY_RECHECK: Duration = Duration::from_secs(45);
 /// Scores older than this are pruned. Longer than the window, so a row keeps
 /// its heat colour for a year after it was scored.
 const SCORE_KEEP_DAYS: i64 = 400;
-/// A guard only: snippets are at most 140 characters already.
-const PREVIEW_CHARS: usize = 400;
+/// The most of a message Jev sees (v1.1.17, D68: was the 140-character
+/// snippet; now the start of the body, see [`body_preview`]).
+const PREVIEW_CHARS: usize = 600;
 /// After an account-wide failure, no scoring for this long.
 const FAIL_BACKOFF: Duration = Duration::from_secs(600);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -405,6 +406,66 @@ const MSG_KEY: &str =
     "m.account_id || char(31) || lower(coalesce(m.from_addr, '')) || char(31) || \
 coalesce(nullif(m.message_id, ''), 'id:' || m.id)";
 
+/// [`MSG_KEY`] for a messages table aliased `alias` (list filters, heat).
+pub fn msg_key(alias: &str) -> String {
+    MSG_KEY.replace("m.", &format!("{alias}."))
+}
+
+/// The `+` / `-` keys move a sender's stored scores too (v1.1.17, D68), so the
+/// heat colour and the Hot filter follow at once: `+` sets them to 1, `-` to
+/// 0, and undo deletes them so the sender is scored afresh. Matches the exact
+/// address inside the score key.
+pub fn train_scores(
+    conn: &Connection,
+    sender: &str,
+    important: Option<bool>,
+) -> rusqlite::Result<()> {
+    let sender = sender.trim().trim_start_matches('@').to_ascii_lowercase();
+    if sender.is_empty() {
+        return Ok(());
+    }
+    let pred = "instr(msg_key, char(31) || ?1 || char(31)) > 0";
+    match important {
+        Some(on) => conn.execute(
+            &format!("UPDATE fork_priority_score SET score = ?2 WHERE {pred}"),
+            params![sender, if on { 1.0 } else { 0.0 }],
+        )?,
+        None => conn.execute(
+            &format!("DELETE FROM fork_priority_score WHERE {pred}"),
+            params![sender],
+        )?,
+    };
+    Ok(())
+}
+
+/// The start of a message body as Jev's preview (v1.1.17): the new text only.
+/// Quoted lines are dropped and the text stops at the first quoted-reply
+/// header ("On ... wrote:", "From:", "-----Original Message-----", a rule of
+/// underscores). Whitespace is collapsed; [`redact`] then removes links and
+/// codes and caps the length.
+pub fn body_preview(text: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    for line in text.lines() {
+        let l = line.trim();
+        let lower = l.to_ascii_lowercase();
+        let header = (lower.starts_with("on ") && lower.ends_with("wrote:"))
+            || lower.starts_with("-----original message")
+            || (lower.starts_with("from:") && !kept.is_empty())
+            || (l.len() >= 8 && l.chars().all(|c| c == '_'));
+        if header {
+            break;
+        }
+        if l.starts_with('>') || l.is_empty() {
+            continue;
+        }
+        kept.push(l);
+    }
+    kept.join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn enabled(conn: &Connection) -> rusqlite::Result<bool> {
     Ok(queries::get_setting(conn, SETTING_ON)?.as_deref() != Some("off"))
 }
@@ -535,6 +596,7 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
         "SELECT {MSG_KEY}, coalesce(m.from_name, ''), coalesce(m.from_addr, ''),
                 coalesce(m.subject, ''), coalesce(m.snippet, ''),
                 m.body_state IN (1, 2), m.date,
+                coalesce((SELECT b.body_text FROM message_bodies b WHERE b.message_id = m.id), ''),
                 coalesce(m.auth_spf, ''), coalesce(m.auth_dkim, ''), coalesce(m.auth_dmarc, '')
          FROM messages m JOIN folders f ON f.id = m.folder_id
          WHERE coalesce(f.role, '') NOT IN ('sent', 'drafts', 'trash', 'spam', 'junk')
@@ -546,16 +608,23 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
     let mut rows = stmt.query(params![floor])?;
     let mut seen = HashSet::new();
     while let Some(r) = rows.next()? {
+        let snippet: String = r.get(4)?;
+        let body: String = r.get(7)?;
+        let from_body = body_preview(&body);
         let c = Candidate {
             key: r.get(0)?,
             from_name: r.get(1)?,
             from_addr: r.get(2)?,
             subject: r.get(3)?,
-            preview: r.get(4)?,
+            preview: if from_body.is_empty() {
+                snippet
+            } else {
+                from_body
+            },
         };
         let body_ready: bool = r.get(5)?;
         let date: i64 = r.get(6)?;
-        let (spf, dkim, dmarc): (String, String, String) = (r.get(7)?, r.get(8)?, r.get(9)?);
+        let (spf, dkim, dmarc): (String, String, String) = (r.get(8)?, r.get(9)?, r.get(10)?);
         if own.contains(&c.from_addr.trim().to_ascii_lowercase())
             || excluded(&c.from_addr, &exclude)
             || is_calendar(&c.subject, &c.from_addr)
@@ -1101,9 +1170,11 @@ pub async fn fork_priority_train(
             let always = queries::get_setting(conn, SETTING_ALWAYS)?.unwrap_or_default();
             let (exclude, always) = train_lists(&exclude, &always, &sender, important);
             queries::set_setting(conn, SETTING_EXCLUDE, &exclude)?;
-            queries::set_setting(conn, SETTING_ALWAYS, &always)
+            queries::set_setting(conn, SETTING_ALWAYS, &always)?;
+            train_scores(conn, &sender, important)
         })
         .await?;
+    let _ = app.emit(crate::fork::heat::EVT_HEAT, json!({}));
     schedule(app);
     Ok(())
 }
@@ -1489,6 +1560,71 @@ mod tests {
             .iter()
             .map(|c| c.key.rsplit('\u{1f}').next().unwrap().to_string())
             .collect()
+    }
+
+    #[test]
+    fn the_body_preview_keeps_the_new_text_only() {
+        let body = "Hello Patrick,\r\n\r\nThanks for your enquiry.\r\n> quoted line\r\nCan you share more?\r\n\r\n________________________________\r\nFrom: Website <info@x.com>\r\nOld thread text";
+        assert_eq!(
+            body_preview(body),
+            "Hello Patrick, Thanks for your enquiry. Can you share more?"
+        );
+        assert_eq!(
+            body_preview("Sounds good.\nOn Tue, 13 Oct 2026 Ann wrote:\nolder"),
+            "Sounds good."
+        );
+        assert_eq!(
+            body_preview("From: a@b.com is the sender\nHi"),
+            "From: a@b.com is the sender Hi"
+        );
+        assert_eq!(body_preview(""), "");
+    }
+
+    #[test]
+    fn plus_and_minus_move_a_senders_stored_scores() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            let k = |acct: &str, from: &str, id: &str| format!("{acct}\u{1f}{from}\u{1f}{id}");
+            store_scores(
+                conn,
+                &[
+                    (k("a", "ann@x.com", "1"), Some(0.3), MODEL.into()),
+                    (k("a", "ann@x.com", "2"), Some(0.6), MODEL.into()),
+                    (k("a", "bob@x.com", "3"), Some(0.4), MODEL.into()),
+                    (k("a", "jo.ann@x.com", "4"), Some(0.4), MODEL.into()),
+                ],
+                "d",
+                1,
+            )?;
+            let score = |conn: &Connection, id: &str| -> Option<f64> {
+                conn.query_row(
+                    "SELECT score FROM fork_priority_score WHERE msg_key LIKE '%' || ?1",
+                    [format!("\u{1f}{id}")],
+                    |r| r.get(0),
+                )
+                .ok()
+            };
+            train_scores(conn, "Ann@x.com", Some(false))?;
+            assert_eq!(score(conn, "1"), Some(0.0));
+            assert_eq!(score(conn, "2"), Some(0.0));
+            assert_eq!(score(conn, "3"), Some(0.4), "another sender is untouched");
+            assert_eq!(
+                score(conn, "4"),
+                Some(0.4),
+                "a longer address is not a match"
+            );
+            train_scores(conn, "ann@x.com", Some(true))?;
+            assert_eq!(score(conn, "1"), Some(1.0));
+            train_scores(conn, "ann@x.com", None)?;
+            assert_eq!(
+                score(conn, "1"),
+                None,
+                "undo leaves the sender to be scored again"
+            );
+            assert_eq!(score(conn, "3"), Some(0.4));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

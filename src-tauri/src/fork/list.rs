@@ -13,6 +13,20 @@ pub enum Filter {
     All,
     Unread,
     Starred,
+    /// v1.1.17 (D68): conversations with a Jev score of [`HOT_SCORE`] or more.
+    Hot,
+}
+
+/// The Hot filter's floor: mint and seafoam rows. The reply floor
+/// (`fork::heat::REPLIED_FLOOR`) sits under it on purpose.
+pub const HOT_SCORE: f64 = 0.5;
+
+/// A message aliased `alias` has a stored score of at least [`HOT_SCORE`].
+fn hot_pred(alias: &str) -> String {
+    format!(
+        "EXISTS (SELECT 1 FROM fork_priority_score sh WHERE sh.msg_key = {} AND sh.score >= {HOT_SCORE})",
+        crate::fork::priority::msg_key(alias)
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -41,6 +55,7 @@ impl ListOpts {
             filter: match filter {
                 Some("unread") => Filter::Unread,
                 Some("starred") => Filter::Starred,
+                Some("hot") => Filter::Hot,
                 _ => Filter::All,
             },
             order: match order {
@@ -91,6 +106,10 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
                 Filter::All => format!(" AND {hidden}"),
                 Filter::Unread => format!(" AND {hidden} AND {unread}"),
                 Filter::Starred => format!(" AND {hidden} AND t.starred = 1"),
+                Filter::Hot => format!(
+                    " AND {hidden} AND EXISTS (SELECT 1 FROM messages mh WHERE mh.thread_id = t.id AND {})",
+                    hot_pred("mh")
+                ),
             };
             // v1.1.11 (D64): a Priority conversation sorts first, ahead even of
             // a due reminder, so the Priority header always heads the list.
@@ -130,6 +149,7 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
                 Filter::All => format!(" AND {hidden}"),
                 Filter::Unread => format!(" AND {hidden} AND m.is_read = 0"),
                 Filter::Starred => format!(" AND {hidden} AND m.is_starred = 1"),
+                Filter::Hot => format!(" AND {hidden} AND {}", hot_pred("m")),
             };
             let om = " ORDER BY m.date DESC, m.id DESC";
             assert!(base.contains(om), "flat list SQL lost its ORDER BY marker");
@@ -148,7 +168,7 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
 /// exhaustive checks.
 pub fn all_opts() -> Vec<ListOpts> {
     let mut out = Vec::new();
-    for filter in [Filter::All, Filter::Unread, Filter::Starred] {
+    for filter in [Filter::All, Filter::Unread, Filter::Starred, Filter::Hot] {
         for order in [Order::Date, Order::UnreadFirst] {
             for priority in [false, true] {
                 out.push(ListOpts {
@@ -251,7 +271,7 @@ mod tests {
     #[test]
     fn every_combination_is_enumerated_once() {
         let all = all_opts();
-        assert_eq!(all.len(), 12);
+        assert_eq!(all.len(), 16);
         let mut seen = std::collections::HashSet::new();
         for o in all {
             assert!(seen.insert((o.filter as u8, o.order as u8, o.priority)));
