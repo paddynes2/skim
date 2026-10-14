@@ -6,6 +6,12 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-14.**
 
+## Version 1.1.22 (October 14)
+
+**To reply, a Colleagues list** (D70, fourth addendum): Settings, under Priority, takes colleagues who write from outside the mailbox's own domain, one address or domain per line. A listed colleague answering someone outside counts as a reply; a note to the owner alone, or one copying only the colleague's own firm, is still judged. The list is read by the Deals parser, so a bare suffix, a personal-mail domain or the own domain is dropped and shown as Not used, and a failed settings read locks the box. The value lives in the local settings table only.
+
+Installed 18:35 on October 14 (db backed up to `~/.skim-fork/backups/20261014-183506`) and published as the GitHub latest release v1.1.22 with its `latest.json` (the served file reads 1.1.22). The colleague's other address was written to the owner's local `fork_colleagues`. Validation: 605 Rust tests, all frontend tests, Clippy, fmt, Svelte check, build; 7 deliberate faults each failed a named test; the change critic's findings (loose parser, a failed read saving an empty list, the colleague's own firm counted as outside) fixed before install. Live: MCP `list_court` `to_reply` 50, down from 51 (the colleague chasing a prospect); his draft proposal sent to the owner alone stays. Over CDP: the box shows the stored value, `co.za` is reported as too broad, a pasted `Name <address>` keeps the address, nothing saved, no page errors. Also removed client and contact names from the fork docs (the repository is public); the v1.1.21 commit messages on `paddy` still name two clients. Rollback: install the 1.1.21 installer; an unknown `fork_colleagues` row is ignored by it.
+
 ## Version 1.1.21 (October 14)
 
 **To reply, a colleague's answer counts** (D70, third addendum): when someone else at the mailbox's own domain answers a client, copying the owner, the conversation leaves To reply and is never sent to Jev. A colleague's mail sent only inside the company is still judged. A `needs` mark set before the colleague's answer ends with it, as it would with the owner's own reply.
