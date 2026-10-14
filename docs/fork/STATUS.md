@@ -6,6 +6,10 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-14.**
 
+## Version 1.1.15 (October 14)
+
+Heat: every list row is tinted by importance, periwinkle (cold) to mint (hot), from Jev scores. Jev now scores read mail too, back 90 days, with a one-time backfill (D67).
+
 ## Version 1.1.14 (October 14)
 
 A click on an attachment name opens it in its usual app (PowerPoint, Word, Excel, the PDF viewer). Images and PDFs keep the in-app preview behind a Preview button (D66).

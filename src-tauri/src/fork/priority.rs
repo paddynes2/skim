@@ -75,14 +75,16 @@ const USED_KEY: &str = "fork_priority_used";
 /// replied to scored 0.24 to 0.8; newsletters, form receipts and alerts under
 /// 0.3.
 pub const THRESHOLD_DEFAULT: f64 = 0.35;
-/// Messages Jev may be asked about per local day.
-pub const DAILY_CAP: i64 = 500;
+/// Messages Jev may be asked about per local day. v1.1.15 (D67): high enough
+/// for the one-time 90-day heat backfill (about 1,350 messages) in one day.
+pub const DAILY_CAP: i64 = 2000;
 /// Messages scored per pass; the next pass picks up the rest.
 const PASS_LIMIT: i64 = 60;
 /// Parallel requests (TypeSafe rate-limits at about eight per key).
 const WORKERS: usize = 4;
-/// Only unread mail this recent is scored.
-pub const SCORE_WINDOW_DAYS: i64 = 14;
+/// Mail this recent is scored, read or unread (v1.1.15, D67: the list's heat
+/// colours every row, not only Priority's unread ones).
+pub const SCORE_WINDOW_DAYS: i64 = 90;
 /// A message whose body has not arrived is scored without a preview once it
 /// is this old.
 pub const BODY_WAIT_SECS: i64 = 900;
@@ -92,8 +94,9 @@ pub const BODY_WAIT_SECS: i64 = 900;
 const ALERT_WINDOW_SECS: i64 = 2 * 3600;
 /// When messages are waiting for their bodies, look again this much later.
 const BODY_RECHECK: Duration = Duration::from_secs(45);
-/// Scores older than this are pruned; their mail is outside the window.
-const SCORE_KEEP_DAYS: i64 = 60;
+/// Scores older than this are pruned. Longer than the window, so a row keeps
+/// its heat colour for a year after it was scored.
+const SCORE_KEEP_DAYS: i64 = 400;
 /// A guard only: snippets are at most 140 characters already.
 const PREVIEW_CHARS: usize = 400;
 /// After an account-wide failure, no scoring for this long.
@@ -534,7 +537,8 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
                 m.body_state IN (1, 2), m.date,
                 coalesce(m.auth_spf, ''), coalesce(m.auth_dkim, ''), coalesce(m.auth_dmarc, '')
          FROM messages m JOIN folders f ON f.id = m.folder_id
-         WHERE f.role = 'inbox' AND m.is_read = 0 AND m.date >= ?1
+         WHERE coalesce(f.role, '') NOT IN ('sent', 'drafts', 'trash', 'spam', 'junk')
+           AND m.date >= ?1
            AND coalesce(m.list_unsubscribe, '') = ''
            AND NOT EXISTS (SELECT 1 FROM fork_priority_score s WHERE s.msg_key = {MSG_KEY})
          ORDER BY m.date DESC, m.id DESC"
@@ -873,8 +877,18 @@ pub fn schedule(app: AppHandle) {
         let db = app.state::<AppState>().db.clone();
         let (scored, waiting) = score_new(&db).await;
         if scored > 0 {
+            let _ = app.emit(crate::fork::heat::EVT_HEAT, json!({}));
             let _guard = recompute_lock().lock().await;
             settle(&app, recompute_with(&app).await).await;
+        }
+        // A full pass means more is waiting (the 90-day backfill): go on
+        // without waiting for the next mail event.
+        if scored as i64 >= PASS_LIMIT {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                schedule(app);
+            });
         }
         if waiting && !RECHECK_ARMED.swap(true, Ordering::SeqCst) {
             let app = app.clone();
@@ -1491,7 +1505,7 @@ mod tests {
                 M { uid: 3, msgid: "bulk@x", unsub: true, date: now, ..M::default() },
                 M { uid: 4, msgid: "cal@x", subject: "Invitation: Catch-up", date: now, ..M::default() },
                 M { uid: 5, msgid: "warm@x", from: "a@warm.example", date: now, ..M::default() },
-                M { uid: 6, msgid: "old@x", date: now - 20 * 86_400, ..M::default() },
+                M { uid: 6, msgid: "old@x", date: now - 100 * 86_400, ..M::default() },
                 M { uid: 7, msgid: "read@x", read: true, date: now, ..M::default() },
                 M { uid: 8, msgid: "done@x", date: now, ..M::default() },
                 M { uid: 9, msgid: "otp@x", subject: "Your verification code", date: now, ..M::default() },
@@ -1510,7 +1524,7 @@ mod tests {
             )?;
             store_scores(conn, &[(done, Some(0.9), MODEL.into())], "d", now)?;
             let scan = candidates(conn, floor, now, 10)?;
-            assert_eq!(keys(&scan), ["keep@x"]);
+            assert_eq!(keys(&scan), ["keep@x", "read@x"], "read mail is scored too (D67)");
             assert!(!scan.waiting);
             assert!(candidates(conn, floor, now, 0)?.candidates.is_empty());
 
@@ -1518,7 +1532,7 @@ mod tests {
             add(conn, M { uid: 12, msgid: "fresh@x", date: now - 60, body: false, ..M::default() });
             add(conn, M { uid: 13, msgid: "stale@x", date: now - BODY_WAIT_SECS - 1, body: false, ..M::default() });
             let scan = candidates(conn, floor, now, 10)?;
-            assert_eq!(keys(&scan), ["keep@x", "stale@x"]);
+            assert_eq!(keys(&scan), ["keep@x", "read@x", "stale@x"]);
             assert!(scan.waiting);
             Ok(())
         })
@@ -1608,7 +1622,7 @@ mod tests {
                 conn,
                 &[("a".into(), Some(0.5), MODEL.into())],
                 "2026-10-13",
-                now - 70 * 86_400,
+                now - 410 * 86_400,
             )?;
             store_scores(
                 conn,
@@ -1623,7 +1637,7 @@ mod tests {
             assert_eq!(used_today(conn, "2026-10-14")?, 0);
             let n: i64 =
                 conn.query_row("SELECT count(*) FROM fork_priority_score", [], |r| r.get(0))?;
-            assert_eq!(n, 2, "the 70-day-old score is pruned");
+            assert_eq!(n, 2, "the 410-day-old score is pruned");
             Ok(())
         })
         .unwrap();

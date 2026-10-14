@@ -16,6 +16,7 @@ pub mod fold;
 pub mod freshness;
 pub mod gmail;
 pub mod google;
+pub mod heat;
 pub mod list;
 pub mod mcp;
 pub mod prefetch;

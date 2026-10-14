@@ -445,6 +445,7 @@ pub fn run() {
             fork::court::fork_court_list,
             fork::court::fork_court_counts,
             fork::court::fork_court_recompute,
+            fork::heat::fork_heat,
             fork::priority::fork_priority_status,
             fork::priority::fork_priority_members,
             fork::priority::fork_priority_train,

@@ -26,6 +26,9 @@
   // Fork (v1.1.11, D64): the Inbox's Priority header.
   import { priority } from "../fork/priority/store.svelte";
   import { priorityApi } from "../fork/priority/api";
+  // Fork (v1.1.15, D67): every row tinted by its conversation's heat.
+  import { heat, heatShown } from "../fork/heat/store.svelte";
+  import { heatBackground } from "../fork/heat/colour";
   import { tick, untrack } from "svelte";
   import MessageMenu from "../fork/layout/MessageMenu.svelte";
   import type { ThreadRow } from "../lib/types";
@@ -148,6 +151,12 @@
   const range = $derived(listWindow(layout.items, scrollTop, viewH, OVERSCAN));
   const visibleItems = $derived(layout.items.slice(range.start, range.end));
   const visible = $derived(visibleItems.flatMap(item => item.thread ? [item.thread] : []));
+  // Read the shown rows' heat, once scrolling settles.
+  $effect(() => {
+    const ids = [...new Set(visible.map((r) => r.id))];
+    const timer = setTimeout(() => heatShown(ids), 120);
+    return () => clearTimeout(timer);
+  });
 
   // Measure the row height for the windowing arithmetic. Rows are NOT perfectly
   // uniform — one with an empty snippet is a line shorter — so as different rows
@@ -319,7 +328,7 @@
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"}>
+        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} style:background-image={heatBackground(heat.of(thread.id), ui.lightness === "light")}>
           <MessageRow
             {thread}
             companyIdentity={deal !== null}
