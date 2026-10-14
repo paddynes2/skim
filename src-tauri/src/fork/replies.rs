@@ -33,10 +33,11 @@
 //! alias would read as someone else's (the owner sends from one address).
 //!
 //! A colleague's answer counts as a reply (v1.1.21): a last message from
-//! someone else at the mailbox's own domain (`autospark.ai`, never a
-//! personal-mail one such as gmail.com) that went to at least one address
-//! outside it. On October 14 that was a colleague answering IQ-EQ and XL
-//! Sigma in 4 listed conversations. Mail a colleague sent only inside the
+//! someone else in the company ([`Company`]: the mailbox's own domain, never
+//! a personal-mail one such as gmail.com, plus the Colleagues setting since
+//! v1.1.22) that went to at least one address outside it. On the owner's
+//! mailbox on October 14 that took out 4 listed conversations, each a
+//! colleague answering a client. Mail a colleague sent only inside the
 //! company is still asked about: it may be waiting on the user. A `needs`
 //! mark ends with the colleague's answer, as it does with the user's own
 //! reply (a mark lasts until the next message); one set on the colleague's
@@ -80,6 +81,9 @@ pub const EVT_UPDATED: &str = "replies:updated";
 pub const VF_TO_REPLY: i64 = -925;
 
 pub const SETTING_THRESHOLD: &str = "fork_reply_threshold";
+/// Colleagues outside the mailbox's own domain ([`Company`]). Local only:
+/// the fork's repository is public.
+pub const SETTING_COLLEAGUES: &str = "fork_colleagues";
 /// Internal counter row: `"YYYY-MM-DD:N"`, messages charged so far today.
 const USED_KEY: &str = "fork_reply_used";
 
@@ -158,7 +162,7 @@ pub struct Row {
     /// phone; that conversation is not waiting on him.
     pub from_me: bool,
     /// A colleague answered: the last message is from someone else at the
-    /// mailbox's own domain and went outside it ([`colleague_answered`]).
+    /// company and went outside it ([`Company::answered`]).
     pub colleague: bool,
     /// A local reply draft on the conversation saved at or after the last
     /// message. An older one is a leftover, not a reply in progress.
@@ -228,33 +232,77 @@ fn domain_of(addr: &str) -> Option<String> {
         .map(|(_, d)| d.to_ascii_lowercase())
 }
 
-/// A colleague answered: `from` is not the user's own address, it is at one
-/// of the mailbox's own domains (`deals::own_domains`: never a personal-mail
-/// one, so a gmail.com mailbox makes no colleagues; a subdomain counts, as in
-/// Deals), and one of the message's To or Cc addresses (JSON, as stored) is
-/// outside them. A note sent only inside the company is not an answer to
-/// anyone outside it. Outside means any other domain, a personal one too.
-pub fn colleague_answered(
-    from: &str,
-    to_json: Option<&str>,
-    cc_json: Option<&str>,
-    own: &HashSet<String>,
-    domains: &HashSet<String>,
-) -> bool {
-    if own.contains(&from.trim().to_ascii_lowercase())
-        || !domain_of(from).is_some_and(|d| deals::is_own(&d, domains))
-    {
-        return false;
+/// Who is inside the company: the user's own addresses, the mailbox's own
+/// domains (`deals::own_domains`: never a personal-mail one, so a gmail.com
+/// mailbox makes no colleagues; a subdomain counts, as in Deals) and the
+/// Colleagues setting ([`SETTING_COLLEAGUES`], one address or domain per
+/// line, for a colleague who also writes from another firm's address). A
+/// personal-mail domain entry is dropped there too: it would make every
+/// Gmail sender a colleague.
+#[derive(Debug, Default)]
+pub struct Company {
+    pub own: HashSet<String>,
+    pub domains: HashSet<String>,
+    pub extra: Vec<String>,
+}
+
+impl Company {
+    pub fn load(conn: &Connection) -> rusqlite::Result<Self> {
+        let raw = queries::get_setting(conn, SETTING_COLLEAGUES)?.unwrap_or_default();
+        let domains = deals::own_domains(conn)?;
+        Ok(Company {
+            own: court::own_addresses(conn)?,
+            extra: parse_colleagues(&raw, &domains),
+            domains,
+        })
     }
-    addresses_from_json(to_json)
+
+    fn inside(&self, addr: &str) -> bool {
+        self.own.contains(&addr.trim().to_ascii_lowercase())
+            || domain_of(addr).is_some_and(|d| deals::is_own(&d, &self.domains))
+            || excluded(addr, &self.extra)
+    }
+
+    /// A colleague answered: `from` is not the user's own address but is
+    /// inside the company, and one of the message's To or Cc addresses (JSON,
+    /// as stored) is outside it. A note sent only inside the company is not
+    /// an answer to anyone outside it. Outside means any other address, a
+    /// personal one too, except one at the colleague's own domain: a listed
+    /// colleague's request to the user that copies their own firm's staff is
+    /// still asked about.
+    pub fn answered(&self, from: &str, to_json: Option<&str>, cc_json: Option<&str>) -> bool {
+        if self.own.contains(&from.trim().to_ascii_lowercase()) || !self.inside(from) {
+            return false;
+        }
+        let firm = domain_of(from).filter(|d| !deals::is_personal(d));
+        addresses_from_json(to_json)
+            .into_iter()
+            .chain(addresses_from_json(cc_json))
+            .any(|a| {
+                a.addr.contains('@')
+                    && !self.inside(&a.addr)
+                    && (firm.is_none() || domain_of(&a.addr) != firm)
+            })
+    }
+}
+
+/// The Colleagues setting as `priority::excluded` entries, read by the Deals
+/// list's parser (`deals::parse`), since a wrong entry here hides mail: a
+/// pasted `Name <address>` keeps the address; a personal-mail domain, a bare
+/// suffix (`com`, `co.za`), a word without a dot and the mailbox's own domain
+/// are dropped (Settings shows each one through `fork_deals_preview`); an
+/// address at a personal-mail domain is kept. `own` is `deals::own_domains`.
+pub fn parse_colleagues(text: &str, own: &HashSet<String>) -> Vec<String> {
+    deals::parse(text, own)
+        .deals
         .into_iter()
-        .chain(addresses_from_json(cc_json))
-        .any(|a| domain_of(&a.addr).is_some_and(|d| !deals::is_own(&d, domains)))
+        .flat_map(|d| d.addresses.into_iter().chain(d.domains))
+        .collect()
 }
 
 fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
-    let own = court::own_addresses(conn)?;
-    let domains = deals::own_domains(conn)?;
+    let company = Company::load(conn)?;
+    let own = &company.own;
     let key = msg_key("m");
     let mut stmt = conn.prepare(&format!(
         "SELECT c.thread_id, c.state, coalesce(c.since, 0), c.reason,
@@ -281,7 +329,7 @@ fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
             since: r.get(2)?,
             reason: r.get(3)?,
             from_me: own.contains(&from_addr.trim().to_ascii_lowercase()),
-            colleague: colleague_answered(&from_addr, to.as_deref(), cc.as_deref(), &own, &domains),
+            colleague: company.answered(&from_addr, to.as_deref(), cc.as_deref()),
             from_addr,
             subject: r.get(5)?,
             spf: r.get(6)?,
@@ -455,8 +503,8 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
     if limit == 0 {
         return Ok(scan);
     }
-    let own = court::own_addresses(conn)?;
-    let domains = deals::own_domains(conn)?;
+    let company = Company::load(conn)?;
+    let own = &company.own;
     let exclude =
         parse_exclude(&queries::get_setting(conn, priority::SETTING_EXCLUDE)?.unwrap_or_default());
     let key = msg_key("m");
@@ -491,8 +539,8 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
         let (spf, dkim, dmarc): (String, String, String) = (r.get(7)?, r.get(8)?, r.get(9)?);
         let (to, cc): (Option<String>, Option<String>) = (r.get(11)?, r.get(12)?);
         // A colleague's answer is never listed, so it is never paid for.
-        if priority::never_asked(&c, (&spf, &dkim, &dmarc), &own, &exclude)
-            || colleague_answered(&c.from_addr, to.as_deref(), cc.as_deref(), &own, &domains)
+        if priority::never_asked(&c, (&spf, &dkim, &dmarc), own, &exclude)
+            || company.answered(&c.from_addr, to.as_deref(), cc.as_deref())
             || !seen.insert(c.key.clone())
         {
             continue;
@@ -869,8 +917,11 @@ mod tests {
 
     #[test]
     fn a_colleague_answered_only_when_the_mail_went_outside_the_company() {
-        let own: HashSet<String> = ["me@firm.ai".to_string()].into();
-        let domains: HashSet<String> = ["firm.ai".to_string()].into();
+        let firm = Company {
+            own: ["me@firm.ai".to_string()].into(),
+            domains: ["firm.ai".to_string()].into(),
+            extra: vec![],
+        };
         let to = |addrs: &[&str]| {
             addresses_to_json(
                 &addrs
@@ -884,9 +935,7 @@ mod tests {
         };
         let client = to(&["anna@client.com", "me@firm.ai"]);
         let inside = to(&["me@firm.ai", "ops@firm.ai"]);
-        let yes = |from: &str, t: Option<&str>, c: Option<&str>| {
-            colleague_answered(from, t, c, &own, &domains)
-        };
+        let yes = |from: &str, t: Option<&str>, c: Option<&str>| firm.answered(from, t, c);
         assert!(yes("Wes@Firm.AI", Some(&client), None));
         assert!(
             yes(
@@ -924,14 +973,99 @@ mod tests {
         );
         // A personal mailbox has no own domain (`deals::own_domains`), so
         // makes no colleagues.
-        let gmail: HashSet<String> = ["me@gmail.com".to_string()].into();
-        assert!(!colleague_answered(
-            "x@gmail.com",
-            Some(&client),
-            None,
-            &gmail,
-            &HashSet::new()
-        ));
+        let gmail = Company {
+            own: ["me@gmail.com".to_string()].into(),
+            ..Company::default()
+        };
+        assert!(!gmail.answered("x@gmail.com", Some(&client), None));
+    }
+
+    #[test]
+    fn the_settings_pane_may_read_and_write_the_reply_settings() {
+        for key in [SETTING_COLLEAGUES, SETTING_THRESHOLD] {
+            assert!(crate::fork::settings::ALLOWED.contains(&key), "{key}");
+        }
+    }
+
+    #[test]
+    fn the_colleagues_setting_adds_an_outside_address_or_domain() {
+        let own: HashSet<String> = ["firm.ai".to_string()].into();
+        let extra = parse_colleagues(
+            "# a colleague's other firm
+Wes Smith <Wes@Other.com>
+@partner.io, gmail.com
+jo@gmail.com
+com, co.za, ai, firm.ai, sales",
+            &own,
+        );
+        assert_eq!(
+            extra,
+            ["wes@other.com", "partner.io", "jo@gmail.com"],
+            "personal, bare-suffix, dotless and own entries are dropped"
+        );
+        let firm = Company {
+            own: ["me@firm.ai".to_string()].into(),
+            domains: own,
+            extra,
+        };
+        let json = |addrs: &[&str]| {
+            addresses_to_json(
+                &addrs
+                    .iter()
+                    .map(|a| Address {
+                        name: None,
+                        addr: a.to_string(),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let client = json(&["pat@client.com", "me@firm.ai"]);
+        assert!(firm.answered("wes@other.com", Some(&client), None));
+        assert!(firm.answered("kim@partner.io", Some(&client), None));
+        assert!(firm.answered("jo@gmail.com", Some(&client), None));
+        assert!(
+            !firm.answered("someone@other.com", Some(&client), None),
+            "only the address"
+        );
+        assert!(
+            !firm.answered("al@gmail.com", Some(&client), None),
+            "gmail.com is not a colleague"
+        );
+        assert!(
+            !firm.answered(
+                "wes@other.com",
+                Some(&json(&["me@firm.ai", "wes@firm.ai"])),
+                None
+            ),
+            "his note to the owner alone is still asked about"
+        );
+        assert!(
+            !firm.answered(
+                "wes@other.com",
+                Some(&json(&["me@firm.ai", "ann@other.com"])),
+                None
+            ),
+            "copying his own firm's staff is not an answer to a client"
+        );
+        assert!(
+            firm.answered(
+                "jo@gmail.com",
+                Some(&json(&["me@firm.ai", "sam@gmail.com"])),
+                None
+            ),
+            "a personal domain is nobody's firm"
+        );
+        assert!(
+            !firm.answered("wes@firm.ai", Some(&json(&["wes@other.com"])), None),
+            "a listed address is inside"
+        );
+        // A mailbox on a personal domain: its own address is inside too.
+        let gmail = Company {
+            own: ["me@gmail.com".to_string()].into(),
+            extra: vec!["wes@other.com".to_string()],
+            ..Company::default()
+        };
+        assert!(!gmail.answered("wes@other.com", Some(&json(&["me@gmail.com"])), None));
     }
 
     #[test]
@@ -1170,6 +1304,52 @@ mod tests {
     }
 
     #[test]
+    fn a_colleague_on_the_colleagues_list_answering_the_client_takes_it_out() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn);
+            let now = 10_000_000;
+            let (_, t) = add(
+                conn,
+                M {
+                    uid: 1,
+                    msgid: "q1",
+                    date: now - 300,
+                    ..M::default()
+                },
+            );
+            pass(conn, &Scope::All, false)?;
+            score_all_at(conn, 0.8, now);
+            add(
+                conn,
+                M {
+                    uid: 2,
+                    msgid: "c1",
+                    refs: vec!["q1"],
+                    from: "wes@other.com",
+                    to: vec!["anna@client.com", ME],
+                    date: now - 200,
+                    ..M::default()
+                },
+            );
+            pass(conn, &Scope::All, false)?;
+            score_all_at(conn, 0.9, now);
+            let none = HashSet::new();
+            assert!(
+                members(conn, &none, now)?.contains_key(&t),
+                "listed: wes@other.com is not a colleague yet"
+            );
+            queries::set_setting(conn, SETTING_COLLEAGUES, "wes@other.com")?;
+            assert!(
+                !members(conn, &none, now)?.contains_key(&t),
+                "a colleague answered"
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn a_colleague_answering_the_client_takes_it_out_and_their_answer_brings_it_back() {
         let db = Db::open_in_memory().unwrap();
         db.with(|conn| {
@@ -1234,7 +1414,7 @@ mod tests {
                     uid: 3,
                     msgid: "n1",
                     from: "wes@example.com",
-                    subject: "Can you review the IQ-EQ deck?",
+                    subject: "Can you review the deck?",
                     to: vec![ME],
                     date: now - 150,
                     ..M::default()

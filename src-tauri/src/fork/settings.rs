@@ -60,6 +60,8 @@ pub const ALLOWED: &[&str] = &[
     "fork_priority_alerts", // on | off; toasts and taskbar count follow Priority
     // v1.1.19
     "fork_reply_threshold", // Jev reply yes-probability for To reply, default 0.4
+    // v1.1.22
+    "fork_colleagues", // one address or domain per line; their answers count in To reply
 ];
 
 #[cfg(test)]

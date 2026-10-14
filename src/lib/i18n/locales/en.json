@@ -1033,6 +1033,8 @@
   "fork.priority.threshold_unit": "lower lets more mail in",
   "fork.priority.exclude": "Never in Priority",
   "fork.priority.exclude_note": "One domain or address per line. Deals and starred mail still show.",
+  "fork.priority.colleagues": "Colleagues",
+  "fork.priority.colleagues_note": "One address or domain per line, for colleagues outside your own domain. When one of them answers someone outside the company, To reply counts it as your reply.",
   "fork.priority.counts": "{count} in Priority now. Scored today: {scored} of {cap}.",
   "fork.priority.saved": " Saved.",
   "fork.priority.save": "Save",

@@ -1,23 +1,32 @@
 <script lang="ts">
   // Priority settings (v1.1.11, D64): on/off, the TypeSafe key, the
-  // threshold and the "never in Priority" list. Mounted from SettingsFork.
-  // Styles mirror SettingsCourt's rows.
+  // threshold and the "never in Priority" list; since v1.1.22 (D70) also To
+  // reply's Colleagues list, since its judge runs in Priority's pass.
+  // Mounted from SettingsFork. Styles mirror SettingsCourt's rows.
   import { onMount } from "svelte";
   import { t } from "../../lib/i18n/index.svelte";
   import { api } from "../../lib/api";
   import { priorityApi, type PriorityStatus } from "./api";
+  import { replies } from "../replies/store.svelte";
+  import { dealsApi, type ParsedDeals } from "../deals/api";
 
   let status = $state<PriorityStatus | null>(null);
   let key = $state("");
   let exclude = $state("");
   let about = $state("");
   let always = $state("");
+  let colleagues = $state("");
+  let colleaguesSaved = $state("");
+  // A failed read leaves this false: the box is locked and Save never writes
+  // it, so an empty box can never replace the stored list (as in Deals).
+  let colleaguesLoaded = $state(false);
+  let colleaguesParsed = $state<ParsedDeals | null>(null);
   let threshold = $state(0.35);
   let busy = $state(false);
   let keyMsg = $state("");
   let keyErr = $state("");
   let saved = $state(false);
-  const dirty = $derived(status !== null && (exclude !== status.exclude || threshold !== status.threshold || about !== status.about || always !== status.always));
+  const dirty = $derived(status !== null && (exclude !== status.exclude || threshold !== status.threshold || about !== status.about || always !== status.always || (colleaguesLoaded && colleagues !== colleaguesSaved)));
 
   async function load() {
     try {
@@ -30,7 +39,30 @@
     } catch {
       status = null;
     }
+    try {
+      colleaguesSaved = (await api.getSettings())["fork_colleagues"] ?? "";
+      colleagues = colleaguesSaved;
+      colleaguesLoaded = true;
+    } catch {
+      colleaguesLoaded = false;
+    }
   }
+
+  // Colleagues is read by the Deals list's parser: show what it leaves out.
+  $effect(() => {
+    const text = colleagues;
+    if (!colleaguesLoaded) return;
+    colleaguesParsed = null;
+    const timer = setTimeout(() => {
+      void dealsApi
+        .preview(text)
+        .then((p) => {
+          if (text === colleagues) colleaguesParsed = p;
+        })
+        .catch(() => {});
+    }, 150);
+    return () => clearTimeout(timer);
+  });
   onMount(() => {
     void load();
   });
@@ -72,7 +104,9 @@
       await api.setSetting("fork_priority_exclude", exclude);
       await api.setSetting("fork_priority_about", about.trim());
       await api.setSetting("fork_priority_always", always);
+      if (colleaguesLoaded) await api.setSetting("fork_colleagues", colleagues);
       await priorityApi.recompute();
+      void replies.refresh();
       saved = true;
       await load();
     } finally {
@@ -141,6 +175,14 @@
       <textarea id="fork-priority-exclude" rows="4" spellcheck="false" bind:value={exclude} oninput={() => (saved = false)} disabled={busy} placeholder={"mail.example.com\nalerts@example.com"}></textarea>
       <span class="note">{t("fork.priority.exclude_note")}</span>
     </label>
+
+    <label class="stack" for="fork-colleagues">
+      <span class="label">{t("fork.priority.colleagues")}</span>
+      <textarea id="fork-colleagues" rows="2" spellcheck="false" bind:value={colleagues} oninput={() => (saved = false)} disabled={busy || !colleaguesLoaded} placeholder={"colleague@theirfirm.com"}></textarea>
+      <span class="note">{t("fork.priority.colleagues_note")}</span>
+    </label>
+    {#if !colleaguesLoaded}<p class="note error" role="alert">{t("fork.deals.settings_not_loaded")}</p>{/if}
+    {#if colleaguesParsed}{#each colleaguesParsed.ignored as item}<p class="note error">{t(`fork.deals.ignored_${item.why}`, { entry: item.entry })}</p>{/each}{/if}
     <div class="actions">
       <span class="note" role="status">
         {t("fork.priority.counts", { count: status.count, scored: status.scoredToday, cap: status.cap })}

@@ -8,9 +8,9 @@ this file, and its date, whenever the state moves.
 
 ## Version 1.1.21 (October 14)
 
-**To reply, a colleague's answer counts** (D70, third addendum): when someone else at the mailbox's own domain (autospark.ai) answers a client, copying the owner, the conversation leaves To reply and is never sent to Jev. A colleague's mail sent only inside the company is still judged. A `needs` mark set before the colleague's answer ends with it, as it would with the owner's own reply.
+**To reply, a colleague's answer counts** (D70, third addendum): when someone else at the mailbox's own domain answers a client, copying the owner, the conversation leaves To reply and is never sent to Jev. A colleague's mail sent only inside the company is still judged. A `needs` mark set before the colleague's answer ends with it, as it would with the owner's own reply.
 
-Installed 17:59 on October 14 (db backed up to `~/.skim-fork/backups/20261014-175946`) and published as the GitHub latest release v1.1.21 with its `latest.json` (NSIS only; the served file reads 1.1.21). Validation: 602 Rust tests, all frontend tests, Clippy, fmt, Svelte check, build; 7 deliberate faults in the new rule each failed a named test (one survived the first test set: the list builder could skip the flag, because the test message had no score; the test now stores one, as the live rows had); the change critic's findings classified in D70. Live through Skim's MCP `list_court` `to_reply`: 51 listed, down from 55; the four that left are the colleague's answers to IQ-EQ (3) and XL Sigma (1). Rollback: install the 1.1.20 installer; no schema change.
+Installed 17:59 on October 14 (db backed up to `~/.skim-fork/backups/20261014-175946`) and published as the GitHub latest release v1.1.21 with its `latest.json` (NSIS only; the served file reads 1.1.21). Validation: 602 Rust tests, all frontend tests, Clippy, fmt, Svelte check, build; 7 deliberate faults in the new rule each failed a named test (one survived the first test set: the list builder could skip the flag, because the test message had no score; the test now stores one, as the live rows had); the change critic's findings classified in D70. Live through Skim's MCP `list_court` `to_reply`: 51 listed, down from 55; the four that left are a colleague's answers to two clients. Rollback: install the 1.1.20 installer; no schema change.
 
 ## Version 1.1.20 (October 14)
 
@@ -399,8 +399,8 @@ size still follows the existing app. No screen-reader audit is claimed.
 The helper is installed at
 `/home/cc-nesbitt/.local/share/skim/estate_reply.py`; private receipts are under
 `~/.local/state/skim-replies`. No credentials, gateway policy, units or database
-schema were changed. A real reply draft was generated for Jon Perper after
-reading the ZLed client files, complete thread and writing/voice guidance. The
+schema were changed. A real reply draft was generated for a client contact after
+reading the client's files, complete thread and writing/voice guidance. The
 adapter verified the Gmail draft's body, recipient and reply target. Two other
 conversations were correctly declined because Patrick had already replied.
 The exact saved RFC identity subsequently appeared in Skim's Drafts folder
