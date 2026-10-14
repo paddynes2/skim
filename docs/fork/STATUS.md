@@ -4,7 +4,11 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-13.**
+**As of 2026-10-14.**
+
+## Version 1.1.14 (October 14)
+
+A click on an attachment name opens it in its usual app (PowerPoint, Word, Excel, the PDF viewer). Images and PDFs keep the in-app preview behind a Preview button (D66).
 
 ## Version 1.1.13 (October 13)
 

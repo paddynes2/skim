@@ -11,17 +11,19 @@
   const groups=$derived(groupAttachments(attachments,fingerprints));
   $effect(()=>{const ids=attachments.map(a=>a.id);let stale=false;grouping=true;fingerprints={};void invoke<{id:number;sha256:string|null}[]>("fork_attachment_fingerprints",{attachmentIds:ids.slice(0,200)}).then(rows=>{if(!stale)fingerprints=Object.fromEntries(rows.filter(r=>r.sha256).map(r=>[r.id,r.sha256!]));}).catch(()=>{}).finally(()=>{if(!stale)grouping=false;});return()=>{stale=true;};});
   $effect(()=>{if(selected && dialog && !dialog.open)dialog.showModal();});
+  // One click opens the file in its usual app; the in-app preview stays for what it can show.
+  function previewable(file:AttachmentMeta){const m=(file.mimeType??"").toLowerCase(),n=(file.filename??"").toLowerCase();return m.startsWith("image/")||m==="application/pdf"||/\.(png|jpe?g|gif|webp|pdf)$/.test(n);}
   function size(bytes:number){return bytes<1024?`${bytes} B`:bytes<1048576?`${Math.round(bytes/1024)} KB`:`${(bytes/1048576).toFixed(1)} MB`;}
   async function open(file:AttachmentMeta){selected=file;preview=null;previewError="";loading=true;const token=++previewToken;try{const result=await invoke<typeof preview>("fork_attachment_preview",{attachmentId:file.id});if(token===previewToken)preview=result;}catch(e){if(token===previewToken)previewError=errorMessage(e);}finally{if(token===previewToken)loading=false;}}
   function close(){previewToken++;selected=null;preview=null;dialog?.close();}
   async function saveAll(){saving=true;error="";notice="";try{const result=await invoke<{saved:number;failed:string[];cancelled:boolean}>("fork_save_attachments",{attachmentIds:groups.map(g=>g[0].id)});if(!result.cancelled)notice=t("fork.files.saved_count",{n:result.saved})+(result.failed.length?" "+t("fork.files.failed_names",{names:result.failed.join(", ")}):"");}catch(e){error=errorMessage(e);}finally{saving=false;}}
   async function save(id:number){previewError="";error="";try{await api.saveAttachment(id);}catch(e){if(selected)previewError=errorMessage(e);else error=errorMessage(e);}}
-  async function original(id:number){try{await api.openAttachment(id);}catch(e){previewError=errorMessage(e);}}
+  async function original(id:number){previewError="";error="";try{await api.openAttachment(id);}catch(e){if(selected)previewError=errorMessage(e);else error=errorMessage(e);}}
 </script>
 <div class="chips">
   <div class="attachment-head"><span>{t("fork.files.heading")}{#if attachments.length>1} &middot; {groups.length}{/if}</span>{#if attachments.length>1}<button disabled={saving||grouping||groups.length>200} onclick={saveAll}>{saving?t("fork.files.saving"):t("fork.files.save_all")}</button>{/if}</div>
   <div class="row">{#each groups as group (group[0].id)}{@const a=group[0]}
-    <div class="file"><div class="chip"><button class="name" onclick={()=>void open(a)} title={t("fork.files.preview")}>{a.filename??t("fork.files.attachment")}<span class="size">{size(a.size)}</span></button><button class="save" onclick={()=>void save(a.id)} aria-label={t("fork.files.save_named",{name:a.filename??t("fork.files.attachment")})}>{t("fork.files.save")}</button></div>
+    <div class="file"><div class="chip"><button class="name" onclick={()=>void original(a.id)} title={t("fork.files.open_usual")}>{a.filename??t("fork.files.attachment")}<span class="size">{size(a.size)}</span></button>{#if previewable(a)}<button class="save" onclick={()=>void open(a)} aria-label={t("fork.files.preview")}>{t("fork.files.preview_short")}</button>{/if}<button class="save" onclick={()=>void save(a.id)} aria-label={t("fork.files.save_named",{name:a.filename??t("fork.files.attachment")})}>{t("fork.files.save")}</button></div>
     {#if group.length>1}<small>{t("fork.files.identical",{n:group.length})}</small>{/if}
     {#if onsource}<div class="sources">{#each group as source,i}<button onclick={()=>onsource?.(source)}>{sourceLabel?.(source)??t("fork.files.source_number",{n:i+1})}</button>{/each}</div>{/if}</div>
   {/each}</div>

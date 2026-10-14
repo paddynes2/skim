@@ -1077,6 +1077,8 @@
   "fork.files.save_all": "Save all",
   "fork.files.saving": "Saving files...",
   "fork.files.preview": "Preview attachment",
+  "fork.files.open_usual": "Open in its usual app",
+  "fork.files.preview_short": "Preview",
   "fork.files.preview_title": "Attachment preview",
   "fork.files.close_preview": "Close attachment preview",
   "fork.files.loading": "Loading preview...",
