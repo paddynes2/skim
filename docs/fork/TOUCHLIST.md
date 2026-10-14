@@ -233,3 +233,9 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/lib.rs` | `invoke_handler` | `fork_priority_members`, `fork_priority_train`, `fork_prefetch_threads`, `fork_mail_dismiss_failed` | D65 |
 | `src/components/MessageList.svelte` | script, row markup, styles | Priority row tags; download-ahead of the first 40 rows | D65 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.12 | Signed local release |
+| `src/components/AttachmentChips.svelte` | file chip, `original` | a click on the name opens the file in its usual app; Preview button for images and PDFs; open errors shown on the chip | D66 |
+| `src/components/MessageList.svelte` | script, row wrapper, styles | heat tint on every row (`fork/heat`), heated rows keep their tint when hovered or selected; Hot chip | D67, D68 |
+| `src/lib/stores/mail.svelte.ts` | `ListFilter` | adds `hot` | D68 |
+| `src-tauri/src/lib.rs` | `invoke_handler` | `fork_heat` | D67 |
+| `src/lib/i18n/locales/en.json` | `fork.files.open_usual`, `fork.files.preview_short`, `fork.list.hot*`, `fork.shortcuts.filter_hot` | attachment, Hot chip and palette copy | D66, D68 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.14 to 1.1.17 | Signed local release; v1.1.17 published |

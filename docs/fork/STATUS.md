@@ -10,6 +10,8 @@ this file, and its date, whenever the state moves.
 
 Heat accuracy: Jev reads the start of each body (one-time re-score of 90 days), your replies lift a conversation to light seafoam, `-` makes a sender cold everywhere, a Hot chip and Shift+H filter to mint and seafoam rows, and the release is published (D68).
 
+Installed 09:20 on October 14 and published as the GitHub latest release with its `latest.json`, so the updater offers 1.1.17 and nothing older. Publish each future build the same way. Live after install: f0014 ran (fork schema 14), the re-score finished in under 2 minutes, 929 answers, none failed, 178 at 0.5 or more (Hot); sample movements: a deck email 0.60 to 0.73, a vendor's "send us more details" reply 0.41 to 0.28. Watch the Priority threshold (0.35, fitted on snippets).
+
 ## Version 1.1.16 (October 14)
 
 A selected or hovered row keeps its heat colour instead of turning navy (D67 addendum).
