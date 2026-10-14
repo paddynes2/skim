@@ -145,29 +145,44 @@
   let draftEditorId = $state<number | null>(null);
   let draftOrigin = $state<number | null>(null);
   let draftResolveToken = 0;
+  // Fork (v1.1.18, D69): a boolean, not the folder object. Every
+  // `mail:updated` rebuilds the folder list, so the object changes on each
+  // sync; depending on it tore the editor down every few seconds while a draft
+  // was open (the pane flashed). The teardown wrote the draft to the server,
+  // whose sync fired `mail:updated` again, and the reload could read the row
+  // before the last keystrokes were saved, which reverted them.
+  const draftsSelected = $derived(mail.selectedFolder?.role === "drafts");
 
   $effect(() => {
-    const folder = mail.selectedFolder;
+    const inDrafts = draftsSelected;
+    const folderId = mail.selectedFolderId;
     const threadId = mail.selectedThreadId;
     const messageId = mail.selectedMessageId;
     const token = ++draftResolveToken;
-    draftEditorId = null;
-    draftOrigin = null;
-    if (folder?.role !== "drafts" || threadId === null) {
+    if (!inDrafts || folderId === null || threadId === null) {
+      draftEditorId = null;
+      draftOrigin = null;
       return;
     }
-    const accountIds = mail.accounts.map((a) => a.id);
+    const accountIds = untrack(() => mail.accounts.map((a) => a.id));
     void (async () => {
       try {
         const detail = await api.getThread(threadId);
         // Unified Drafts has a virtual id; resolve the real folders first.
-        const draftFolders = await draftFolderIds(folder.id, accountIds);
+        const draftFolders = await draftFolderIds(folderId, accountIds);
         const msgId = draftMessageId(detail.messages, draftFolders, messageId);
-        if (msgId == null || token !== draftResolveToken) return;
+        if (token !== draftResolveToken) return;
+        if (msgId == null) {
+          draftEditorId = null;
+          draftOrigin = null;
+          return;
+        }
         const draft = await api.editDraft(msgId);
         if (token !== draftResolveToken) return; // selection moved on
+        // The same local draft (a resync re-pointed it at a new server copy)
+        // keeps its open editor: a new id remounts it via the {#key}.
         draftOrigin = msgId;
-        draftEditorId = draft.id;
+        if (draftEditorId !== draft.id) draftEditorId = draft.id;
       } catch {
         if (token === draftResolveToken) {
           draftEditorId = null;
