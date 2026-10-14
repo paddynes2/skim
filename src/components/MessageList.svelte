@@ -328,7 +328,7 @@
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} style:background-image={heatBackground(heat.of(thread.id), ui.lightness === "light")}>
+        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} class:heated={heat.of(thread.id) !== undefined} style:background-image={heatBackground(heat.of(thread.id), ui.lightness === "light")}>
           <MessageRow
             {thread}
             companyIdentity={deal !== null}
@@ -515,6 +515,20 @@
   }
   .court-wrap {
     position: relative;
+  }
+  /* Fork (v1.1.16, D67): a tinted row keeps its heat colour when hovered,
+     selected or checked; the theme's solid fills would hide it. A light
+     overlay and the selection bar mark the state instead. */
+  .court-wrap.heated :global(.row-wrap:hover .row),
+  .court-wrap.heated :global(.row-wrap.checked .row) {
+    background: var(--heat-hover, rgba(255, 255, 255, 0.05));
+  }
+  .court-wrap.heated :global(.row-wrap.selected .row) {
+    background: var(--heat-selected, rgba(255, 255, 255, 0.09));
+  }
+  :global(:root[data-theme$="-light"]) .court-wrap.heated {
+    --heat-hover: rgba(0, 0, 0, 0.035);
+    --heat-selected: rgba(0, 0, 0, 0.07);
   }
   /* Bottom-right of the row, over the tail of the snippet line; the hover
      actions live on line 1, so the two never overlap. */
