@@ -109,7 +109,7 @@ access is reused. Remote helper installation is a versioned user-owned code copy
   nine Python boundary tests passed against the installed helper; 34 Node
   tests and 96 contrast checks passed. Svelte check retains one pre-existing
   ComposeForm warning. Frontend and signed NSIS builds succeeded.
-- Live draft: Jon Perper's latest acknowledgement was selected after reading
+- Live draft: a client contact's latest acknowledgement was selected after reading
   the complete thread. The agent cited client files, project memory and voice
   guidance. The adapter saved once and verified the draft body and headers.
   Two already-answered conversations produced no draft. Nothing was sent.
