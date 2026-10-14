@@ -6,6 +6,12 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-14.**
 
+## Version 1.1.21 (October 14)
+
+**To reply, a colleague's answer counts** (D70, third addendum): when someone else at the mailbox's own domain (autospark.ai) answers a client, copying the owner, the conversation leaves To reply and is never sent to Jev. A colleague's mail sent only inside the company is still judged. A `needs` mark set before the colleague's answer ends with it, as it would with the owner's own reply.
+
+Installed 17:59 on October 14 (db backed up to `~/.skim-fork/backups/20261014-175946`) and published as the GitHub latest release v1.1.21 with its `latest.json` (NSIS only; the served file reads 1.1.21). Validation: 602 Rust tests, all frontend tests, Clippy, fmt, Svelte check, build; 7 deliberate faults in the new rule each failed a named test (one survived the first test set: the list builder could skip the flag, because the test message had no score; the test now stores one, as the live rows had); the change critic's findings classified in D70. Live through Skim's MCP `list_court` `to_reply`: 51 listed, down from 55; the four that left are the colleague's answers to IQ-EQ (3) and XL Sigma (1). Rollback: install the 1.1.20 installer; no schema change.
+
 ## Version 1.1.20 (October 14)
 
 **To reply** (D70 and its addendum): a sidebar view under the Inbox, `g r`, listing the conversations where someone else wrote last and a reply is owed, newest first, with the age and a Deal, draft started, marked or not checked tag. The judge is a second TypeSafe Jev question about the last message ("does the sender expect a personal reply?"), scored once per message after Priority's pass. A reply sent from Skim, the web or the phone takes a conversation out; their next message brings it back. `D` marks one done in the view and adds one elsewhere; the row menu does both; Undo restores the previous mark. Deals conversations need a reply score of 0.2 (others 0.4). The view says when new mail is not being checked (Priority off, no key, paused). MCP `list_court` takes `to_reply`. 1.1.19 shipped the view with Deals always listed; the live check showed 8 of 32 Deals rows were notices, and 1.1.20 set the 0.2 bar.
