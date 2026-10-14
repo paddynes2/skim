@@ -6,6 +6,10 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-14.**
 
+## Version 1.1.18 (October 14)
+
+An open draft in the Drafts folder no longer flashes or loses typing when mail syncs (D69). Installed 11:03 on October 14 (db backed up to `~/.skim-fork/backups/`) and published as the GitHub latest release with its `latest.json` (NSIS only, no MSI this time). Live check on the installed app: with a draft open, five forced `mail:updated` events left the editor mounted (0 removals, same DOM node).
+
 ## Version 1.1.17 (October 14)
 
 Heat accuracy: Jev reads the start of each body (one-time re-score of 90 days), your replies lift a conversation to light seafoam, `-` makes a sender cold everywhere, a Hot chip and Shift+H filter to mint and seafoam rows, and the release is published (D68).
