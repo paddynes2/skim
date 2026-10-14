@@ -145,7 +145,7 @@ pub struct Deal {
 
 /// Whether `domain` is a mailbox's own domain, a subdomain of one, or a parent
 /// of one. `own` never holds personal-mail domains (see [`own_domains`]).
-fn is_own(domain: &str, own: &HashSet<String>) -> bool {
+pub(crate) fn is_own(domain: &str, own: &HashSet<String>) -> bool {
     own.iter().any(|o| {
         domain == o || o.ends_with(&format!(".{domain}")) || domain.ends_with(&format!(".{o}"))
     })
@@ -321,7 +321,7 @@ fn own_addresses(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
 
 /// The domains of the configured mailboxes, without personal-mail ones: a
 /// gmail.com mailbox does not make every Gmail correspondent "own".
-fn own_domains(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
+pub(crate) fn own_domains(conn: &Connection) -> rusqlite::Result<HashSet<String>> {
     Ok(own_addresses(conn)?
         .iter()
         .filter_map(|e| e.rsplit_once('@').map(|(_, d)| d.to_string()))

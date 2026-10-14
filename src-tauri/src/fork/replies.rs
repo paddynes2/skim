@@ -19,7 +19,8 @@
 //!   - a local reply draft was saved on it at or after that message (an older
 //!     draft is a leftover: the reply may have gone out from Gmail or the
 //!     phone, which never deletes Skim's draft row); or
-//!   - it is not calendar mail or a sign-in or reset notice, the sender is
+//!   - it is not a colleague's answer to someone outside the company (below),
+//!     calendar mail or a sign-in or reset notice, the sender is
 //!     authenticated and not on the exclude list, and Jev scored the last
 //!     message at or above the threshold (`fork_reply_threshold`), or at or
 //!     above [`DEAL_FLOOR`] in a Deals conversation, or Jev was
@@ -31,6 +32,16 @@
 //! every account address (`court::own_addresses`); a reply from a send-as
 //! alias would read as someone else's (the owner sends from one address).
 //!
+//! A colleague's answer counts as a reply (v1.1.21): a last message from
+//! someone else at the mailbox's own domain (`autospark.ai`, never a
+//! personal-mail one such as gmail.com) that went to at least one address
+//! outside it. On October 14 that was a colleague answering IQ-EQ and XL
+//! Sigma in 4 listed conversations. Mail a colleague sent only inside the
+//! company is still asked about: it may be waiting on the user. A `needs`
+//! mark ends with the colleague's answer, as it does with the user's own
+//! reply (a mark lasts until the next message); one set on the colleague's
+//! message lists it, and so does a reply draft saved after it.
+//!
 //! A mark lasts until the next message in the conversation, from anyone
 //! (`fork_reply_mark.msg_key`). So a reply sent from Skim, from Gmail on the
 //! web or from the phone takes the conversation out (the court sees the Sent
@@ -41,15 +52,17 @@
 //! subject and the start of the body with links and codes removed. The same
 //! mail is never asked about: bulk and automated senders (the court drops
 //! them), calendar mail, sign-in codes, unauthenticated mail, the exclude list,
-//! the user's own mail. Fail-open: no key or an outage leaves a conversation
+//! the user's own mail, a colleague's answer. Fail-open: no key or an outage leaves a conversation
 //! unscored, so it is simply not listed by the Jev rule; nothing else changes.
 //! Scoring runs inside `priority::schedule`, after Priority's own pass and
 //! under the same lock, so the two never compete for TypeSafe's rate limit.
 
 use crate::db::models::ThreadRow;
+use crate::db::queries::addresses_from_json;
 use crate::db::{queries, Db};
 use crate::error::{Result, SkimError};
 use crate::fork::court::{self, CourtRow, REASON_DRAFT, STATE_ON_ME};
+use crate::fork::deals;
 use crate::fork::priority::{
     self, authenticated, body_preview, excluded, is_calendar, is_sensitive, msg_key, parse_exclude,
     Answer, Ask, Candidate, BODY_WAIT_SECS,
@@ -144,6 +157,9 @@ pub struct Row {
     /// a local draft is left over after the reply went out from Gmail or the
     /// phone; that conversation is not waiting on him.
     pub from_me: bool,
+    /// A colleague answered: the last message is from someone else at the
+    /// mailbox's own domain and went outside it ([`colleague_answered`]).
+    pub colleague: bool,
     /// A local reply draft on the conversation saved at or after the last
     /// message. An older one is a leftover, not a reply in progress.
     pub fresh_draft: bool,
@@ -158,8 +174,9 @@ pub struct Row {
 /// Which conversations are in To reply, with the row tag (`None` = Jev).
 /// Pure: the tests drive it. A mark is the user's own call and wins. Then
 /// only a conversation waiting on the user, inside the window: a reply draft
-/// in progress; else never calendar mail, an unauthenticated sender or one on
-/// the exclude list; else a Deals conversation, a Jev score at the threshold,
+/// in progress; else never one a colleague answered, calendar mail, an
+/// unauthenticated sender or one on the exclude list; else a Deals
+/// conversation, a Jev score at the threshold,
 /// or a message Jev was asked about and could not judge (listed, since a
 /// missed reply costs more than a wrong row).
 pub fn decide(
@@ -182,7 +199,8 @@ pub fn decide(
                 }
                 if r.fresh_draft {
                     Some(REASON_DRAFT)
-                } else if excluded(&r.from_addr, exclude)
+                } else if r.colleague
+                    || excluded(&r.from_addr, exclude)
                     || is_calendar(&r.subject, &r.from_addr)
                     || is_sensitive(&r.subject, "")
                     || !authenticated(&r.spf, &r.dkim, &r.dmarc)
@@ -204,8 +222,39 @@ pub fn decide(
     out
 }
 
+fn domain_of(addr: &str) -> Option<String> {
+    addr.trim()
+        .rsplit_once('@')
+        .map(|(_, d)| d.to_ascii_lowercase())
+}
+
+/// A colleague answered: `from` is not the user's own address, it is at one
+/// of the mailbox's own domains (`deals::own_domains`: never a personal-mail
+/// one, so a gmail.com mailbox makes no colleagues; a subdomain counts, as in
+/// Deals), and one of the message's To or Cc addresses (JSON, as stored) is
+/// outside them. A note sent only inside the company is not an answer to
+/// anyone outside it. Outside means any other domain, a personal one too.
+pub fn colleague_answered(
+    from: &str,
+    to_json: Option<&str>,
+    cc_json: Option<&str>,
+    own: &HashSet<String>,
+    domains: &HashSet<String>,
+) -> bool {
+    if own.contains(&from.trim().to_ascii_lowercase())
+        || !domain_of(from).is_some_and(|d| deals::is_own(&d, domains))
+    {
+        return false;
+    }
+    addresses_from_json(to_json)
+        .into_iter()
+        .chain(addresses_from_json(cc_json))
+        .any(|a| domain_of(&a.addr).is_some_and(|d| !deals::is_own(&d, domains)))
+}
+
 fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
     let own = court::own_addresses(conn)?;
+    let domains = deals::own_domains(conn)?;
     let key = msg_key("m");
     let mut stmt = conn.prepare(&format!(
         "SELECT c.thread_id, c.state, coalesce(c.since, 0), c.reason,
@@ -215,7 +264,7 @@ fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
                         JOIN messages dm ON dm.id = d.reply_to_message_id
                                          OR dm.id = d.origin_message_id
                         WHERE dm.thread_id = c.thread_id AND d.updated_at >= m.date),
-                s.msg_key IS NOT NULL, s.score, k.mark
+                s.msg_key IS NOT NULL, s.score, k.mark, m.to_addrs, m.cc_addrs
          FROM fork_court c
          JOIN messages m ON m.id = c.last_message_id
          LEFT JOIN fork_reply_score s ON s.msg_key = {key}
@@ -225,12 +274,14 @@ fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
     ))?;
     let rows = stmt.query_map(params![floor], |r| {
         let from_addr: String = r.get(4)?;
+        let (to, cc): (Option<String>, Option<String>) = (r.get(13)?, r.get(14)?);
         Ok(Row {
             thread_id: r.get(0)?,
             state: r.get(1)?,
             since: r.get(2)?,
             reason: r.get(3)?,
             from_me: own.contains(&from_addr.trim().to_ascii_lowercase()),
+            colleague: colleague_answered(&from_addr, to.as_deref(), cc.as_deref(), &own, &domains),
             from_addr,
             subject: r.get(5)?,
             spf: r.get(6)?,
@@ -405,6 +456,7 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
         return Ok(scan);
     }
     let own = court::own_addresses(conn)?;
+    let domains = deals::own_domains(conn)?;
     let exclude =
         parse_exclude(&queries::get_setting(conn, priority::SETTING_EXCLUDE)?.unwrap_or_default());
     let key = msg_key("m");
@@ -413,7 +465,7 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
                 coalesce(m.subject, ''), coalesce(m.snippet, ''),
                 m.body_state IN (1, 2), m.date,
                 coalesce(m.auth_spf, ''), coalesce(m.auth_dkim, ''), coalesce(m.auth_dmarc, ''),
-                m.id
+                m.id, m.to_addrs, m.cc_addrs
          FROM fork_court c
          JOIN messages m ON m.id = c.last_message_id
          WHERE c.state = 'on_me'
@@ -437,7 +489,10 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
         let body_ready: bool = r.get(5)?;
         let date: i64 = r.get(6)?;
         let (spf, dkim, dmarc): (String, String, String) = (r.get(7)?, r.get(8)?, r.get(9)?);
+        let (to, cc): (Option<String>, Option<String>) = (r.get(11)?, r.get(12)?);
+        // A colleague's answer is never listed, so it is never paid for.
         if priority::never_asked(&c, (&spf, &dkim, &dmarc), &own, &exclude)
+            || colleague_answered(&c.from_addr, to.as_deref(), cc.as_deref(), &own, &domains)
             || !seen.insert(c.key.clone())
         {
             continue;
@@ -655,8 +710,8 @@ pub async fn fork_replies_mark(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::models::NewMessage;
-    use crate::db::queries::insert_message;
+    use crate::db::models::{Address, NewMessage};
+    use crate::db::queries::{addresses_to_json, insert_message};
     use crate::fork::court::{pass, Scope};
 
     const ME: &str = "me@example.com";
@@ -787,6 +842,99 @@ mod tests {
     }
 
     #[test]
+    fn a_colleagues_answer_is_a_reply_unless_he_is_drafting_or_marked_it() {
+        let answered = Row {
+            colleague: true,
+            ..r(1, Some(0.9))
+        };
+        let deal = Row {
+            colleague: true,
+            ..r(7, Some(0.9))
+        };
+        assert!(run(&[answered, deal]).is_empty());
+        let drafting = Row {
+            colleague: true,
+            fresh_draft: true,
+            ..r(2, None)
+        };
+        let marked = Row {
+            colleague: true,
+            mark: Some(MARK_NEEDS.into()),
+            ..r(3, None)
+        };
+        let out = run(&[drafting, marked]);
+        assert_eq!(out.get(&2), Some(&Some(REASON_DRAFT)));
+        assert_eq!(out.get(&3), Some(&Some(TAG_MARKED)));
+    }
+
+    #[test]
+    fn a_colleague_answered_only_when_the_mail_went_outside_the_company() {
+        let own: HashSet<String> = ["me@firm.ai".to_string()].into();
+        let domains: HashSet<String> = ["firm.ai".to_string()].into();
+        let to = |addrs: &[&str]| {
+            addresses_to_json(
+                &addrs
+                    .iter()
+                    .map(|a| Address {
+                        name: None,
+                        addr: a.to_string(),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let client = to(&["anna@client.com", "me@firm.ai"]);
+        let inside = to(&["me@firm.ai", "ops@firm.ai"]);
+        let yes = |from: &str, t: Option<&str>, c: Option<&str>| {
+            colleague_answered(from, t, c, &own, &domains)
+        };
+        assert!(yes("Wes@Firm.AI", Some(&client), None));
+        assert!(
+            yes(
+                "wes@firm.ai",
+                Some(&inside),
+                Some(&to(&["anna@client.com"]))
+            ),
+            "Cc counts"
+        );
+        assert!(
+            !yes("wes@firm.ai", Some(&inside), None),
+            "a note inside the company"
+        );
+        assert!(!yes("wes@firm.ai", None, None), "no recipients: Bcc to him");
+        assert!(
+            !yes("me@firm.ai", Some(&client), None),
+            "his own mail is from_me"
+        );
+        assert!(!yes("anna@client.com", Some(&client), None));
+        assert!(
+            !yes("wes@firm.ai.evil.com", Some(&client), None),
+            "a lookalike domain"
+        );
+        assert!(
+            yes("wes@sub.firm.ai", Some(&client), None),
+            "a subdomain is the company, as in Deals"
+        );
+        assert!(
+            !yes("wes@firm.ai", Some(&to(&["ops@eu.firm.ai"])), None),
+            "nor is a subdomain outside it"
+        );
+        assert!(
+            yes("wes@firm.ai", Some(&to(&["jo@gmail.com"])), None),
+            "a personal address is outside"
+        );
+        // A personal mailbox has no own domain (`deals::own_domains`), so
+        // makes no colleagues.
+        let gmail: HashSet<String> = ["me@gmail.com".to_string()].into();
+        assert!(!colleague_answered(
+            "x@gmail.com",
+            Some(&client),
+            None,
+            &gmail,
+            &HashSet::new()
+        ));
+    }
+
+    #[test]
     fn scoring_off_names_the_first_missing_piece() {
         assert_eq!(scoring_off(false, false, true), Some("priority_off"));
         assert_eq!(scoring_off(true, false, true), Some("no_key"));
@@ -861,6 +1009,7 @@ mod tests {
         subject: &'a str,
         date: i64,
         dmarc: &'a str,
+        to: Vec<&'a str>,
     }
 
     impl Default for M<'_> {
@@ -874,6 +1023,7 @@ mod tests {
                 subject: "Proposal",
                 date: 0,
                 dmarc: "pass",
+                to: vec![],
             }
         }
     }
@@ -894,6 +1044,14 @@ mod tests {
                 date: m.date,
                 snippet: Some("Can you send the deck?".into()),
                 auth_dmarc: Some(m.dmarc.into()),
+                to_addrs: m
+                    .to
+                    .iter()
+                    .map(|a| Address {
+                        name: None,
+                        addr: a.to_string(),
+                    })
+                    .collect(),
                 ..Default::default()
             },
         )
@@ -1006,6 +1164,100 @@ mod tests {
             assert_eq!(keys(&candidates(conn, 0, now, 10)?), vec!["q2"]);
             score_all_at(conn, 0.8, now);
             assert!(members(conn, &none, now)?.contains_key(&t));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_colleague_answering_the_client_takes_it_out_and_their_answer_brings_it_back() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn);
+            let now = 10_000_000;
+            let (_, t) = add(
+                conn,
+                M {
+                    uid: 1,
+                    msgid: "q1",
+                    date: now - 300,
+                    ..M::default()
+                },
+            );
+            pass(conn, &Scope::All, false)?;
+            score_all_at(conn, 0.8, now);
+            let none = HashSet::new();
+            assert!(members(conn, &none, now)?.contains_key(&t));
+
+            // A colleague answers the client, copying him: his Inbox copy.
+            add(
+                conn,
+                M {
+                    uid: 2,
+                    msgid: "c1",
+                    refs: vec!["q1"],
+                    from: "wes@example.com",
+                    to: vec!["anna@client.com", ME],
+                    date: now - 200,
+                    ..M::default()
+                },
+            );
+            pass(conn, &Scope::All, false)?;
+            assert!(
+                candidates(conn, 0, now, 10)?.candidates.is_empty(),
+                "never paid for"
+            );
+            // Scored before 1.1.21, as the four on the owner's mailbox were.
+            let c1: String = conn.query_row(
+                &format!(
+                    "SELECT {} FROM messages m WHERE m.folder_id = 1 AND m.uid = 2",
+                    msg_key("m")
+                ),
+                [],
+                |r| r.get(0),
+            )?;
+            store_scores(
+                conn,
+                &[(c1, Some(0.9), priority::MODEL.to_string())],
+                "d",
+                now,
+            )?;
+            assert!(
+                !members(conn, &none, now)?.contains_key(&t),
+                "answered: out"
+            );
+
+            // A colleague's note to him alone is asked about as usual.
+            let (_, t2) = add(
+                conn,
+                M {
+                    uid: 3,
+                    msgid: "n1",
+                    from: "wes@example.com",
+                    subject: "Can you review the IQ-EQ deck?",
+                    to: vec![ME],
+                    date: now - 150,
+                    ..M::default()
+                },
+            );
+            pass(conn, &Scope::All, false)?;
+            assert_eq!(keys(&candidates(conn, 0, now, 10)?), vec!["n1"]);
+
+            // The client writes again: back in once Jev has judged it.
+            add(
+                conn,
+                M {
+                    uid: 4,
+                    msgid: "q2",
+                    refs: vec!["q1", "c1"],
+                    date: now - 100,
+                    ..M::default()
+                },
+            );
+            pass(conn, &Scope::All, false)?;
+            score_all_at(conn, 0.8, now);
+            let m = members(conn, &none, now)?;
+            assert!(m.contains_key(&t) && m.contains_key(&t2));
             Ok(())
         })
         .unwrap();
