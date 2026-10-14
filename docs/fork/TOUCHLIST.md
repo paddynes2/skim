@@ -239,3 +239,11 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/lib.rs` | `invoke_handler` | `fork_heat` | D67 |
 | `src/lib/i18n/locales/en.json` | `fork.files.open_usual`, `fork.files.preview_short`, `fork.list.hot*`, `fork.shortcuts.filter_hot` | attachment, Hot chip and palette copy | D66, D68 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.14 to 1.1.17 | Signed local release; v1.1.17 published |
+| `src-tauri/src/lib.rs` | `invoke_handler` | `fork_replies_list`, `fork_replies_ids`, `fork_replies_mark` | To reply (D70) |
+| `src/lib/stores/mail.svelte.ts` | imports, `mail:updated` and `court:updated` listeners, new `replies:updated` listener, `fetchPage`, `courtStateOf`, `selectCourt` | the To reply view is court view `to_reply` (id -925), listed by `fork_replies_list`; it reloads on mail, court and reply events | D70 |
+| `src/components/MessageList.svelte` | imports, court header, empty state | To reply title, "Newest first · N" and an empty line | D70 |
+| `src/components/Sidebar.svelte` | imports, first section | To reply row with its count, under the Inbox | D70 |
+| `src/components/ShortcutsOverlay.svelte` | list keys | `G R` in the go-to row, `D` for To reply | D70 |
+| `src/App.svelte` | mount effect, imports | `startReplies()` (g r, palette row, first count) | D70 |
+| `src/lib/i18n/locales/en.json` | `fork.nav.to_reply`, `fork.replies.*`, `fork.shortcuts.to_reply` | To reply copy | D70 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.19 | Signed local release |

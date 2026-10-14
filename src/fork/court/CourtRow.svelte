@@ -21,6 +21,10 @@
     filed: "fork.court.reason_filed",
     "bulk: list-unsubscribe": "fork.court.reason_bulk",
     "bulk: automated sender": "fork.court.reason_bulk",
+    // v1.1.19 (D70): To reply tags.
+    deal: "fork.replies.reason_deal",
+    marked: "fork.replies.reason_marked",
+    unchecked: "fork.replies.reason_unchecked",
   };
   const why = $derived.by(() => {
     if (!reason) return null;

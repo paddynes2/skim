@@ -58,6 +58,8 @@ pub const ALLOWED: &[&str] = &[
     // v1.1.12
     "fork_priority_always", // one domain or address per line, always in Priority when unread
     "fork_priority_alerts", // on | off; toasts and taskbar count follow Priority
+    // v1.1.19
+    "fork_reply_threshold", // Jev reply yes-probability for To reply, default 0.4
 ];
 
 #[cfg(test)]

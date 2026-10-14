@@ -2,8 +2,10 @@
 // the Rust structs' in camelCase, like `ThreadRow`.
 import type { ThreadRow } from "../../lib/types";
 
-/** The two views. `none` rows exist in the table but are never listed. */
-export type CourtState = "on_me" | "waiting";
+/** The views. `none` rows exist in the table but are never listed.
+ *  v1.1.19 (D70): `to_reply` is the court rows that need a reply
+ *  (`fork_replies_list`); On me and Waiting have no sidebar row since D54. */
+export type CourtState = "on_me" | "waiting" | "to_reply";
 
 /** One row of "On me" / "Waiting": exactly a `ThreadRow` (so the message list
  *  renders it unchanged) plus when the ball landed and why. */

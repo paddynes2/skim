@@ -12,6 +12,8 @@ import { withoutToken } from "../../fork/search/query";
 import { COURT_UPDATED, courtApi, VF_ON_ME, VF_WAITING } from "../../fork/court/api";
 import { courtCounts } from "../../fork/court/counts.svelte";
 import type { CourtState } from "../../fork/court/types";
+import { REPLIES_UPDATED, repliesApi, VF_TO_REPLY } from "../../fork/replies/api";
+import { replies } from "../../fork/replies/store.svelte";
 // Fork (v1.1.3): Deals as virtual folder -924 (it replaced Snoozed / Follow-ups).
 import { dealsApi, VF_DEALS } from "../../fork/deals/api";
 import { dealsStore } from "../../fork/deals/store.svelte";
@@ -141,6 +143,7 @@ async function attachListeners() {
       !e.payload?.folderId ||
       isUnified() ||
       state.selectedFolderId === VF_DEALS ||
+      state.selectedFolderId === VF_TO_REPLY ||
       e.payload.folderId === state.selectedFolderId
     ) {
       void refreshThreads();
@@ -154,6 +157,13 @@ async function attachListeners() {
   await listen(COURT_UPDATED, () => {
     if (courtStateOf(state.selectedFolderId) !== null) void refreshThreads();
     void courtCounts.refresh();
+    // v1.1.19 (D70): To reply is court rows too (a reply sent, a new message).
+    void replies.refresh();
+  });
+  // v1.1.19 (D70): new reply scores or a mark moved To reply.
+  await listen(REPLIES_UPDATED, () => {
+    if (state.selectedFolderId === VF_TO_REPLY) void refreshThreads();
+    void replies.refresh();
   });
   // Fork (v1.1.11, D64): the Priority set moved; only the Inbox orders by it.
   await listen(PRIORITY_UPDATED, () => {
@@ -384,6 +394,8 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
   // Fork (10): the court views come from `fork_court_list`, always by thread
   // (a court row IS a thread), oldest first, across every account.
   const court = courtStateOf(folderId);
+  // v1.1.19 (D70): To reply, newest first, from `fork_replies_list`.
+  if (court === "to_reply") return repliesApi.list(offset, limit);
   if (court !== null) return courtApi.list(court, offset, limit);
   // Fork (v1.1.3): Deals, by thread, newest first, across every folder.
   if (folderId === VF_DEALS) return dealsApi.list(offset, limit, dealsStore.selectedCompany || undefined);
@@ -551,12 +563,13 @@ async function removeSearchToken(token: string) {
 function courtStateOf(folderId: number | null): CourtState | null {
   if (folderId === VF_ON_ME) return "on_me";
   if (folderId === VF_WAITING) return "waiting";
+  if (folderId === VF_TO_REPLY) return "to_reply";
   return null;
 }
 
-/** Show one of the two views in the list. */
+/** Show one of the court views in the list. */
 async function selectCourt(court: CourtState) {
-  const id = court === "on_me" ? VF_ON_ME : VF_WAITING;
+  const id = court === "on_me" ? VF_ON_ME : court === "waiting" ? VF_WAITING : VF_TO_REPLY;
   if (state.selectedFolderId === SEARCH_FOLDER_ID) {
     state.searchQuery = null;
     state.searchPrevFolderId = null;

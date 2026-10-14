@@ -7,6 +7,8 @@ export interface NavHooks {
   court?: (state: "on_me" | "waiting") => void;
   /** v1.1.3: open Deals (it replaced Snoozed / Follow-ups and H / B). */
   deals?: () => void;
+  /** v1.1.19 (D70): open To reply. */
+  toReply?: () => void;
   crmToggle?: () => void;
   meetNow?: () => void;
 }

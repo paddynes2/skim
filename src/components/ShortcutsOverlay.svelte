@@ -27,7 +27,7 @@
         // Fork (3.1)
         { label: t("fork.shortcuts.filter_unread"), keys: ["Shift U"] },
         { label: t("fork.shortcuts.filter_starred"), keys: ["Shift S"] },
-        { label: t("fork.shortcuts.goto"), keys: ["G  I/S/T/D/A/C/E"] },
+        { label: t("fork.shortcuts.goto"), keys: ["G  I/S/T/D/A/C/E/R"] },
         // Fork (4.3)
         { label: t("fork.shortcuts.search_list"), keys: ["Shift Enter"] },
         { label: t("fork.shortcuts.search_close"), keys: ["Esc"] },
@@ -46,6 +46,8 @@
         { label: t("reading.move"), keys: ["V"] },
         { label: t("reading.star"), keys: ["S"] },
         { label: t("reading.toggle_read"), keys: ["U"] },
+        // Fork (v1.1.19, D70)
+        { label: t("fork.shortcuts.to_reply"), keys: ["D"] },
         { label: t("reading.reply"), keys: ["R"] },
         { label: t("reading.reply_all"), keys: ["A"] },
         { label: t("reading.forward"), keys: ["F"] },

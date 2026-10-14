@@ -462,6 +462,10 @@ async fn run_pass(app: &AppHandle, db: &Db, scope: Scope, forced: bool) {
         let _ = app.emit(EVT_UPDATED, serde_json::json!({}));
     }
     if stats.written > 0 {
+        // v1.1.19 (D70): a conversation newly on the user may need its reply
+        // score; the Jev runner asks once this pass has stored the row (the
+        // `mail:updated` run may have looked before it was written).
+        crate::fork::priority::schedule(app.clone());
         match ai_pass(db).await {
             Ok(0) => {}
             Ok(n) => {

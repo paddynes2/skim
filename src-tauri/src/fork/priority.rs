@@ -224,6 +224,22 @@ pub fn authenticated(spf: &str, dkim: &str, dmarc: &str) -> bool {
         .any(|v| v.trim().eq_ignore_ascii_case("pass"))
 }
 
+/// Jev is never asked about this message: the user's own mail, a sender on
+/// the exclude list, calendar mail, sign-in codes and resets, mail without
+/// sender authentication. One place for Priority and To reply (D70).
+pub fn never_asked(
+    c: &Candidate,
+    (spf, dkim, dmarc): (&str, &str, &str),
+    own: &HashSet<String>,
+    exclude: &[String],
+) -> bool {
+    own.contains(&c.from_addr.trim().to_ascii_lowercase())
+        || excluded(&c.from_addr, exclude)
+        || is_calendar(&c.subject, &c.from_addr)
+        || is_sensitive(&c.subject, &c.preview)
+        || !authenticated(spf, dkim, dmarc)
+}
+
 /// The preview Jev sees: links and standalone 4 to 8 digit numbers (codes,
 /// account and reference numbers) removed, whitespace collapsed.
 pub fn redact(preview: &str) -> String {
@@ -335,8 +351,33 @@ pub struct Candidate {
     pub preview: String,
 }
 
-/// The request for one message.
+/// One yes/no question for Jev: the instructions and the two criteria. The
+/// Priority question is [`Ask::priority`]; v1.1.19 (D70) adds the reply
+/// question in `fork::replies`.
+#[derive(Debug, Clone)]
+pub struct Ask {
+    pub instructions: String,
+    pub yes: &'static str,
+    pub no: &'static str,
+}
+
+impl Ask {
+    pub fn priority(question: String) -> Self {
+        Ask {
+            instructions: question,
+            yes: QUESTION_TRUE,
+            no: QUESTION_FALSE,
+        }
+    }
+}
+
+/// The Priority request for one message.
 pub fn request_body(c: &Candidate, question: &str) -> Value {
+    request_body_for(c, &Ask::priority(question.to_string()))
+}
+
+/// The request for one message and one question.
+pub fn request_body_for(c: &Candidate, ask: &Ask) -> Value {
     let from = if c.from_name.trim().is_empty() {
         c.from_addr.clone()
     } else {
@@ -353,8 +394,8 @@ pub fn request_body(c: &Candidate, question: &str) -> Value {
         "questions": {
             "read": {
                 "type": "noul",
-                "instructions": question,
-                "criteria": { "true": QUESTION_TRUE, "false": QUESTION_FALSE },
+                "instructions": ask.instructions,
+                "criteria": { "true": ask.yes, "false": ask.no },
             }
         }
     })
@@ -625,13 +666,7 @@ pub fn candidates(conn: &Connection, floor: i64, now: i64, limit: usize) -> rusq
         let body_ready: bool = r.get(5)?;
         let date: i64 = r.get(6)?;
         let (spf, dkim, dmarc): (String, String, String) = (r.get(8)?, r.get(9)?, r.get(10)?);
-        if own.contains(&c.from_addr.trim().to_ascii_lowercase())
-            || excluded(&c.from_addr, &exclude)
-            || is_calendar(&c.subject, &c.from_addr)
-            || is_sensitive(&c.subject, &c.preview)
-            || !authenticated(&spf, &dkim, &dmarc)
-            || !seen.insert(c.key.clone())
-        {
+        if never_asked(&c, (&spf, &dkim, &dmarc), &own, &exclude) || !seen.insert(c.key.clone()) {
             continue;
         }
         if !body_ready && date > now - BODY_WAIT_SECS {
@@ -799,9 +834,9 @@ fn http() -> &'static reqwest::Client {
 async fn score_one(
     api_key: &str,
     c: &Candidate,
-    question: &str,
+    ask: &Ask,
 ) -> std::result::Result<(f64, String), ScoreErr> {
-    let body = request_body(c, question);
+    let body = request_body_for(c, ask);
     let mut last = String::new();
     for attempt in 0..2 {
         if attempt > 0 {
@@ -842,18 +877,19 @@ async fn score_one(
 
 /// Ask about every candidate, [`WORKERS`] at a time. Stops at the first
 /// account-wide failure and returns it with the answers already in hand.
-async fn score_all(
+/// Shared with `fork::replies` (D70), which asks its own question.
+pub(crate) async fn score_all(
     api_key: &str,
     cands: Vec<Candidate>,
-    question: &str,
+    ask: &Ask,
 ) -> (Vec<Answer>, Option<String>) {
     use futures::stream::{self, StreamExt};
     let mut out = Vec::new();
     let mut stream = stream::iter(cands.into_iter().map(|c| {
         let key = api_key.to_string();
-        let question = question.to_string();
+        let ask = ask.clone();
         async move {
-            let r = score_one(&key, &c, &question).await;
+            let r = score_one(&key, &c, &ask).await;
             (c.key, r)
         }
     }))
@@ -898,6 +934,42 @@ fn health() -> &'static Mutex<Health> {
     H.get_or_init(Mutex::default)
 }
 
+/// Scoring is paused after an account-wide failure. One key, one pause:
+/// `fork::replies` (D70) reads and sets the same one.
+pub(crate) fn paused() -> bool {
+    health()
+        .lock()
+        .ok()
+        .and_then(|h| h.paused_until)
+        .is_some_and(|until| Instant::now() < until)
+}
+
+/// Record how a scoring pass ended: an account-wide failure pauses scoring
+/// for [`FAIL_BACKOFF`], a clean pass clears the pause.
+pub(crate) fn note_health(fatal: Option<&str>) {
+    if let Ok(mut h) = health().lock() {
+        match fatal {
+            Some(e) => {
+                tracing::warn!(error = %e, "jev: scoring paused");
+                h.paused_until = Some(Instant::now() + FAIL_BACKOFF);
+                h.last_error = Some(e.to_string());
+            }
+            None => {
+                h.paused_until = None;
+                h.last_error = None;
+            }
+        }
+    }
+}
+
+/// The stored TypeSafe key, when there is a usable one.
+pub(crate) fn api_key() -> Option<String> {
+    match crate::secrets::get(SECRET_KEY) {
+        Ok(Some(k)) if !k.trim().is_empty() => Some(k.trim().to_string()),
+        _ => None,
+    }
+}
+
 /// Serializes recomputes (short). Scoring has its own lock, so a star or a
 /// new deal reaches the list without waiting for a scoring pass.
 fn recompute_lock() -> &'static tokio::sync::Mutex<()> {
@@ -914,6 +986,8 @@ fn scoring_lock() -> &'static tokio::sync::Mutex<()> {
 static QUEUED: AtomicBool = AtomicBool::new(false);
 /// A delayed look for messages waiting on their bodies is armed.
 static RECHECK_ARMED: AtomicBool = AtomicBool::new(false);
+/// A run found the scoring lock busy and skipped its scoring.
+static MISSED: AtomicBool = AtomicBool::new(false);
 
 fn now_ts() -> i64 {
     std::time::SystemTime::now()
@@ -938,11 +1012,15 @@ pub fn schedule(app: AppHandle) {
             QUEUED.store(false, Ordering::SeqCst);
             settle(&app, recompute_with(&app).await).await;
         }
-        // One scoring pass at a time; a busy one will see this event's mail
-        // on its own next look, or the next event's.
-        let Ok(_scoring) = scoring_lock().try_lock() else {
+        // One scoring pass at a time. A run that finds one busy leaves a
+        // note, and the busy one runs again when it is done (v1.1.19, D70:
+        // with the reply pass the lock is held longer, and new mail would
+        // otherwise wait for the next event).
+        let Ok(scoring) = scoring_lock().try_lock() else {
+            MISSED.store(true, Ordering::SeqCst);
             return;
         };
+        MISSED.store(false, Ordering::SeqCst);
         let db = app.state::<AppState>().db.clone();
         let (scored, waiting) = score_new(&db).await;
         if scored > 0 {
@@ -950,9 +1028,21 @@ pub fn schedule(app: AppHandle) {
             let _guard = recompute_lock().lock().await;
             settle(&app, recompute_with(&app).await).await;
         }
-        // A full pass means more is waiting (the 90-day backfill): go on
-        // without waiting for the next mail event.
-        if scored as i64 >= PASS_LIMIT {
+        // v1.1.19 (D70): then the reply question, under the same lock, so the
+        // two never share TypeSafe's rate limit at once.
+        let (replied, reply_waiting) = crate::fork::replies::score_new(&db).await;
+        if replied > 0 {
+            let _ = app.emit(crate::fork::replies::EVT_UPDATED, json!({}));
+        }
+        let waiting = waiting || reply_waiting;
+        drop(scoring);
+        // A full pass means more is waiting (the 90-day backfill), and a
+        // missed run has mail this pass may not have seen: go on without
+        // waiting for the next mail event.
+        if scored as i64 >= PASS_LIMIT
+            || replied as i64 >= crate::fork::replies::PASS_LIMIT
+            || MISSED.swap(false, Ordering::SeqCst)
+        {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -1022,17 +1112,11 @@ async fn recompute_with(app: &AppHandle) -> Recomputed {
 /// Score what is new, when on, keyed, under the cap and not paused. Returns
 /// how many answers were stored and whether messages wait on their bodies.
 async fn score_new(db: &Db) -> (usize, bool) {
-    if health()
-        .lock()
-        .ok()
-        .and_then(|h| h.paused_until)
-        .is_some_and(|until| Instant::now() < until)
-    {
+    if paused() {
         return (0, false);
     }
-    let api_key = match crate::secrets::get(SECRET_KEY) {
-        Ok(Some(k)) if !k.trim().is_empty() => k.trim().to_string(),
-        _ => return (0, false),
+    let Some(api_key) = api_key() else {
+        return (0, false);
     };
     let now = now_ts();
     let day = today();
@@ -1061,20 +1145,8 @@ async fn score_new(db: &Db) -> (usize, bool) {
     if scan.candidates.is_empty() {
         return (0, waiting);
     }
-    let (answers, fatal) = score_all(&api_key, scan.candidates, &question).await;
-    if let Ok(mut h) = health().lock() {
-        match &fatal {
-            Some(e) => {
-                tracing::warn!(error = %e, "priority: scoring paused");
-                h.paused_until = Some(Instant::now() + FAIL_BACKOFF);
-                h.last_error = Some(e.clone());
-            }
-            None => {
-                h.paused_until = None;
-                h.last_error = None;
-            }
-        }
-    }
+    let (answers, fatal) = score_all(&api_key, scan.candidates, &Ask::priority(question)).await;
+    note_health(fatal.as_deref());
     let n = answers.len();
     if n > 0 {
         if let Err(e) = db
@@ -1195,7 +1267,7 @@ pub async fn fork_priority_set_key(app: AppHandle, key: String) -> Result<()> {
             preview: String::new(),
         };
         if let Err(ScoreErr::Account(e) | ScoreErr::Message(e)) =
-            score_one(&key, &probe, &question(None)).await
+            score_one(&key, &probe, &Ask::priority(question(None))).await
         {
             return Err(SkimError::other(
                 "priority",

@@ -21,6 +21,8 @@ export function archiveOffered(role: string | null | undefined): boolean {
   // v1.1.3: not in Deals either. Its rows span every folder, so Archive would
   // act on the Sent and Important copies too (D56).
   if (mail.dealsView) return false;
+  // v1.1.19 (D70): nor in To reply, for the same reason.
+  if (mail.courtView === "to_reply") return false;
   return !(role && NO_ARCHIVE_ROLES.has(role));
 }
 

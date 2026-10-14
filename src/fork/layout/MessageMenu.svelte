@@ -6,6 +6,8 @@
   import { mail } from "../../lib/stores/mail.svelte";
   import { dealsStore } from "../deals/store.svelte";
   import { trainPriority } from "../priority/train";
+  import { replies } from "../replies/store.svelte";
+  import { markDone, markNeeds } from "../replies/toggle";
   const inbox = $derived(mail.selectedFolder?.role === "inbox");
   let { thread, x, y, onclose }: { thread: ThreadRow; x: number; y: number; onclose: () => void } = $props();
   let menu: HTMLDivElement;
@@ -27,6 +29,7 @@
         : event.key === "Delete" ? "delete"
         : event.key.toLowerCase() === "e" && archiveOffered(mail.selectedFolder?.role) ? "archive" : undefined;
       if (action) { event.preventDefault(); run(action); return; }
+      if (event.key.toLowerCase() === "d") { event.preventDefault(); const target = thread; close(); void (replies.has(target.id) ? markDone(target) : markNeeds(target)); return; }
     }
     if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); close(); }
     if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
@@ -40,11 +43,16 @@
   }
 </script>
 <svelte:window onpointerdown={(event) => { if (!menu?.contains(event.target as Node)) close(); }} onblur={close} />
-<div class="message-menu" role="menu" tabindex="-1" bind:this={menu} style:left={`${Math.min(x, window.innerWidth - 230)}px`} style:top={`${Math.min(y, window.innerHeight - 260)}px`}>
+<div class="message-menu" role="menu" tabindex="-1" bind:this={menu} style:left={`${Math.min(x, window.innerWidth - 230)}px`} style:top={`${Math.min(y, window.innerHeight - 310)}px`}>
   <button role="menuitem" class="deal-action" onclick={addDeal}>{t("fork.deals.add")}</button>
   <button role="menuitem" onclick={() => run("toggle_star")}>{t(thread.isStarred ? "reading.unstar" : "reading.star")}<kbd>S</kbd></button>
   <button role="menuitem" onclick={() => run("toggle_read")}>{t(thread.isRead ? "reading.mark_unread" : "reading.mark_read")}<kbd>U</kbd></button>
   {#if archiveOffered(mail.selectedFolder?.role)}<button role="menuitem" onclick={() => run("archive")}>{t("reading.archive")}<kbd>E</kbd></button>{/if}
+  {#if replies.has(thread.id)}
+    <button role="menuitem" onclick={() => { const target = thread; close(); void markDone(target); }}>{t("fork.replies.menu_done")}<kbd>D</kbd></button>
+  {:else}
+    <button role="menuitem" onclick={() => { const target = thread; close(); void markNeeds(target); }}>{t("fork.replies.menu_needs")}<kbd>D</kbd></button>
+  {/if}
   {#if inbox}
     <button role="menuitem" onclick={() => { const target = thread; close(); void trainPriority(target, true); }}>{t("fork.priority.menu_always")}<kbd>+</kbd></button>
     <button role="menuitem" onclick={() => { const target = thread; close(); void trainPriority(target, false); }}>{t("fork.priority.menu_never")}<kbd>-</kbd></button>

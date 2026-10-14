@@ -7,6 +7,7 @@ import { goState } from "./stores/go.svelte";
 import { prefs } from "./stores/prefs.svelte";
 import { undo } from "./stores/undo.svelte";
 import { trainPriority } from "./priority/train";
+import { replyKey } from "./replies/toggle";
 
 /** Where `g` can go. Order is the order the hint shows them in. */
 export const GO_TARGETS: { key: string; code: string; label: string; role?: string }[] = [
@@ -18,6 +19,8 @@ export const GO_TARGETS: { key: string; code: string; label: string; role?: stri
   { key: "c", code: "KeyC", label: "fork.nav.calendar" },
   // v1.1.3: e for dEals; d was already Drafts.
   { key: "e", code: "KeyE", label: "fork.nav.deals" },
+  // v1.1.19 (D70): r for To Reply.
+  { key: "r", code: "KeyR", label: "fork.nav.to_reply" },
 ];
 
 const GO_WINDOW_MS = 1000;
@@ -53,6 +56,9 @@ export function goTo(key: string): void {
       return;
     case "e":
       navHooks.deals?.();
+      return;
+    case "r":
+      navHooks.toReply?.();
       return;
     default: {
       const target = GO_TARGETS.find((t) => t.key === key);
@@ -118,6 +124,16 @@ export function forkKey(e: KeyboardEvent): boolean {
     if (row) {
       e.preventDefault();
       void trainPriority(row, e.key !== "-");
+      return true;
+    }
+  }
+  // v1.1.19 (D70): d, To reply: done in the view, add elsewhere (replyKey).
+  // (g d, Drafts, is caught above.)
+  if (!e.shiftKey && e.code === "KeyD" && mail.selectedThreadId !== null) {
+    const row = mail.threads.find((r) => r.id === mail.selectedThreadId);
+    if (row) {
+      e.preventDefault();
+      void replyKey(row);
       return true;
     }
   }

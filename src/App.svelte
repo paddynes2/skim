@@ -32,6 +32,7 @@
   import ScheduledList from "./fork/scheduled/ScheduledList.svelte";
   import { SCHEDULED_FOLDER_ID } from "./fork/compose/api";
   import { dealsStore } from "./fork/deals/store.svelte";
+  import { startReplies } from "./fork/replies/toggle";
   import CalendarView from "./fork/calendar/CalendarView.svelte";
   import SlotsPopover from "./fork/slots/SlotsPopover.svelte";
   import { calendar } from "./fork/calendar/store.svelte";
@@ -60,18 +61,20 @@
   // Mount-once: `untrack` so the effect never subscribes to what the stores
   // read while starting (they write state, which would re-run the effect).
   $effect(() => {
-    const [stopCourt, stopCalendar] = untrack(() => {
+    const [stopCourt, stopCalendar, stopReplies] = untrack(() => {
       stopPrepReminder = startPrepReminder();
       // Fork (v1.1.3): Deals replaces Snooze / Follow-ups, which replaced the
       // court views (Patrick used none of them). The court table still feeds
       // the MCP `list_court` tool.
       // Fork (7): calendar hooks (g c, m), calendar:* listeners, next-event chip.
-      return [dealsStore.start(), calendar.start()] as const;
+      // Fork (v1.1.19, D70): To reply (g r, the count).
+      return [dealsStore.start(), calendar.start(), startReplies()] as const;
     });
     return () => {
       stopPrepReminder?.();
       stopCourt();
       stopCalendar?.();
+      stopReplies();
     };
   });
 

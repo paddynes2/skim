@@ -13,6 +13,7 @@
         return mail.folders.some((f) => f.role === g.role || (g.role === "archive" && f.role === "all"));
       if (g.key === "c") return !!navHooks.calendar;
       if (g.key === "e") return !!navHooks.deals;
+      if (g.key === "r") return !!navHooks.toReply;
       return !!navHooks.court;
     }),
   );

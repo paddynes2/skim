@@ -302,6 +302,13 @@ export function invoke<T = any>(cmd: string, args: any = {}): Promise<T> {
       return ok(forkCourtCounts());
     case "fork_court_recompute":
       return ok(undefined);
+    // ---- v1.1.19 To reply (D70): the On me fixture stands in ----
+    case "fork_replies_list":
+      return ok(forkCourtList("on_me", args.offset ?? 0));
+    case "fork_replies_state":
+      return ok({ ids: forkCourtList("on_me", 0).map((r: any) => r.id), off: null });
+    case "fork_replies_mark":
+      return ok(null);
     // ---- v1.1.3 deals ----
     case "fork_deals_catalog": return ok(forkDealsCatalog());
     case "fork_deals_preview_scope": return ok(forkDealsPreviewScope(args.input));

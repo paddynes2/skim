@@ -12,6 +12,7 @@
   // Fork (10): the court views' header and per-row age + reason badge.
   import CourtRow from "../fork/court/CourtRow.svelte";
   import type { CourtRow as CourtRowShape } from "../fork/court/types";
+  import { replies } from "../fork/replies/store.svelte";
   // Fork (v1.1.3): Deals header and per-row deal name.
   import DealBadge from "../fork/deals/DealBadge.svelte";
   import type { DealRow } from "../fork/deals/api";
@@ -225,10 +226,20 @@
            order (oldest first) and how many, since the filter chips do not
            apply here (the view is its own filter). -->
       <div class="court-head">
-        <h1>{t(mail.courtView === "on_me" ? "fork.nav.on_me" : "fork.nav.waiting")}</h1>
-        <span class="court-sub">
-          {t(mail.courtView === "on_me" ? "fork.court.sub_on_me" : "fork.court.sub_waiting", { n: mail.threads.length })}
-        </span>
+        {#if mail.courtView === "to_reply"}
+          <!-- v1.1.19 (D70): To reply. Newest first; D marks one done. -->
+          <h1>{t("fork.nav.to_reply")}</h1>
+          <span class="court-sub">{t("fork.replies.sub", { n: replies.count })}</span>
+          {#if replies.off}
+            <!-- The Jev check cannot run: say so, so an empty list is not read as nothing owed. -->
+            <span class="court-sub replies-off" role="status">{t(`fork.replies.off_${replies.off}`)}</span>
+          {/if}
+        {:else}
+          <h1>{t(mail.courtView === "on_me" ? "fork.nav.on_me" : "fork.nav.waiting")}</h1>
+          <span class="court-sub">
+            {t(mail.courtView === "on_me" ? "fork.court.sub_on_me" : "fork.court.sub_waiting", { n: mail.threads.length })}
+          </span>
+        {/if}
       </div>
       {#if mail.threads.length > 0}
         <span class="nav-hint" title="{t('shortcuts.next')} · {t('shortcuts.prev')}">
@@ -321,6 +332,8 @@
         {:else if mail.dealsView && dealsStore.loaded && dealsStore.text.trim() === ""}
           <!-- Fork (v1.1.3): an empty list says where the deals come from. -->
           <button class="retry" onclick={() => ui.openSettings()}>{t("fork.deals.empty")}</button>
+        {:else if mail.courtView === "to_reply"}
+          {t("fork.replies.empty")}
         {:else}
           {mail.syncState === "syncing" ? t("sync.syncing") : t("list.empty")}
         {/if}
@@ -532,6 +545,13 @@
     text-transform: uppercase;
     color: var(--text-faint);
     white-space: nowrap;
+  }
+  /* v1.1.19 (D70): a sentence, in the amber the court age already uses. */
+  .court-sub.replies-off {
+    white-space: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--acct-2);
   }
   .court-wrap {
     position: relative;

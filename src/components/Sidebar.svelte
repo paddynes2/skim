@@ -16,6 +16,10 @@
   import { dealsCount } from "../fork/deals/count.svelte";
   import { dealsStore } from "../fork/deals/store.svelte";
   import { labelPrefs } from "../fork/labels.svelte";
+  // Fork (v1.1.19, D70): To reply, under the Inbox.
+  import { VF_TO_REPLY } from "../fork/replies/api";
+  import { replies } from "../fork/replies/store.svelte";
+  import { openToReply } from "../fork/replies/toggle";
 
   async function compose() {
     const draft = await api.createDraft(await mail.composeAccountId());
@@ -102,6 +106,21 @@
       {#each mainFolders.filter((f) => f.role === "inbox") as folder (folder.id)}
         {@render folderRow(folder)}
       {/each}
+      <!-- Fork (v1.1.19, D70): To reply, the conversations waiting on a reply.
+           The count is every one of them, read or not. -->
+      <button
+        class="item court"
+        class:selected={ui.view === "mail" && mail.selectedFolderId === VF_TO_REPLY}
+        onclick={openToReply}
+        title={collapsed ? t("fork.nav.to_reply") : undefined}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M6.5 4L2.5 8l4 4" />
+          <path d="M2.5 8h7a4 4 0 0 1 4 4v1" />
+        </svg>
+        <span class="name">{t("fork.nav.to_reply")}</span>
+        {#if replies.count > 0}<span class="count">{replies.count}</span>{/if}
+      </button>
       <button
         class="item calendar"
         class:selected={ui.view === "calendar"}

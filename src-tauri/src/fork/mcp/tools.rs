@@ -102,10 +102,12 @@ pub fn definitions() -> Vec<Value> {
         ),
         tool(
             "list_court",
-            "Ball-in-court threads: `on_me` (someone else spoke last and it looks like it needs \
-             a reply) or `waiting` (the user spoke last). Oldest first, with the age in days.",
+            "Ball-in-court threads: `on_me` (someone else spoke last), `waiting` (the user \
+             spoke last), or `to_reply` (the To reply list: conversations that need a reply \
+             from the user, newest first). `on_me` and `waiting` are oldest first. Each \
+             thread has its age in days.",
             json!({
-                "state": { "type": "string", "enum": ["on_me", "waiting"], "default": "on_me" },
+                "state": { "type": "string", "enum": ["on_me", "waiting", "to_reply"], "default": "on_me" },
                 "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 },
             }),
             &[],
@@ -456,18 +458,30 @@ async fn list_unread(server: &Server, a: &Args<'_>) -> ToolResult {
     Ok(json!({ "count": rows.len(), "threads": rows }))
 }
 
+/// `list_court` state for the To reply list (v1.1.19, D70).
+const TO_REPLY: &str = "to_reply";
+
 async fn list_court(server: &Server, a: &Args<'_>) -> ToolResult {
     let state = a
         .opt_str("state")
         .unwrap_or_else(|| court::STATE_ON_ME.to_string());
-    if state != court::STATE_ON_ME && state != court::STATE_WAITING {
-        return Err(ToolError::Input("`state` must be on_me or waiting".into()));
+    if state != court::STATE_ON_ME && state != court::STATE_WAITING && state != TO_REPLY {
+        return Err(ToolError::Input(
+            "`state` must be on_me, waiting or to_reply".into(),
+        ));
     }
     let limit = a.int("limit", 50)?.clamp(1, 200);
     let now = Utc::now().timestamp();
+    let cache = server.deals.clone();
     let rows = server
         .db
         .read("mcp_list_court", move |conn| {
+            if state == TO_REPLY {
+                // The same set as the To reply view.
+                let deals = cache.membership(conn)?.1.keys().copied().collect();
+                let m = crate::fork::replies::members(conn, &deals, now)?;
+                return crate::fork::replies::list(conn, &m, 0, limit);
+            }
             let floor = court::window_floor(conn, chrono::Utc::now().timestamp())?;
             court::list_since(conn, &state, floor, 0, limit)
         })
@@ -1059,11 +1073,26 @@ mod tests {
             conn.execute(
                 "INSERT OR REPLACE INTO settings (key, value) VALUES ('fork_court_window_days', 'all')",
                 [],
+            )?;
+            // To reply (D70): the user marked the waiting thread as owing a
+            // reply; the on_me one has no reply score, so it is not listed.
+            conn.execute(
+                &format!(
+                    "INSERT INTO fork_reply_mark (thread_id, msg_key, mark, marked_at)
+                     SELECT ?1, {}, 'needs', 0 FROM messages m WHERE m.id = ?2",
+                    crate::fork::priority::msg_key("m")
+                ),
+                rusqlite::params![threads[0], ids[3]],
             )
             .map(|_| ())
         })
         .unwrap();
         let (url, _stop) = spawn(db, TOKEN).await;
+        let r = call(&url, TOKEN, "list_court", json!({ "state": "to_reply" })).await;
+        let s = &r["structuredContent"];
+        assert_eq!(s["count"], 1, "{s}");
+        assert_eq!(s["threads"][0]["thread_id"], threads[0]);
+        assert_eq!(s["threads"][0]["reason"], "marked");
         let r = call(&url, TOKEN, "list_court", json!({})).await;
         let s = &r["structuredContent"];
         assert_eq!(s["count"], 1, "{s}");

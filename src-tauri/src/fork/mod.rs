@@ -23,6 +23,7 @@ pub mod prefetch;
 pub mod prep;
 pub mod priority;
 pub mod reminders;
+pub mod replies;
 pub mod restore;
 pub mod scheduler;
 pub mod search_query;

@@ -93,6 +93,9 @@ pub struct Server {
     pub(crate) db: Db,
     token: Arc<String>,
     hooks: Option<Arc<dyn Hooks>>,
+    /// v1.1.19 (D70): Deals membership for `list_court` `to_reply`, kept for
+    /// the server's life so a call rescans only after mail changed.
+    pub(crate) deals: Arc<crate::fork::deals::Cache>,
 }
 
 impl Server {
@@ -101,6 +104,7 @@ impl Server {
             db,
             token: Arc::new(token),
             hooks,
+            deals: Arc::default(),
         }
     }
 
