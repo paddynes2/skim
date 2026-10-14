@@ -246,4 +246,4 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/components/ShortcutsOverlay.svelte` | list keys | `G R` in the go-to row, `D` for To reply | D70 |
 | `src/App.svelte` | mount effect, imports | `startReplies()` (g r, palette row, first count) | D70 |
 | `src/lib/i18n/locales/en.json` | `fork.nav.to_reply`, `fork.replies.*`, `fork.shortcuts.to_reply` | To reply copy | D70 |
-| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.19 | Signed local release |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.19, 1.1.20 | Signed local release |

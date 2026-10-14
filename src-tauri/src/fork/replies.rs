@@ -19,9 +19,10 @@
 //!   - a local reply draft was saved on it at or after that message (an older
 //!     draft is a leftover: the reply may have gone out from Gmail or the
 //!     phone, which never deletes Skim's draft row); or
-//!   - it is not calendar mail, the sender is authenticated and not on the
-//!     exclude list, and it is a Deals conversation, or Jev scored the last
-//!     message at or above the threshold (`fork_reply_threshold`), or Jev was
+//!   - it is not calendar mail or a sign-in or reset notice, the sender is
+//!     authenticated and not on the exclude list, and Jev scored the last
+//!     message at or above the threshold (`fork_reply_threshold`), or at or
+//!     above [`DEAL_FLOOR`] in a Deals conversation, or Jev was
 //!     asked and gave no usable answer (listed as "not checked": a missed
 //!     reply costs more than a wrong row).
 //!
@@ -71,6 +72,12 @@ const USED_KEY: &str = "fork_reply_used";
 
 /// Fitted on the owner's mail (module comment): 0.5 would drop 13 of the 49.
 pub const THRESHOLD_DEFAULT: f64 = 0.4;
+/// The bar for a Deals conversation: lower, not none. On the owner's mailbox
+/// on October 14 (1.1.19 live check) "always" listed 32 Deals rows, 8 of them
+/// notices (a signature receipt at 0.06, a portal login at 0.07, an
+/// auto-acknowledgement at 0.31); at 0.2 the people's mail stays (0.23 to
+/// 0.36) and the receipts go.
+pub const DEAL_FLOOR: f64 = 0.2;
 /// Messages asked about per local day. The first fill is about 160.
 pub const DAILY_CAP: i64 = 500;
 /// Messages per pass; a full pass asks `priority::schedule` to run again.
@@ -177,10 +184,11 @@ pub fn decide(
                     Some(REASON_DRAFT)
                 } else if excluded(&r.from_addr, exclude)
                     || is_calendar(&r.subject, &r.from_addr)
+                    || is_sensitive(&r.subject, "")
                     || !authenticated(&r.spf, &r.dkim, &r.dmarc)
                 {
                     continue;
-                } else if deals.contains(&r.thread_id) {
+                } else if deals.contains(&r.thread_id) && r.score.is_some_and(|s| s >= DEAL_FLOOR) {
                     Some(TAG_DEAL)
                 } else if r.score.is_some_and(|s| s >= threshold) {
                     None
@@ -694,15 +702,28 @@ mod tests {
     }
 
     #[test]
-    fn drafts_and_deals_are_in_without_a_score() {
+    fn a_draft_needs_no_score_and_a_deal_needs_a_lower_one() {
         let draft = Row {
             reason: Some(REASON_DRAFT.into()),
             fresh_draft: true,
             ..r(1, None)
         };
-        let out = run(&[draft, r(7, None)]);
+        let out = run(&[draft]);
         assert_eq!(out.get(&1), Some(&Some(REASON_DRAFT)));
-        assert_eq!(out.get(&7), Some(&Some(TAG_DEAL)));
+        assert_eq!(
+            run(&[r(7, Some(DEAL_FLOOR))]).get(&7),
+            Some(&Some(TAG_DEAL))
+        );
+        assert_eq!(run(&[r(7, Some(0.5))]).get(&7), Some(&Some(TAG_DEAL)));
+        assert!(
+            run(&[r(7, Some(0.19))]).is_empty(),
+            "a receipt in a deal thread"
+        );
+        assert!(run(&[r(7, None)]).is_empty(), "not judged yet");
+        assert!(
+            run(&[r(8, Some(0.3))]).is_empty(),
+            "0.3 is not enough outside Deals"
+        );
     }
 
     #[test]
@@ -726,17 +747,21 @@ mod tests {
     fn deals_never_list_calendar_unauthenticated_or_excluded_mail() {
         let invite = Row {
             subject: "Accepted: Call with Patrick".into(),
-            ..r(7, None)
+            ..r(7, Some(0.9))
         };
         let spoof = Row {
             dmarc: "fail".into(),
-            ..r(7, None)
+            ..r(7, Some(0.9))
         };
         let excluded = Row {
             from_addr: "ops@alerts.com".into(),
-            ..r(7, None)
+            ..r(7, Some(0.9))
         };
-        for row in [invite, spoof, excluded] {
+        let reset = Row {
+            subject: "[Portal] Password Reset".into(),
+            ..r(7, Some(0.9))
+        };
+        for row in [invite, spoof, excluded, reset] {
             assert!(run(&[row]).is_empty());
         }
     }
