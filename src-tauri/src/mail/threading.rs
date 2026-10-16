@@ -127,12 +127,23 @@ pub fn resolve_thread(conn: &Connection, msg: &NewMessage) -> rusqlite::Result<i
         return Ok(target);
     }
 
-    // 2. Subject fallback — only when the message carries no reference data.
+    // 2. Subject fallback — when the message carries no reference data, or
+    // (fork, D71) when it is a reply whose references match nothing we hold.
+    // A Gmail API draft can point at an ancestor the cache never saw; without
+    // this its reply, and every answer to that reply, opened a new thread.
     let no_refs = msg.references.is_empty() && msg.in_reply_to.is_none();
     let subject_norm = msg.subject.as_deref().and_then(normalize_subject);
-    if no_refs {
+    let orphan_reply = !no_refs
+        && msg.subject.as_deref().is_some_and(has_reply_prefix)
+        && is_own_sender(conn, msg.from_addr.as_deref())?;
+    if no_refs || orphan_reply {
         if let Some(ref norm) = subject_norm {
-            if let Some(id) = subject_fallback(conn, msg, norm)? {
+            let found = if no_refs {
+                subject_fallback(conn, msg, norm)?
+            } else {
+                subject_fallback_before(conn, msg, norm, -1)?
+            };
+            if let Some(id) = found {
                 return Ok(id);
             }
         }
@@ -149,6 +160,183 @@ pub fn resolve_thread(conn: &Connection, msg: &NewMessage) -> rusqlite::Result<i
 
 fn normalize_msgid_opt(raw: &str) -> Option<String> {
     normalize_msgid(raw)
+}
+
+/// Fork (D71): whether the message was sent by the user. The orphan rule is
+/// only for the user's own replies: received mail keeps upstream threading.
+fn is_own_sender(conn: &Connection, from: Option<&str>) -> rusqlite::Result<bool> {
+    let Some(from) = from else { return Ok(false) };
+    Ok(crate::fork::court::own_addresses(conn)?.contains(&from.trim().to_ascii_lowercase()))
+}
+
+/// Fork (D71): whether a subject carries a reply or forward prefix, so it
+/// names a conversation that already exists.
+pub fn has_reply_prefix(subject: &str) -> bool {
+    match normalize_subject(subject) {
+        Some(norm) => {
+            norm != subject
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .to_lowercase()
+        }
+        None => false,
+    }
+}
+
+/// thread_id, account_id, subject, from_addr, to_addrs, cc_addrs, date.
+type FirstRow = (
+    i64,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    i64,
+);
+
+/// Fork (D71): one-time repair for conversations split before the orphan
+/// reply rule. A thread whose oldest message is a reply, whose references
+/// point at nothing outside it, joins the conversation the subject fallback
+/// finds for that message. Returns how many threads were merged.
+pub fn rejoin_split_replies(conn: &Connection) -> rusqlite::Result<usize> {
+    let firsts: Vec<i64> = conn
+        .prepare(
+            "SELECT m.id FROM messages m
+             WHERE m.id = (SELECT m2.id FROM messages m2 WHERE m2.thread_id = m.thread_id
+                           ORDER BY m2.date, m2.id LIMIT 1)
+             ORDER BY m.date",
+        )?
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    let mut merged = 0;
+    for id in firsts {
+        let row: Option<FirstRow> = conn
+            .query_row(
+                "SELECT thread_id, account_id, subject, from_addr, to_addrs, cc_addrs, date
+                 FROM messages WHERE id = ?1",
+                params![id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((thread_id, account_id, subject, from, to_json, cc_json, date)) = row else {
+            continue; // merged away earlier in this pass
+        };
+        let Some(subject) = subject else { continue };
+        if !has_reply_prefix(&subject) || !is_own_sender(conn, from.as_deref())? {
+            continue;
+        }
+        let Some(norm) = normalize_subject(&subject) else {
+            continue;
+        };
+        // References that resolve outside this thread mean it is joined already
+        // or deliberately apart; leave it.
+        let outside: bool = conn
+            .prepare_cached(
+                "SELECT 1 FROM message_refs r
+                 JOIN messages p ON p.account_id = ?2 AND p.message_id = r.ref
+                 WHERE r.message_id IN (SELECT id FROM messages WHERE thread_id = ?1)
+                   AND p.thread_id <> ?1 LIMIT 1",
+            )?
+            .exists(params![thread_id, account_id])?;
+        if outside {
+            continue;
+        }
+        let msg = NewMessage {
+            account_id: account_id.clone(),
+            subject: Some(subject.clone()),
+            from_addr: from,
+            to_addrs: crate::db::queries::addresses_from_json(to_json.as_deref()),
+            cc_addrs: crate::db::queries::addresses_from_json(cc_json.as_deref()),
+            date,
+            ..Default::default()
+        };
+        if let Some(target) = subject_fallback_before(conn, &msg, &norm, thread_id)? {
+            merge_threads(conn, target, thread_id)?;
+            merged += 1;
+        }
+    }
+    Ok(merged)
+}
+
+/// Fork (D71): the stricter fallback for an orphan reply and for the repair.
+/// The candidate must have started before `msg`, must not be `exclude`, and
+/// must share a participant OTHER than the user's own addresses (every
+/// conversation in the mailbox includes the user, so that match proves
+/// nothing).
+fn subject_fallback_before(
+    conn: &Connection,
+    msg: &NewMessage,
+    subject_norm: &str,
+    exclude: i64,
+) -> rusqlite::Result<Option<i64>> {
+    let own = crate::fork::court::own_addresses(conn)?;
+    let mut participants: BTreeSet<String> = BTreeSet::new();
+    if let Some(from) = &msg.from_addr {
+        participants.insert(from.to_lowercase());
+    }
+    for a in msg.to_addrs.iter().chain(msg.cc_addrs.iter()) {
+        participants.insert(a.addr.to_lowercase());
+    }
+    participants.retain(|p| !own.contains(p));
+    if participants.is_empty() {
+        return Ok(None);
+    }
+    let candidates: Vec<i64> = conn
+        .prepare_cached(
+            "SELECT t.id FROM threads t
+             WHERE t.account_id = ?1 AND t.subject_norm = ?2 AND t.id <> ?5
+               AND abs(t.last_date - ?3) <= ?4
+               AND (SELECT min(m.date) FROM messages m WHERE m.thread_id = t.id) <= ?3
+             ORDER BY t.last_date DESC LIMIT 8",
+        )?
+        .query_map(
+            params![
+                msg.account_id,
+                subject_norm,
+                msg.date,
+                SUBJECT_FALLBACK_WINDOW_SECS,
+                exclude
+            ],
+            |r| r.get(0),
+        )?
+        .collect::<Result<_, _>>()?;
+    for thread_id in candidates {
+        let rows: Vec<(Option<String>, Option<String>, Option<String>)> = conn
+            .prepare_cached(
+                "SELECT from_addr, to_addrs, cc_addrs FROM messages WHERE thread_id = ?1",
+            )?
+            .query_map(params![thread_id], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })?
+            .collect::<Result<_, _>>()?;
+        for (from, to_json, cc_json) in rows {
+            if from.is_some_and(|f| participants.contains(&f.to_lowercase())) {
+                return Ok(Some(thread_id));
+            }
+            for json in [to_json, cc_json].into_iter().flatten() {
+                if let Ok(addrs) = serde_json::from_str::<Vec<crate::db::models::Address>>(&json) {
+                    if addrs
+                        .iter()
+                        .any(|a| participants.contains(&a.addr.to_lowercase()))
+                    {
+                        return Ok(Some(thread_id));
+                    }
+                }
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn subject_fallback(
@@ -277,4 +465,151 @@ pub fn recompute_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<b
         params![thread_id, count, last_date, unread, starred, snippet],
     )?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod d71_tests {
+    use super::*;
+    use crate::db::models::Address;
+    use crate::db::{queries, Db};
+
+    const ME: &str = "me@example.com";
+
+    fn seed(conn: &Connection) -> rusqlite::Result<i64> {
+        conn.execute(
+            "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
+             VALUES ('a1', ?1, 'custom', 'imap.example.com', 'smtp.example.com', 0)",
+            params![ME],
+        )?;
+        conn.execute(
+            "INSERT INTO folders (account_id, imap_name, role, display_name, unread_count, sort_order)
+             VALUES ('a1', 'INBOX', 'inbox', 'Inbox', 0, 0)",
+            [],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn msg(
+        folder: i64,
+        uid: u32,
+        id: &str,
+        irt: Option<&str>,
+        subject: &str,
+        from: &str,
+        to: &str,
+        date: i64,
+    ) -> NewMessage {
+        NewMessage {
+            account_id: "a1".into(),
+            folder_id: folder,
+            uid,
+            message_id: Some(format!("<{id}>")),
+            in_reply_to: irt.map(|r| format!("<{r}>")),
+            references: irt.map(|r| vec![format!("<{r}>")]).unwrap_or_default(),
+            subject: Some(subject.into()),
+            from_addr: Some(from.into()),
+            to_addrs: vec![Address {
+                name: None,
+                addr: to.into(),
+            }],
+            date,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn reply_prefix_detection() {
+        assert!(has_reply_prefix("Re: Intro"));
+        assert!(has_reply_prefix("RE:  FW: Intro"));
+        assert!(!has_reply_prefix("Intro"));
+        assert!(!has_reply_prefix("Regarding the intro"));
+    }
+
+    #[test]
+    fn orphan_reply_joins_the_conversation_with_that_person() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            let f = seed(conn)?;
+            let (_, t1) = queries::insert_message(
+                conn,
+                &msg(
+                    f,
+                    1,
+                    "p1",
+                    None,
+                    "Intro | A & B",
+                    "raees@ciba.test",
+                    ME,
+                    100,
+                ),
+            )?
+            .unwrap();
+            // Our reply points at an ancestor the cache never saw.
+            let (_, t2) = queries::insert_message(
+                conn,
+                &msg(
+                    f,
+                    2,
+                    "r1",
+                    Some("unknown"),
+                    "Re: Intro | A & B",
+                    ME,
+                    "raees@ciba.test",
+                    200,
+                ),
+            )?
+            .unwrap();
+            assert_eq!(t1, t2);
+            // A same-subject reply to someone else stays apart: only I am shared.
+            let (_, t3) = queries::insert_message(
+                conn,
+                &msg(
+                    f,
+                    3,
+                    "r2",
+                    Some("unknown2"),
+                    "Re: Intro | A & B",
+                    ME,
+                    "other@x.test",
+                    300,
+                ),
+            )?
+            .unwrap();
+            assert_ne!(t1, t3);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn repair_rejoins_a_split_conversation_and_its_answers() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            let f = seed(conn)?;
+            let (_, t1) = queries::insert_message(conn, &msg(f, 1, "p1", None, "Handover", "jess@cb.test", ME, 100))?.unwrap();
+            // Simulate the old behaviour: our reply and her answer in a thread of their own.
+            conn.execute(
+                "INSERT INTO threads (account_id, subject_norm, last_date, message_count, unread_count, starred)
+                 VALUES ('a1', 'handover', 300, 0, 0, 0)",
+                [],
+            )?;
+            let split = conn.last_insert_rowid();
+            for (uid, id, irt, from, to, date) in [(2, "r1", "ghost", ME, "jess@cb.test", 200), (3, "a1", "r1", "jess@cb.test", ME, 300)] {
+                let (pk, t) = queries::insert_message(conn, &msg(f, uid, id, Some(irt), "Re: Handover", from, to, date))?.unwrap();
+                conn.execute("UPDATE messages SET thread_id = ?1 WHERE id = ?2", params![split, pk])?;
+                if t != split && t != t1 {
+                    conn.execute("DELETE FROM threads WHERE id = ?1", params![t])?;
+                }
+            }
+            recompute_thread(conn, t1)?;
+            recompute_thread(conn, split)?;
+            assert_eq!(rejoin_split_replies(conn)?, 1);
+            let n: i64 = conn.query_row("SELECT count(*) FROM messages WHERE thread_id = ?1", params![t1], |r| r.get(0))?;
+            assert_eq!(n, 3);
+            assert_eq!(rejoin_split_replies(conn)?, 0, "second run finds nothing");
+            Ok(())
+        })
+        .unwrap();
+    }
 }

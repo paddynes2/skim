@@ -47,7 +47,31 @@ pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {
 
 /// Apply every fork migration past the stored version. Idempotent.
 pub fn migrate(conn: &mut Connection) -> Result<()> {
-    migrate_with(conn, FORK_MIGRATIONS)
+    migrate_with(conn, FORK_MIGRATIONS)?;
+    rejoin_once(conn)
+}
+
+/// Settings row set once the D71 split-reply repair has run.
+const REJOIN_KEY: &str = "fork_rejoin_split_replies_v1";
+
+/// Fork (D71): rejoin conversations split before the orphan reply rule, once.
+/// The court pass at startup then re-reads the merged threads.
+fn rejoin_once(conn: &mut Connection) -> Result<()> {
+    let done: bool = conn
+        .prepare("SELECT 1 FROM settings WHERE key = ?1")?
+        .exists([REJOIN_KEY])?;
+    if done {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    let merged = crate::mail::threading::rejoin_split_replies(&tx)?;
+    tx.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params![REJOIN_KEY, merged.to_string()],
+    )?;
+    tx.commit()?;
+    tracing::info!(merged, "rejoined split reply threads");
+    Ok(())
 }
 
 fn migrate_with(conn: &mut Connection, migrations: &[&str]) -> Result<()> {

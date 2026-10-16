@@ -97,7 +97,8 @@ fn merge_when_message_bridges_two_threads() {
         .unwrap();
     db.with(|c| insert_message(c, &msg(2, "<c@x>", &["<z@x>"], "Re: Topic", 3000)).map(|_| ()))
         .unwrap();
-    assert_ne!(thread_of(&db, 1), thread_of(&db, 2));
+    // Fork (D71): an orphan reply now joins by subject and shared participant,
+    // so these two meet early; the bridge below must still leave one thread.
 
     // A message referencing both bridges them into one thread.
     db.with(|c| {

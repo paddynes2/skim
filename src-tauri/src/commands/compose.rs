@@ -586,6 +586,24 @@ pub async fn edit_draft(state: State<'_, AppState>, message_id: i64) -> Result<D
                 .ok()
                 .flatten()
             });
+            // Fork (D71): when the header names nothing we hold, reply to the
+            // newest sent or received message of the conversation the draft
+            // sits in, so the send still carries In-Reply-To/References.
+            let reply_to_id = match reply_to_id {
+                Some(id) => Some(id),
+                None => conn
+                    .query_row(
+                        "SELECT m.id FROM messages d
+                         JOIN messages m ON m.thread_id = d.thread_id AND m.id <> d.id
+                         LEFT JOIN folders f ON f.id = m.folder_id
+                         WHERE d.id = ?1 AND f.role IS NOT 'drafts' AND m.message_id IS NOT NULL
+                           AND m.message_id IS NOT d.message_id AND m.date <= d.date
+                         ORDER BY m.date DESC, m.id DESC LIMIT 1",
+                        rusqlite::params![message_id],
+                        |r| r.get::<_, i64>(0),
+                    )
+                    .optional()?,
+            };
             let mode = if reply_to_id.is_some() {
                 "reply"
             } else {

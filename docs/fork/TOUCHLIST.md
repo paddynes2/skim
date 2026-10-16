@@ -247,3 +247,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/App.svelte` | mount effect, imports | `startReplies()` (g r, palette row, first count) | D70 |
 | `src/lib/i18n/locales/en.json` | `fork.nav.to_reply`, `fork.replies.*`, `fork.shortcuts.to_reply`, `fork.priority.colleagues*` | To reply copy | D70 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.19, 1.1.20, 1.1.21, 1.1.22 | Signed local release |
+| `src-tauri/src/mail/threading.rs` | `resolve_thread` step 2, new `has_reply_prefix`, `is_own_sender`, `subject_fallback_before`, `rejoin_split_replies`, tests `d71_tests` | A sent reply whose references match nothing joins by subject and a shared non-own participant; one-time repair | D71 |
+| `src-tauri/src/mail/threading_tests.rs` | `merge_when_message_bridges_two_threads` | Dropped the precondition that two same-subject replies start apart (they now meet early); the bridge assertion stays | D71 |
+| `src-tauri/src/commands/compose.rs` | `edit_draft` reply link | Unresolved In-Reply-To falls back to the newest message of the draft's conversation | D71 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.23 | Signed local release |
