@@ -4,7 +4,13 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-14.**
+**As of 2026-10-16.**
+
+## Version 1.1.23 (October 16)
+
+**A sent reply joins its conversation** (D71): the owner reported a prospect still listed in To reply after he had answered. An agent-drafted Gmail API reply whose In-Reply-To named nothing in the cache opened its own thread, was reopened as a "new" draft and sent with no reply headers, so the prospect's message stayed unanswered. Now a reply sent from his own address whose references match nothing joins by subject and a shared participant other than himself; a reopened draft with an unresolved parent replies to the newest message of its conversation; a one-time repair at start merged 9 split conversations (setting `fork_rejoin_split_replies_v1` = 9). A dry run on a copy of his mailbox showed 75 merges when received mail was included, so the rule is limited to his own replies.
+
+Installed 10:01 on October 16 (db backed up to `~/.skim-fork/backups/20261016-100036`); the script's silent install left 1.1.22 in place, a second run of the 1.1.23 installer with Skim closed replaced it. Validation: 608 Rust tests (3 new), Clippy, fmt, Svelte check, build. Live: MCP `list_court` `to_reply` 49, down from 52 (the three split conversations). Rollback: install 1.1.22; merged threads stay merged (harmless).
 
 ## Version 1.1.22 (October 14)
 
