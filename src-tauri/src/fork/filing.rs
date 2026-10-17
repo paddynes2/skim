@@ -84,10 +84,21 @@ they must act on (a payment problem, a security alert, a legal or tax deadline, 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule {
-    /// The folder name, lowercased: the rule's identity in the tables.
+    /// The folder name, lowercased: the rule's identity in the log and the
+    /// never list.
     pub key: String,
+    /// What Jev's answers are stored under: the key plus a hash of the
+    /// description, so editing a description asks Jev again.
+    pub score_key: String,
     pub folder: String,
     pub description: String,
+}
+
+fn score_key(key: &str, description: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(description.as_bytes());
+    let hex: String = hash.iter().take(6).map(|b| format!("{b:02x}")).collect();
+    format!("{key}\u{1f}{hex}")
 }
 
 /// System folder names a rule may not take: the move would delete, train
@@ -135,6 +146,7 @@ pub fn parse_rules(text: &str) -> Vec<Rule> {
             continue;
         }
         out.push(Rule {
+            score_key: score_key(&key, description),
             key,
             folder: folder.to_string(),
             description: description.to_string(),
@@ -192,7 +204,7 @@ pub fn best<'a>(
 ) -> Option<(&'a Rule, f64)> {
     let mut pick: Option<(&Rule, f64)> = None;
     for r in rules {
-        if let Some(Some(s)) = scores.get(&r.key) {
+        if let Some(Some(s)) = scores.get(&r.score_key) {
             if *s >= bar && pick.is_none_or(|(_, b)| *s > b) {
                 pick = Some((r, *s));
             }
@@ -576,7 +588,9 @@ fn questions(
         let missing: Vec<usize> = rules
             .iter()
             .enumerate()
-            .filter(|(_, r)| !scores.contains_key(&r.key) && !guard.refused_by(r, &n.from_addr))
+            .filter(|(_, r)| {
+                !scores.contains_key(&r.score_key) && !guard.refused_by(r, &n.from_addr)
+            })
             .map(|(i, _)| i)
             .collect();
         if missing.is_empty() || guard.kept(conn, &n)?.is_some() {
@@ -683,7 +697,7 @@ pub async fn score_new(app: &AppHandle) -> (usize, bool) {
         let n = answers.len();
         if n > 0 {
             let day = day.clone();
-            let key = rule.key.clone();
+            let key = rule.score_key.clone();
             if let Err(e) = db
                 .call(move |conn| store_scores(conn, &key, &answers, &day, now))
                 .await
@@ -1116,17 +1130,23 @@ mod tests {
     #[test]
     fn best_needs_the_bar_and_takes_the_higher() {
         let rules = parse_rules("A: a\nB: b\n");
+        let (a, b) = (rules[0].score_key.clone(), rules[1].score_key.clone());
         let mut s = HashMap::new();
-        s.insert("a".to_string(), Some(0.69));
-        s.insert("b".to_string(), None);
+        s.insert(a.clone(), Some(0.69));
+        s.insert(b.clone(), None);
         assert!(best(&rules, &s, 0.7).is_none());
-        s.insert("a".to_string(), Some(0.8));
-        s.insert("b".to_string(), Some(0.9));
+        s.insert("a".to_string(), Some(0.95));
+        assert!(
+            best(&rules, &s, 0.7).is_none(),
+            "scored under another description"
+        );
+        s.insert(a.clone(), Some(0.8));
+        s.insert(b.clone(), Some(0.9));
         assert_eq!(
             best(&rules, &s, 0.7).map(|(r, _)| r.key.as_str()),
             Some("b")
         );
-        s.insert("b".to_string(), Some(0.8));
+        s.insert(b.clone(), Some(0.8));
         assert_eq!(
             best(&rules, &s, 0.7).map(|(r, _)| r.key.as_str()),
             Some("a")
@@ -1214,13 +1234,43 @@ mod tests {
     fn score(conn: &Connection, thread: i64, s: f64) {
         conn.execute(
             "INSERT OR REPLACE INTO fork_filing_score (msg_key, rule, score, model, scored_at)
-             VALUES (?1, 'deal flow', ?2, 'm', 0)",
-            params![key_of(conn, thread), s],
+             VALUES (?1, ?2, ?3, 'm', 0)",
+            params![key_of(conn, thread), rule_key(conn), s],
         )
         .unwrap();
     }
 
     const BOT: &str = "notifications@listings.com";
+
+    /// The score key of the one seeded rule.
+    fn rule_key(conn: &Connection) -> String {
+        let text = queries::get_setting(conn, SETTING_RULES).unwrap().unwrap();
+        parse_rules(&text)[0].score_key.clone()
+    }
+
+    #[test]
+    fn editing_a_description_asks_again() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn);
+            let now = 10_000_000;
+            let cache = deals::Cache::default();
+            let t = add(conn, 1, 1, "plain", &[], BOT, now - 10);
+            score(conn, t, 0.9);
+            let rules = parse_rules(&queries::get_setting(conn, SETTING_RULES)?.unwrap());
+            assert!(questions(conn, &cache, &rules, now, 5)?.0[0].1.is_empty());
+            assert_eq!(decide(conn, &cache, now)?.len(), 1);
+            queries::set_setting(conn, SETTING_RULES, "Deal Flow: something else")?;
+            let rules = parse_rules(&queries::get_setting(conn, SETTING_RULES)?.unwrap());
+            assert_eq!(questions(conn, &cache, &rules, now, 5)?.0[0].1.len(), 1);
+            assert!(
+                decide(conn, &cache, now)?.is_empty(),
+                "the old answer no longer counts"
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn only_a_scored_automated_conversation_under_every_guard_files() {

@@ -256,3 +256,4 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/lib/i18n/locales/en.json` | `fork.filing.*`, `fork.threadfiles.*` | Filing settings, filed bar and files strip copy | D72 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.24 | Signed local release |
 | `src-tauri/src/lib.rs` | `invoke_handler` | `fork_filing_*` (4) and `fork_thread_files` registered | D72 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.25 | Signed local release |
