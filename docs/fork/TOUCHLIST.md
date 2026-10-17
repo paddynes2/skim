@@ -251,3 +251,8 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/mail/threading_tests.rs` | `merge_when_message_bridges_two_threads` | Dropped the precondition that two same-subject replies start apart (they now meet early); the bridge assertion stays | D71 |
 | `src-tauri/src/commands/compose.rs` | `edit_draft` reply link | Unresolved In-Reply-To falls back to the newest message of the draft's conversation | D71 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.23 | Signed local release |
+| `src-tauri/src/commands/mail.rs` | `wire_folder_name` | `pub(crate)`, so Filing creates its folder the way Move does | D72 |
+| `src/components/ReadingPane.svelte` | imports, scroll head | `FiledBar` under the Deal status; `ThreadFiles` sticky strip above the conversation tools | D72 |
+| `src/lib/i18n/locales/en.json` | `fork.filing.*`, `fork.threadfiles.*` | Filing settings, filed bar and files strip copy | D72 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.24 | Signed local release |
+| `src-tauri/src/lib.rs` | `invoke_handler` | `fork_filing_*` (4) and `fork_thread_files` registered | D72 |

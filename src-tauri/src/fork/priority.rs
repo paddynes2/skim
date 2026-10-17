@@ -357,16 +357,16 @@ pub struct Candidate {
 #[derive(Debug, Clone)]
 pub struct Ask {
     pub instructions: String,
-    pub yes: &'static str,
-    pub no: &'static str,
+    pub yes: std::borrow::Cow<'static, str>,
+    pub no: std::borrow::Cow<'static, str>,
 }
 
 impl Ask {
     pub fn priority(question: String) -> Self {
         Ask {
             instructions: question,
-            yes: QUESTION_TRUE,
-            no: QUESTION_FALSE,
+            yes: QUESTION_TRUE.into(),
+            no: QUESTION_FALSE.into(),
         }
     }
 }
@@ -1034,13 +1034,17 @@ pub fn schedule(app: AppHandle) {
         if replied > 0 {
             let _ = app.emit(crate::fork::replies::EVT_UPDATED, json!({}));
         }
-        let waiting = waiting || reply_waiting;
+        // v1.1.24 (D72): then Filing's questions, and the moves they decide.
+        let (filed_scored, filing_waiting) = crate::fork::filing::score_new(&app).await;
+        let waiting = waiting || reply_waiting || filing_waiting;
         drop(scoring);
+        crate::fork::filing::apply(&app).await;
         // A full pass means more is waiting (the 90-day backfill), and a
         // missed run has mail this pass may not have seen: go on without
         // waiting for the next mail event.
         if scored as i64 >= PASS_LIMIT
             || replied as i64 >= crate::fork::replies::PASS_LIMIT
+            || filed_scored as i64 >= crate::fork::filing::PASS_LIMIT
             || MISSED.swap(false, Ordering::SeqCst)
         {
             let app = app.clone();

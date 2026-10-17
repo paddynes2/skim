@@ -11,6 +11,7 @@
   import SettingsCourt from "./court/SettingsCourt.svelte";
   import SettingsDeals from "./deals/SettingsDeals.svelte";
   import SettingsPriority from "./priority/SettingsPriority.svelte";
+  import SettingsFiling from "./filing/SettingsFiling.svelte";
   import SettingsCalendar from "./calendar/SettingsCalendar.svelte";
 
   const zoomPct = $derived(Math.round(prefs.zoom * 100));
@@ -158,6 +159,7 @@
 
 <SettingsDeals />
 <SettingsPriority />
+<SettingsFiling />
 <SettingsCourt />
 <SettingsCalendar />
 

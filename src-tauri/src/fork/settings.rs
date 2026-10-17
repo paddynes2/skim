@@ -62,6 +62,12 @@ pub const ALLOWED: &[&str] = &[
     "fork_reply_threshold", // Jev reply yes-probability for To reply, default 0.4
     // v1.1.22
     "fork_colleagues", // one address or domain per line; their answers count in To reply
+    // v1.1.24
+    "fork_filing", // "Folder: description" per line; Jev files matching Inbox mail there
+    "fork_filing_mode", // off | preview | on, default off
+    "fork_filing_never", // one domain or address per line, never filed
+    "fork_filing_threshold", // Jev yes-probability to file, default 0.7, never below 0.5
+    "fork_filing_paused", // why Filing went back to preview; Settings clears it on save
 ];
 
 #[cfg(test)]

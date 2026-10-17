@@ -8,6 +8,8 @@
   import type { MessageMeta, RenderedBody, ThreadDetail, ThreadRow } from "../lib/types";
   import { untrack, tick } from "svelte";
   import ConversationTools from "../fork/reading/ConversationTools.svelte";
+  import ThreadFiles from "../fork/reading/ThreadFiles.svelte";
+  import FiledBar from "../fork/filing/FiledBar.svelte";
   import AiAsk from "./AiAsk.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
   import HtmlViewer from "./HtmlViewer.svelte";
@@ -658,9 +660,11 @@
       {#if mail.selectedThreadId !== null}
         {#key mail.selectedThreadId}
           <DealTool threadId={mail.selectedThreadId} mode="status" />
+          <FiledBar threadId={mail.selectedThreadId} />
         {/key}
       {/if}
 
+      {#key detail.id}<ThreadFiles messages={detail.messages} refreshKey={Object.values(bodies).filter((b) => typeof b === "object").length} loading={bulkLoading} onselect={setFocus} onload={() => void loadRemaining()} />{/key}
       {#key detail.id}<ConversationTools messages={detail.messages} {bodies} loading={bulkLoading} onload={() => void loadRemaining()} onselect={setFocus} onexpand={conversation ? expandAll : undefined} oncollapse={conversation ? collapseAll : undefined} />{/key}
       {#if detailLoading}<div class="refresh-note" role="status">{t("fork.reading.refreshing")}</div>{/if}
       {#if detailError}<div class="refresh-error" role="alert">{detailError}<button onclick={() => loadThread(detail!.id)}>{t("reading.retry")}</button></div>{/if}

@@ -681,7 +681,7 @@ fn message_origin(
 /// (server's hierarchy separator, modified UTF-7) and the display name. Keeping
 /// the two in step is what stops a folder we created or renamed from turning
 /// into a second sidebar row on the next `discover_folders` sweep.
-fn wire_folder_name(
+pub(crate) fn wire_folder_name(
     conn: &rusqlite::Connection,
     account_id: &str,
     typed: &str,

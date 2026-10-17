@@ -11,6 +11,7 @@ pub mod crm;
 pub mod db;
 pub mod deals;
 pub mod estate_reply;
+pub mod filing;
 pub mod flags;
 pub mod fold;
 pub mod freshness;

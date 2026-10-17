@@ -344,3 +344,83 @@ mod tests {
         assert_eq!(image_type(b"\x89PNG\r\n\x1a\nimage"), Some("image/png"));
     }
 }
+
+/// v1.1.24 (D72): the files of a whole conversation, for the strip pinned to
+/// the top of the reading pane.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadFiles {
+    pub files: Vec<crate::db::models::AttachmentMeta>,
+    /// Messages that carry files whose bodies are not downloaded yet.
+    pub pending: Vec<i64>,
+}
+
+/// The real (non-inline) attachments of `message_ids`, newest message first.
+/// A message whose own row has none listed yet borrows them from another
+/// folder copy of the same message (Inbox and All Mail hold one each), still
+/// reported under the given id so the strip can jump to it.
+pub fn thread_files(
+    conn: &rusqlite::Connection,
+    message_ids: &[i64],
+) -> rusqlite::Result<ThreadFiles> {
+    use rusqlite::{params, OptionalExtension};
+    let mut out = ThreadFiles {
+        files: Vec::new(),
+        pending: Vec::new(),
+    };
+    let mut one =
+        conn.prepare_cached("SELECT has_attachments, date FROM messages WHERE id = ?1")?;
+    let mut rows: Vec<(i64, bool, i64)> = Vec::new();
+    for id in message_ids {
+        if let Some((has, d)) = one
+            .query_row(params![id], |r| {
+                Ok((r.get::<_, bool>(0)?, r.get::<_, i64>(1)?))
+            })
+            .optional()?
+        {
+            rows.push((*id, has, d));
+        }
+    }
+    rows.sort_by(|a, b| b.2.cmp(&a.2).then(b.0.cmp(&a.0)));
+    let mut copy = conn.prepare_cached(
+        "SELECT c.id FROM messages m JOIN messages c
+           ON c.account_id = m.account_id AND c.message_id = m.message_id AND c.id <> m.id
+         JOIN folders f ON f.id = c.folder_id
+         WHERE m.id = ?1 AND coalesce(m.message_id, '') <> ''
+           AND coalesce(f.role, '') NOT IN ('trash', 'junk', 'drafts')
+           AND EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = c.id AND a.is_inline = 0)
+         ORDER BY c.id LIMIT 1",
+    )?;
+    for (id, has, _) in rows {
+        let mut files = bodies::list_attachments(conn, id)?;
+        if files.is_empty() {
+            if let Some(other) = copy
+                .query_row(params![id], |r| r.get::<_, i64>(0))
+                .optional()?
+            {
+                files = bodies::list_attachments(conn, other)?;
+                for f in &mut files {
+                    f.message_id = id;
+                }
+            }
+        }
+        if files.is_empty() && has {
+            out.pending.push(id);
+        }
+        out.files.extend(files);
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn fork_thread_files(
+    state: State<'_, AppState>,
+    message_ids: Vec<i64>,
+) -> Result<ThreadFiles> {
+    state
+        .db
+        .read("fork_thread_files", move |conn| {
+            thread_files(conn, &message_ids)
+        })
+        .await
+}

@@ -129,8 +129,8 @@ pub fn ask(about: Option<&str>) -> Ask {
         .unwrap_or(priority::ABOUT_DEFAULT);
     Ask {
         instructions: format!("{about} {QUESTION_REST}"),
-        yes: QUESTION_TRUE,
-        no: QUESTION_FALSE,
+        yes: QUESTION_TRUE.into(),
+        no: QUESTION_FALSE.into(),
     }
 }
 
@@ -257,7 +257,7 @@ impl Company {
         })
     }
 
-    fn inside(&self, addr: &str) -> bool {
+    pub(crate) fn inside(&self, addr: &str) -> bool {
         self.own.contains(&addr.trim().to_ascii_lowercase())
             || domain_of(addr).is_some_and(|d| deals::is_own(&d, &self.domains))
             || excluded(addr, &self.extra)
