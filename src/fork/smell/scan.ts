@@ -194,11 +194,13 @@ export function maskNoise(text: string): string {
 
 /** The RFC 3676 sign-off delimiter the composer puts above a signature, and the
  *  "On … wrote:" attribution above a quoted original: the same two marks
- *  `ComposeForm.splitTail` uses. Returns the user's own words and where they end. */
+ *  `ComposeForm.splitTail` uses (the attribution as `compose/html.ts` `quoteAt`
+ *  finds it: one line ending in "wrote:", so the user's own paragraph starting
+ *  "On" stays in the words). Returns the user's own words and where they end. */
 export function ownWords(body: string): { text: string; end: number } {
   const sig = body.indexOf("\n\n-- \n");
-  const quote = body.indexOf("\n\nOn ");
-  const marks = [sig, quote >= 0 && body.slice(quote).includes(" wrote:\n") ? quote : -1].filter((i) => i >= 0);
+  const quote = /\n\nOn [^\n]* wrote:(?:\n|$)/.exec(body)?.index ?? -1;
+  const marks = [sig, quote].filter((i) => i >= 0);
   const end = marks.length ? Math.min(...marks) : body.length;
   return { text: body.slice(0, end), end };
 }

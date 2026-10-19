@@ -84,6 +84,9 @@ test("ownWords stops at the signature and the quoted original; neither is scanne
   const quoteFirst = "Fine by me.\n\nOn Mon, Jim wrote:\n> x\n\n-- \nsig";
   assert.equal(ownWords(quoteFirst).text, "Fine by me.");
   assert.equal(ownWords("No tail here").end, 12);
+  // D73: a paragraph of the user's own that starts with "On" is not the quote.
+  const onPara = "Hi Bob,\n\nOn the contract, the redline is attached.\n\n-- \nPat\n\nOn Mon, Bob wrote:\n> x";
+  assert.equal(ownWords(onPara).text, "Hi Bob,\n\nOn the contract, the redline is attached.");
 });
 
 test("maskNoise keeps offsets: fences, inline code and > quote lines become spaces", () => {

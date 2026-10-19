@@ -1,6 +1,7 @@
 // Typed wrappers for the Phase 6 IPC commands (src-tauri/src/fork/compose.rs
 // and src-tauri/src/fork/scheduler.rs).
 import { invoke } from "@tauri-apps/api/core";
+import type { DraftSource } from "./html";
 
 /** The "Scheduled" virtual folder id (PLAN.md 6.4). Negative, like the other
  *  virtual folders; -900 is search, -9 Important. */
@@ -31,6 +32,9 @@ export const forkComposeApi = {
   /** The user's own words as HTML, when the rich editor wrote them. */
   draftHtmlGet: (draftId: number) =>
     invoke<string | null>("fork_draft_html_get", { draftId }),
+  /** The server copy a draft was opened from (Gmail, an agent), as stored;
+   *  `null` for a local draft (D73). */
+  draftSource: (draftId: number) => invoke<DraftSource | null>("fork_draft_source", { draftId }),
   /** Store the words as HTML; `null` drops the row (the draft sends as text/plain). */
   draftHtmlSet: (draftId: number, wordsHtml: string | null) =>
     invoke<void>("fork_draft_html_set", { draftId, wordsHtml }),

@@ -93,7 +93,8 @@ a hook call, a parameter, a prop; this table is what makes
 | `src/components/ComposeForm.svelte` | props | `variant?: "default" \| "reply"`, `onPopOut?` | 6.2 inline reply |
 | `src/components/ComposeForm.svelte` | script: rich block after `canPickFrom` | `richMode`, `wordsHtml`/`wordsText`/`tail`, `tailParts`, `onWordsChange`, `onTailInput`, body-change `$effect`, `flushHtml()`; `canPickFrom` also `variant !== "reply"` | 6.3 data model (D5) |
 | `src/components/ComposeForm.svelte` | `discardClick()` + `discardArmed` | two-click Discard | 6.1 |
-| `src/components/ComposeForm.svelte` | load `$effect` | reads `fork_draft_html`, splits the tail; reply variant scrolls into view + focuses | 6.2, 6.3 |
+| `src/components/ComposeForm.svelte` | load `$effect` | reads `fork_draft_html` and the server copy (`fork_draft_source`), picks the words with `openingHtml` and rebuilds the body from them before `loadedShape`, splits the tail; reply variant scrolls into view + focuses | 6.2, 6.3, D73 |
+| `src/components/ComposeForm.svelte` | `splitTail`, `tailParts` | the quote starts at `quoteAt` (an "On … wrote:" line), not at any paragraph starting "On" | D73 |
 | `src/components/ComposeForm.svelte` | `scheduleSave` | `await flushHtml()` after `updateDraft` | 6.3 |
 | `src/components/ComposeForm.svelte` | `send(when?)` | flushes HTML; `api.sendDraft(id, notBefore, label)` with the undo hold (`prefs.undoSendSecs`) or the picked time | 6.4 |
 | `src/components/ComposeForm.svelte` | `sendKey`, `onFormKeydown`, `popOut`, `close`, `onDestroy` | Ctrl/Cmd+Enter sends; Esc on the reply variant; pop-out; window ✕ saves when dirty; reply teardown deletes an untouched draft | 6.1, 6.2 |

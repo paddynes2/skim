@@ -17,7 +17,7 @@
   import RichEditor from "../fork/RichEditor.svelte";
   import SendLater from "../fork/compose/SendLater.svelte";
   import { forkComposeApi } from "../fork/compose/api";
-  import { htmlToText, textToHtml } from "../fork/compose/html";
+  import { htmlToText, openingHtml, quoteAt as quoteStart, textToHtml } from "../fork/compose/html";
   import type { WhenPick } from "../fork/compose/when";
   import { prefs } from "../fork/stores/prefs.svelte";
   // Fork (6.5): AI-tell underlines, health line, send check.
@@ -128,8 +128,7 @@
 
   /** The signature block and the quote, split for the read-only rendering. */
   const tailParts = $derived.by(() => {
-    const q = tail.indexOf("\n\nOn ");
-    const quoteAt = q >= 0 && tail.slice(q).includes(" wrote:\n") ? q : -1;
+    const quoteAt = quoteStart(tail);
     const sigText = quoteAt >= 0 ? tail.slice(0, quoteAt) : tail;
     const quote = quoteAt >= 0 ? tail.slice(quoteAt).replace(/^\n+/, "") : "";
     const sig = sigText.startsWith(SIG_MARK) ? sigText.slice(SIG_MARK.length) : sigText.trim();
@@ -434,10 +433,9 @@
    *  a rewrite: the signature block, the quoted original, or both. The AI
    *  co-author replaces everything above the split and nothing below it. */
   function splitTail(body: string): [string, string] {
-    const quote = body.indexOf("\n\nOn ");
     const marks = [
       body.indexOf(SIG_MARK),
-      quote >= 0 && body.slice(quote).includes(" wrote:\n") ? quote : -1,
+      quoteStart(body),
     ].filter((i) => i >= 0);
     if (marks.length === 0) return [body, ""];
     const idx = Math.min(...marks);
@@ -587,16 +585,22 @@
     void (async () => {
       try {
         const d = await api.getDraft(draftId);
-        // Fork (6.3): the words as HTML, when the rich editor wrote them and
-        // they still say what body_text says (a plain-mode edit elsewhere
-        // wins; the row is rebuilt from the text).
+        // Fork (6.3, D73): the words as HTML. A draft written in Gmail or by an
+        // agent opens from its server copy's HTML (links, lists, bold); one the
+        // rich editor wrote, from its stored HTML while that still says what
+        // body_text says (a plain-mode edit elsewhere wins). The body is
+        // rebuilt from that HTML before `loadedShape` is taken, so opening a
+        // draft is never an edit and never rewrites the server copy.
         richMode = prefs.richText;
         if (richMode) {
           const [w, tl] = splitTail(d.body);
-          wordsText = w;
           tail = tl;
           const stored = await forkComposeApi.draftHtmlGet(draftId).catch(() => null);
-          wordsHtml = typeof stored === "string" && htmlToText(stored) === w ? stored : textToHtml(w);
+          const source =
+            d.originMessageId !== null ? await forkComposeApi.draftSource(draftId).catch(() => null) : null;
+          wordsHtml = openingHtml(w, typeof stored === "string" ? stored : null, source);
+          wordsText = htmlToText(wordsHtml);
+          d.body = wordsText + tl;
         }
         draft = d;
         loadedShape = shapeOf(d);

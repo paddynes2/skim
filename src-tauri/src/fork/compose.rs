@@ -37,7 +37,8 @@ pub fn get_words_html(conn: &Connection, draft_id: i64) -> rusqlite::Result<Opti
 }
 
 /// Store (or, with `None`, drop) the HTML of the user's words. Dropping the
-/// row puts the draft back on the text/plain path.
+/// row puts the draft back on the text/plain path. `rev` 1 marks the row as
+/// this build's, which outranks the draft's server copy (f0017, D73).
 pub fn set_words_html(
     conn: &Connection,
     draft_id: i64,
@@ -46,10 +47,11 @@ pub fn set_words_html(
     match words_html {
         Some(html) => {
             conn.execute(
-                "INSERT INTO fork_draft_html (draft_id, words_html, updated_at)
-                 VALUES (?1, ?2, unixepoch())
+                "INSERT INTO fork_draft_html (draft_id, words_html, updated_at, rev)
+                 VALUES (?1, ?2, unixepoch(), 1)
                  ON CONFLICT(draft_id) DO UPDATE SET words_html = excluded.words_html,
-                                                    updated_at = excluded.updated_at",
+                                                    updated_at = excluded.updated_at,
+                                                    rev = 1",
                 rusqlite::params![draft_id, html],
             )?;
         }
@@ -76,6 +78,52 @@ pub async fn fork_draft_html_get(
         .await
 }
 
+/// The server copy a draft was opened from, as stored. `edit_draft` builds the
+/// draft from the text part only, so a draft written in Gmail or by an agent
+/// lost its links and lists; the composer takes them from `html` (D73).
+#[derive(Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftSource {
+    pub html: Option<String>,
+    pub text: Option<String>,
+}
+
+/// `None` for a local draft, when the server copy has left Drafts, and once
+/// this build has stored the editor's words (`rev` 1): from then on the local
+/// copy holds the user's edits, which a stale server copy must not undo before
+/// the write-back lands (a link removed, then the window popped out).
+pub fn get_draft_source(conn: &Connection, draft_id: i64) -> rusqlite::Result<Option<DraftSource>> {
+    conn.query_row(
+        "SELECT b.body_html, b.body_text FROM drafts d
+         JOIN messages m ON m.id = d.origin_message_id
+         JOIN folders f ON f.id = m.folder_id AND f.role = 'drafts'
+         JOIN message_bodies b ON b.message_id = m.id
+         WHERE d.id = ?1
+           AND NOT EXISTS (SELECT 1 FROM fork_draft_html h WHERE h.draft_id = d.id AND h.rev = 1)",
+        rusqlite::params![draft_id],
+        |r| {
+            Ok(DraftSource {
+                html: r.get(0)?,
+                text: r.get(1)?,
+            })
+        },
+    )
+    .optional()
+}
+
+#[tauri::command]
+pub async fn fork_draft_source(
+    state: State<'_, AppState>,
+    draft_id: i64,
+) -> Result<Option<DraftSource>> {
+    state
+        .db
+        .read("fork_draft_source", move |conn| {
+            get_draft_source(conn, draft_id)
+        })
+        .await
+}
+
 #[tauri::command]
 pub async fn fork_draft_html_set(
     state: State<'_, AppState>,
@@ -98,13 +146,15 @@ fn escape(text: &str) -> String {
 
 /// The attribution line the plain body carries above the quoted original
 /// (`On {date}, {who} wrote:`), so the HTML quote says exactly the same thing.
-/// The composer's `splitTail` finds the quote by this anchor too.
+/// The composer's `quoteAt` finds the quote by this anchor too. The first
+/// such line, not the first paragraph starting "On" (D73: the user's own
+/// "On Tuesday works" hid the quote from the HTML part).
 pub fn attribution_line(body_text: &str) -> Option<&str> {
-    let start = body_text.find("\n\nOn ")? + 2;
-    let rest = &body_text[start..];
-    let end = rest.find('\n').unwrap_or(rest.len());
-    let line = &rest[..end];
-    line.ends_with(" wrote:").then_some(line)
+    body_text.match_indices("\n\nOn ").find_map(|(at, _)| {
+        let rest = &body_text[at + 2..];
+        let line = &rest[..rest.find('\n').unwrap_or(rest.len())];
+        line.ends_with(" wrote:").then_some(line)
+    })
 }
 
 /// Inline images of the quoted original point at the app's own `cid` protocol
@@ -248,6 +298,73 @@ mod tests {
         })
         .unwrap();
     }
+
+    #[test]
+    fn a_draft_source_is_its_server_copy_while_that_is_in_drafts() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            conn.execute_batch(
+                "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)
+                   VALUES ('a1','me@x','gmail','imap.gmail.com','smtp.gmail.com',0);
+                 INSERT INTO folders (id, account_id, imap_name, role, display_name, sort_order)
+                   VALUES (1,'a1','Drafts','drafts','Drafts',0), (2,'a1','Sent','sent','Sent',0);
+                 INSERT INTO messages (id, account_id, folder_id, uid, date, is_read, is_starred)
+                   VALUES (7,'a1',1,1,10,1,0);
+                 INSERT INTO message_bodies (message_id, body_html, body_text)
+                   VALUES (7,'<p>Book <a href=\"https://x.test/\">here</a></p>','Book here');",
+            )?;
+            let d = crate::db::drafts::create_server_draft(
+                conn,
+                "a1",
+                "new",
+                None,
+                "bob@x",
+                "",
+                "",
+                "Hi",
+                "Book here",
+                7,
+                "m@x",
+            )?;
+            assert_eq!(
+                get_draft_source(conn, d.id)?,
+                Some(DraftSource {
+                    html: Some("<p>Book <a href=\"https://x.test/\">here</a></p>".into()),
+                    text: Some("Book here".into()),
+                })
+            );
+            let local = crate::db::drafts::create(conn, "a1", "new", None, "bob@x", "Hi", "x")?;
+            assert_eq!(
+                get_draft_source(conn, local.id)?,
+                None,
+                "a local draft has none"
+            );
+            // A row an older build stored on open (rev 0) leaves the server copy in play.
+            conn.execute(
+                "INSERT INTO fork_draft_html (draft_id, words_html, updated_at)
+                 VALUES (?1, '<div>Book here</div>', 0)",
+                [d.id],
+            )?;
+            assert!(get_draft_source(conn, d.id)?.is_some(), "older row: kept");
+            // Words this build stored are the user's: the server copy no longer
+            // applies, whether the row was updated or newly written.
+            set_words_html(conn, d.id, Some("<div>Book now</div>"))?;
+            assert_eq!(get_draft_source(conn, d.id)?, None, "own row: dropped");
+            set_words_html(conn, d.id, None)?;
+            assert!(get_draft_source(conn, d.id)?.is_some(), "no row: back");
+            set_words_html(conn, d.id, Some("<div>Book soon</div>"))?;
+            assert_eq!(get_draft_source(conn, d.id)?, None, "new own row: dropped");
+            set_words_html(conn, d.id, None)?;
+            conn.execute("UPDATE messages SET folder_id = 2 WHERE id = 7", [])?;
+            assert_eq!(
+                get_draft_source(conn, d.id)?,
+                None,
+                "sent: no longer a draft"
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
     use crate::db::models::Account;
     use crate::mail::smtp::{build_message_with_html, OutgoingRefs};
     use mail_parser::{MessageParser, MimeHeaders};
@@ -299,6 +416,10 @@ mod tests {
             Some("On 2026-09-23 10:00, Bob <bob@x.com> wrote:")
         );
         assert_eq!(attribution_line("Thanks\n\nOn my way home\n"), None);
+        assert_eq!(
+            attribution_line("Fine.\n\nOn Tuesday works\n\nOn Mon, Bob wrote:\n> hi\n"),
+            Some("On Mon, Bob wrote:")
+        );
         assert_eq!(attribution_line("no quote"), None);
     }
 

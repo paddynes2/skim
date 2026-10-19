@@ -495,6 +495,7 @@ pub fn run() {
             fork::smell::fork_smell_rewrite,
             fork::compose::fork_draft_html_get,
             fork::compose::fork_draft_html_set,
+            fork::compose::fork_draft_source,
             fork::scheduler::fork_cancel_scheduled,
             fork::scheduler::fork_scheduled_list,
             fork::scheduler::fork_send_now,
