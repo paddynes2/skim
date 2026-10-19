@@ -26,7 +26,17 @@ export function folderSelected(folder: Folder | null | undefined): void {
   if (current) request(current);
 }
 
+// Fork (D75): coming back from Gmail web is the moment a gap shows, so focus
+// also runs the full sweep. It probes each folder with STATUS and syncs only
+// the ones that moved; at most once per 20 s.
+const SWEEP_EVERY_MS = 20_000;
+let lastSweep = 0;
+
 /** The window regained focus: refresh whichever of Sent/Drafts is open. */
 export function windowFocused(): void {
   if (current) request(current);
+  const now = Date.now();
+  if (now - lastSweep < SWEEP_EVERY_MS) return;
+  lastSweep = now;
+  invoke<void>("sync_now", { accountId: null }).catch(() => {});
 }

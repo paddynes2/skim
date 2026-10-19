@@ -20,6 +20,7 @@
   import { inlineReply } from "../fork/compose/inline.svelte";
   import { prefs } from "../fork/stores/prefs.svelte";
   import { crmFocus } from "../fork/crm/store.svelte";
+  import CopyAddress from "../fork/reading/CopyAddress.svelte";
   import EstateReplyAction from "../fork/estate/ReplyAction.svelte";
   // Fork (v1.1.3): Add to Deals, and the line naming the thread's deal.
   import DealTool from "../fork/deals/DealTool.svelte";
@@ -752,9 +753,9 @@
       <div class="who">
         <div class="from">
           {#if conversation}<button class="sender-select" class:selected={message.id === focused?.id} onclick={() => setFocus(message.id)} title={t(message.id === focused?.id ? "fork.reading.reply_target" : "fork.reading.select_for_reply")}>{isOutgoing(message) ? t("reading.you") : message.from.name ?? message.from.addr}</button>{:else}{message.from.name ?? message.from.addr}{/if}
-          <span class="addr" title={message.from.addr}>&lt;{message.from.addr}&gt;</span>
+          <span class="addr"><CopyAddress addr={message.from.addr} brackets /></span>
         </div>
-        <details class="recipients"><summary>{t("fork.reading.to_label")} {recipients(message)}</summary><div>{#each message.to as person}<p><span>{t("fork.reading.to_label")}</span>{person.name ? `${person.name} <${person.addr}>` : person.addr}</p>{/each}{#each message.cc as person}<p><span>Cc</span>{person.name ? `${person.name} <${person.addr}>` : person.addr}</p>{/each}</div></details>
+        <details class="recipients"><summary>{t("fork.reading.to_label")} {recipients(message)}</summary><div>{#each message.to as person}<p><span>{t("fork.reading.to_label")}</span>{#if person.name}{person.name} {/if}<CopyAddress addr={person.addr} brackets={!!person.name} /></p>{/each}{#each message.cc as person}<p><span>Cc</span>{#if person.name}{person.name} {/if}<CopyAddress addr={person.addr} brackets={!!person.name} /></p>{/each}</div></details>
       </div>
       <time class="date" datetime={new Date(message.date * 1000).toISOString()} title={new Date(message.date * 1000).toLocaleString(getLocale(), {dateStyle:"full",timeStyle:"short"})}>{formatFull(message.date)}</time>
       {#if conversation}<button class="collapse-message" disabled={message.id === inlineMessageId && inlineReply.draftId !== null && inlineReply.threadId === detail?.id} onclick={() => collapseMessage(message.id)} aria-label={t("fork.reading.collapse_message")} title={t("fork.reading.collapse_message")}>&minus;</button>{/if}

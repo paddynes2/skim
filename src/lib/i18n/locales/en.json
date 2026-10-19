@@ -785,6 +785,8 @@
   "fork.shortcuts.cal_prev": "Previous period",
   "fork.shortcuts.cal_new": "New event",
   "fork.reading.history": "Earlier messages ({n})",
+  "fork.copy.address": "Copy address",
+  "fork.copy.done": "Copied {addr}",
   "fork.reading.show_quoted": "Show quoted text",
   "fork.reading.hide_quoted": "Hide quoted text",
   "settings.images_block": "Block until I allow",

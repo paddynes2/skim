@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CopyAddress from "../reading/CopyAddress.svelte";
   // Phase 9: the Rebound card for the sender of the focused message. A 320px
   // drawer on the right of the reading pane, read-only. Four states: connect
   // (nothing configured / signed in / chosen), loading, not in Rebound, found.
@@ -134,7 +135,7 @@
     {:else if !hit}
       <div class="state">
         <p class="empty">{t("fork.crm.not_found")}</p>
-        <p class="dim mono addr">{email}</p>
+        <p class="dim mono addr"><CopyAddress addr={email} /></p>
         <button class="linkish" onclick={() => void openUrl(addLink)}>{t("fork.crm.add")} ↗</button>
       </div>
     {:else}
@@ -153,7 +154,7 @@
             <dl class="facts">
               {#if person.primaryEmail}
                 <dt>{t("fork.crm.email")}</dt>
-                <dd class="mono">{person.primaryEmail}</dd>
+                <dd class="mono"><CopyAddress addr={person.primaryEmail} /></dd>
               {/if}
               {#if person.primaryPhone}
                 <dt>{t("fork.crm.phone")}</dt>

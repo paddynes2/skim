@@ -213,3 +213,16 @@ Known limit: a Gmail web reply whose text part wraps the attribution line over t
 ## D74: text anywhere can be selected and copied (1.1.27)
 
 Patrick: "make it so things are copyable (ie, email addresses, right nav bar etc)". Upstream set `user-select: none` on the body, so only inputs and a few opted-in panes could be selected; the sender address, recipients, the CRM drawer and the deal panels could not be copied. The body rule is gone. Buttons, summaries, keys and ARIA controls (`button`, `tab`, `menuitem`, `option`, `slider`) stay unselectable, so a click or a drag across the message list does not highlight labels. Right-click keeps suppressing the WebView2 menu except on editable fields and, now, when text is selected (app and message iframe), so right-click Copy works. The selection colour moved from the AI violet to the focus blue, since selection is ordinary UI everywhere now.
+
+## D75: one click copies an address; Drafts and Sent catch up within a minute (1.1.28)
+
+Patrick: "can you make one click on email address copy? also, there seems to be latency between mails showing in skim vs gmail online (also, drafts going to sent etc)".
+
+Copy: `fork/reading/CopyAddress.svelte` is the address as a borderless button; a click writes it to the clipboard and toasts "Copied <address>". Used for the sender, every To and Cc line, and the CRM drawer's address fields. A name stays plain text; only the address copies.
+
+Latency: measured at the time of the report, Skim and Gmail agreed (newest inbox message, all four drafts, no stuck mail ops). The gap is structural: IDLE watches INBOX only, and Drafts and Sent waited for the five-minute poll unless that folder was open. A draft sent or deleted in Gmail web, the phone or by an agent therefore stayed a draft in Skim for up to five minutes. Two changes:
+
+1. Every 60 s the engine STATUS-probes Drafts and Sent and syncs only a folder whose snapshot moved (the snapshot `sync_all_folders` already keeps). STATUS is refused on the selected mailbox, so a selected target is first swapped for a read-only EXAMINE of INBOX; CLOSE is never used because it expunges.
+2. Window focus also runs the full STATUS-gated sweep (`sync_now`), at most once per 20 s, so returning from Gmail web catches every folder.
+
+Read-state changes made elsewhere still wait for the five-minute poll on folders other than the open one: STATUS UNSEEN catches them only for unread counts that moved.

@@ -262,3 +262,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/main.ts` | `contextmenu` listener | native menu also shown when text is selected | D74 |
 | `src/components/HtmlViewer.svelte` | iframe `contextmenu` listener | native menu shown when text in the message is selected | D74 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.27 | Signed local release |
+| `src-tauri/src/mail/sync.rs` | constants, worker loop, new `sync_fresh` | 60 s STATUS-gated sync of Drafts and Sent | D75 |
+| `src/components/ReadingPane.svelte` | imports, sender address, recipients details | addresses render as `CopyAddress` | D75 |
+| `src/lib/i18n/locales/en.json` | `fork.copy.*` | copy tooltip and toast | D75 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.28 | Signed local release |

@@ -30,6 +30,10 @@ const BACKFILL_CHUNKS_PER_PASS: u32 = 10;
 // IDLE keeps the inbox instant, so this poll only backfills the slow-changing
 // rest (other folders, read state from other devices) — it can run infrequently.
 const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
+// Fork (D75): Drafts and Sent change from Gmail web, the phone and agents, and
+// IDLE cannot see them. A STATUS probe of the two each minute catches that;
+// a folder is synced only when its snapshot moved.
+const FRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 // A short heartbeat detects sockets blackholed by sleep or a network change.
 const IDLE_REISSUE: std::time::Duration = std::time::Duration::from_secs(60);
 const IDLE_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -398,6 +402,8 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
 
         let mut poll = tokio::time::interval(POLL_INTERVAL);
         poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut fresh = tokio::time::interval(FRESH_INTERVAL);
+        fresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
@@ -436,6 +442,10 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
                 _ = poll.tick() => {
                     engine.drain_ops().await;
                     engine.run_sync().await;
+                }
+                _ = fresh.tick() => {
+                    engine.drain_ops().await;
+                    engine.sync_fresh().await;
                 }
             }
         }
@@ -714,6 +724,77 @@ impl Engine {
         // badge must follow it, not wait for the next full sweep. Painted on
         // failure too — that is the offline fallback to the cached count.
         crate::badge::refresh(&self.app).await;
+    }
+
+    /// Fork (D75): sync Drafts and Sent when a STATUS probe says either moved.
+    /// IMAP forbids STATUS on the selected mailbox, so a selected target is
+    /// first swapped for a read-only EXAMINE of INBOX (never CLOSE, which
+    /// would expunge); otherwise every tick would re-walk that folder's flags.
+    async fn sync_fresh(&mut self) {
+        let account_id = self.account.id.clone();
+        let targets: Vec<(i64, String)> = match self
+            .db
+            .call(move |conn| {
+                let mut stmt = conn.prepare_cached(
+                    "SELECT id, imap_name FROM folders
+                      WHERE account_id = ?1 AND role IN ('drafts', 'sent') ORDER BY id",
+                )?;
+                let rows = stmt.query_map(rusqlite::params![account_id], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?;
+                rows.collect()
+            })
+            .await
+        {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        if targets.is_empty() {
+            return;
+        }
+        if targets
+            .iter()
+            .any(|(_, name)| self.selected.as_deref() == Some(name.as_str()))
+        {
+            let examined = match self.session().await {
+                Ok(s) => s.examine("INBOX").await.map_err(imap_err),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = examined {
+                tracing::debug!(error = %e, "fresh sweep: EXAMINE failed");
+                self.reset_session();
+                return;
+            }
+            self.selected = Some("INBOX".to_string());
+        }
+        let mut any = false;
+        for (folder_id, name) in targets {
+            let st = match self.probe_status(&name).await {
+                Ok(st) => st,
+                Err(e) => {
+                    tracing::debug!(folder = %name, error = %e, "fresh sweep: STATUS failed");
+                    self.reset_session();
+                    return;
+                }
+            };
+            if self.status_matches(folder_id, &st).await {
+                continue;
+            }
+            match self.sync_folder(folder_id, &name).await {
+                Ok(_) => {
+                    self.store_status(folder_id, &st).await;
+                    any = true;
+                }
+                Err(e) => {
+                    tracing::warn!(folder = %name, error = %e, "fresh sweep: folder sync failed");
+                    self.reset_session();
+                    return;
+                }
+            }
+        }
+        if any {
+            crate::badge::refresh(&self.app).await;
+        }
     }
 
     async fn logout(&mut self) {
