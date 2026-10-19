@@ -263,7 +263,10 @@ ${folded ? FOLD_CSS : ""}</style></head><body>${body}</body></html>`;
     }
     // The message body is never editable, so kill the WebView2 context menu
     // here too — the parent document's handler can't reach into the iframe.
-    doc.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Fork D74: selected text keeps the menu, for right-click Copy.
+    doc.addEventListener("contextmenu", (e) => {
+      if ((doc.getSelection()?.toString() ?? "").trim() === "") e.preventDefault();
+    });
     doc.addEventListener("click", (e) => {
       const target = (e.target as HTMLElement | null)?.closest("a");
       if (!target) {

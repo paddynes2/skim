@@ -22,12 +22,26 @@ body {
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
-  user-select: none;
   cursor: default;
 }
 
+/* Fork (D74): text anywhere can be selected and copied (addresses, the CRM
+   drawer, headers). Controls stay unselectable so a click or a drag across
+   the list does not highlight their labels. */
+button,
+summary,
+kbd,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[role="option"],
+[role="slider"] {
+  user-select: none;
+}
+
+/* Fork D74: selection is ordinary UI now, so not the AI violet. */
 ::selection {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--focus) 28%, transparent);
 }
 
 button {

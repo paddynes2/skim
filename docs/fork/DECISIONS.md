@@ -209,3 +209,7 @@ The body is rebuilt from the chosen HTML before the loaded shape is taken, so op
 Validation: 21 deliberate faults in the new logic each failed a named test (four first survived and got a sharper test, or, for a second guard that duplicated the word match, the guard was removed); a read-only pass over the owner's four server drafts with HTML: both with a link open with it, the one with a list keeps it, the two plain ones open as before, and Squire round-trips each with no input event.
 
 Known limit: a Gmail web reply whose text part wraps the attribution line over two lines does not split, so its words do not match and it opens from the text as before.
+
+## D74: text anywhere can be selected and copied (1.1.27)
+
+Patrick: "make it so things are copyable (ie, email addresses, right nav bar etc)". Upstream set `user-select: none` on the body, so only inputs and a few opted-in panes could be selected; the sender address, recipients, the CRM drawer and the deal panels could not be copied. The body rule is gone. Buttons, summaries, keys and ARIA controls (`button`, `tab`, `menuitem`, `option`, `slider`) stay unselectable, so a click or a drag across the message list does not highlight labels. Right-click keeps suppressing the WebView2 menu except on editable fields and, now, when text is selected (app and message iframe), so right-click Copy works. The selection colour moved from the AI violet to the focus blue, since selection is ordinary UI everywhere now.

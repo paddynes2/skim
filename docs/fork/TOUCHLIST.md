@@ -258,3 +258,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.24 | Signed local release |
 | `src-tauri/src/lib.rs` | `invoke_handler` | `fork_filing_*` (4) and `fork_thread_files` registered | D72 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.25 | Signed local release |
+| `src/styles/base.css` | `body`, `::selection` | body no longer `user-select: none`; controls are; selection in focus blue | D74 |
+| `src/main.ts` | `contextmenu` listener | native menu also shown when text is selected | D74 |
+| `src/components/HtmlViewer.svelte` | iframe `contextmenu` listener | native menu shown when text in the message is selected | D74 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.27 | Signed local release |
