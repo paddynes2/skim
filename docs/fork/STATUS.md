@@ -4,7 +4,13 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-17.**
+**As of 2026-10-19.**
+
+## Version 1.1.26 (October 19)
+
+**A draft written elsewhere keeps its links, lists and bold** (D73): the owner reported that drafts did not show rich text such as links. Drafts an agent creates through the Gmail API, and drafts started in Gmail, opened in the editor from their text part, so the link was gone in Skim and a send or edit from Skim would have sent the HTML part without it. The composer now opens such a draft from its server copy's HTML when its words match the plain words, and stops offering the server copy once this build has stored the user's own words (f0017 `fork_draft_html.rev`). `htmlToText` keeps blank lines (it dropped every one, so the text part of Skim's mail ran paragraphs together) and gives an agent's `<p>` paragraphs their spacing; the quote attribution must be one "On … wrote:" line in the composer, the AI-tell scan and Rust.
+
+Installed 06:08 on October 19 (db backed up to `~/.skim-fork/backups/20261019-060750`; the installed exe reads 1.1.26). Validation: all gates (622 Rust tests, all frontend tests including the new Chromium test of `compose/html.ts` with the real Squire build); 21 deliberate faults each failed a named test; prove-test PROVEN against 1.1.25; two change-critic passes (plan and diff), every real finding fixed before install. Live over CDP: fork schema 17; the two agent drafts in Drafts each show their booking link in the editor and one its four-item list; after opening and leaving both, their server copies kept the same UID and HTML and no `save_draft` op was queued; no page errors. Not exercised live: a send (never send while testing). Rollback: install the 1.1.25 installer; older builds ignore the `rev` column.
 
 ## Versions 1.1.24 and 1.1.25 (October 17)
 
