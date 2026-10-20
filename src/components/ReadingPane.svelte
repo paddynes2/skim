@@ -5,7 +5,7 @@
   import { aiSessions } from "../lib/stores/aiSession.svelte";
   import { mail } from "../lib/stores/mail.svelte";
   import { ui } from "../lib/stores/ui.svelte";
-  import type { MessageMeta, RenderedBody, ThreadDetail, ThreadRow } from "../lib/types";
+  import type { Draft, MessageMeta, RenderedBody, ThreadDetail, ThreadRow } from "../lib/types";
   import { untrack, tick } from "svelte";
   import ConversationTools from "../fork/reading/ConversationTools.svelte";
   import ThreadFiles from "../fork/reading/ThreadFiles.svelte";
@@ -24,6 +24,21 @@
   import EstateReplyAction from "../fork/estate/ReplyAction.svelte";
   // Fork (v1.1.3): Add to Deals, and the line naming the thread's deal.
   import DealTool from "../fork/deals/DealTool.svelte";
+
+  // Fork (v1.1.29): a reply draft opened from Drafts. The editor sits above the
+  // conversation it answers, which stays read-only underneath. Kept outside the
+  // message loop: each server save gives the draft a new message id, and a loop
+  // keyed by id would remount the editor on every save (the D69 flash).
+  let {
+    draftEditor = null,
+  }: {
+    draftEditor?: {
+      id: number;
+      onSent: () => void;
+      onDiscarded: () => void;
+      onLocalSave: (d: Draft) => void;
+    } | null;
+  } = $props();
 
   let detail = $state<ThreadDetail | null>(null);
   let moreOpen = $state(false);
@@ -118,7 +133,7 @@
   // the Drafts view, so a draft never stands in for the latest mail. A thread
   // of drafts only still opens.
   function newestOf(msgs: MessageMeta[]): MessageMeta | null {
-    const wantDraft = mail.selectedFolder?.role === "drafts";
+    const wantDraft = mail.selectedFolder?.role === "drafts" && !draftEditor;
     for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].isDraft === wantDraft) return msgs[i];
     return msgs[msgs.length - 1] ?? null;
   }
@@ -134,7 +149,10 @@
   });
 
   // Whole thread, newest first; the focused message expands in place.
-  const ordered = $derived.by(() => [...(detail?.messages ?? [])].reverse());
+  // With the draft editor open the draft itself is the editor, not a message.
+  const ordered = $derived.by(() =>
+    [...(detail?.messages ?? [])].filter((m) => !(draftEditor && m.isDraft)).reverse(),
+  );
 
   // The single message shown when not in conversation view: the one picked from
   // a flat list, else the newest in folder.
@@ -313,7 +331,7 @@
       const msgs = d.messages;
       const inFolder = msgs.filter((m) => m.folderId === mail.selectedFolderId);
       const draftsFolder = mail.selectedFolder?.role === "drafts";
-      const topId = (draftsFolder && inFolder.length ? inFolder[inFolder.length - 1] : newestOf(msgs))?.id ?? null;
+      const topId = (draftsFolder && !draftEditor && inFolder.length ?inFolder[inFolder.length - 1] : newestOf(msgs))?.id ?? null;
       if (!sameThread || !msgs.some((m) => m.id === focusedId)) focusedId = topId;
       if (topId !== null && expanded[topId] === undefined) expanded = { ...expanded, [topId]: true };
 
@@ -623,6 +641,7 @@
       </div>
     {/if}
   {:else}
+    {#if !draftEditor}
     <header class="toolbar">
       <div class="spacer"></div>
       {#if canArchive}
@@ -655,6 +674,7 @@
         {/key}
       {/if}
     </header>
+    {/if}
 
     <div class="scroll">
       <h1 class="subject">{shownSubject}</h1>
@@ -669,7 +689,19 @@
       {#key detail.id}<ConversationTools messages={detail.messages} {bodies} loading={bulkLoading} onload={() => void loadRemaining()} onselect={setFocus} onexpand={conversation ? expandAll : undefined} oncollapse={conversation ? collapseAll : undefined} />{/key}
       {#if detailLoading}<div class="refresh-note" role="status">{t("fork.reading.refreshing")}</div>{/if}
       {#if detailError}<div class="refresh-error" role="alert">{detailError}<button onclick={() => loadThread(detail!.id)}>{t("reading.retry")}</button></div>{/if}
-      {#if conversation}
+      {#if draftEditor}
+        <div class="inline-reply draft-editor">
+          {#key draftEditor.id}
+            <ComposeForm
+              draftId={draftEditor.id}
+              onSent={draftEditor.onSent}
+              onDiscarded={draftEditor.onDiscarded}
+              onLocalSave={draftEditor.onLocalSave}
+            />
+          {/key}
+        </div>
+      {/if}
+      {#if conversation || draftEditor}
         <div class="convo">
           {#each ordered as m, i (m.id)}
             {#if i === 1}<div class="history-label">{t("fork.reading.history", { n: ordered.length - 1 })}</div>{/if}
@@ -701,6 +733,7 @@
       />
     {/if}
 
+    {#if !draftEditor}
     <footer class="actions">
       <div class="reply-controls"><button class="btn primary-reply" onclick={() => reply(canReplyAll ? "reply_all" : "reply")} title={`${t(canReplyAll ? "reading.reply_all" : "reading.reply")}  ${canReplyAll ? "A" : "R"}`}>{t(canReplyAll ? "reading.reply_all" : "reading.reply")}<kbd>{canReplyAll ? "A" : "R"}</kbd></button>
       {#if canReplyAll}<button class="btn secondary-reply" onclick={() => reply("reply")} title={`${t("reading.reply")}  R`}>{t("reading.reply")}<kbd>R</kbd></button>{/if}
@@ -712,6 +745,7 @@
       {#if ai.keyPresent}<button class="ai-btn" onclick={openAsk} title={`${t("ai.ask")}  Q`}>{t("ai.ask")}<kbd>Q</kbd></button>{/if}
       </div>
     </footer>
+    {/if}
 
     {#if hoverUrl}
       <!-- Browser-style status bar: the real destination of the hovered link. -->

@@ -266,3 +266,6 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/components/ReadingPane.svelte` | imports, sender address, recipients details | addresses render as `CopyAddress` | D75 |
 | `src/lib/i18n/locales/en.json` | `fork.copy.*` | copy tooltip and toast | D75 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.28 | Signed local release |
+| `src/components/ReadingPane.svelte` | `draftEditor` prop, draft rows left out, toolbar and footer hidden with it | reply draft above its conversation in Drafts | D76 |
+| `src/App.svelte` | Drafts editor branch, `draftHasThread` | Drafts opens the reading pane for a reply draft | D76 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.29 | Signed local release |

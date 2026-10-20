@@ -147,6 +147,8 @@
   // the Drafts-folder message it mirrors (needed to remove it on discard).
   let draftEditorId = $state<number | null>(null);
   let draftOrigin = $state<number | null>(null);
+  // Fork (v1.1.29): the draft answers mail in its thread, so the pane shows it.
+  let draftHasThread = $state(false);
   let draftResolveToken = 0;
   // Fork (v1.1.18, D69): a boolean, not the folder object. Every
   // `mail:updated` rebuilds the folder list, so the object changes on each
@@ -185,6 +187,7 @@
         // The same local draft (a resync re-pointed it at a new server copy)
         // keeps its open editor: a new id remounts it via the {#key}.
         draftOrigin = msgId;
+        draftHasThread = detail.messages.some((m) => !m.isDraft);
         if (draftEditorId !== draft.id) draftEditorId = draft.id;
       } catch {
         if (token === draftResolveToken) {
@@ -536,7 +539,12 @@
           <ScheduledList />
         {:else}
         <MessageList />
-        {#if mail.selectedFolder?.role === "drafts" && draftEditorId !== null}
+        {#if mail.selectedFolder?.role === "drafts" && draftEditorId !== null && draftHasThread}
+          <!-- Fork (v1.1.29): a reply draft opens above the conversation it answers. -->
+          <ReadingPane
+            draftEditor={{ id: draftEditorId, onSent: onDraftSent, onDiscarded: onDraftDiscarded, onLocalSave: onDraftLocalSave }}
+          />
+        {:else if mail.selectedFolder?.role === "drafts" && draftEditorId !== null}
           {#key draftEditorId}
             <ComposeForm
               draftId={draftEditorId}
