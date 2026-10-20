@@ -5,8 +5,8 @@
   import AttachmentLinks from "./AttachmentLinks.svelte";
   import { eventState } from "./presentation";
   import { calendar } from "./store.svelte";
-  import { fmtWhen, parseAttendees, calendarErrorText } from "./guests";
-  import type { EventRow } from "./types";
+  import { fmtWhen, parseAttendees, calendarErrorText, selfIsGuest } from "./guests";
+  import type { EventRow, RsvpResponse } from "./types";
   let { row, onclose }: { row: EventRow; onclose: () => void } = $props();
   let error = $state("");
   let discarding = $state(false);
@@ -14,6 +14,15 @@
   let heading: HTMLHeadingElement;
   onMount(() => heading?.focus({ preventScroll: true }));
   const sync = $derived(calendar.syncState(row.id));
+  // Fork (v1.1.29, D77): answer an invitation from the first click, not only
+  // behind Event details.
+  const iAmGuest = $derived(selfIsGuest(row, calendar.ownEmails));
+  let rsvpBusy = $state(false);
+  async function rsvp(response: RsvpResponse) {
+    if (rsvpBusy) return;
+    rsvpBusy = true; error = "";
+    try { await calendar.rsvp(row.id, response); } catch (e) { error = calendarErrorText(e); } finally { rsvpBusy = false; }
+  }
   async function retry() { try { await calendar.retry(row.id); } catch (e) { error = calendarErrorText(e); } }
 </script>
 <aside class="preview" aria-label={t("fork.cal.event_preview")}>
@@ -22,6 +31,7 @@
     <h2 bind:this={heading} tabindex="-1">{row.summary || t("fork.cal.untitled")}</h2>
     <p class="when">{fmtWhen(row)}</p>
     <p class="event-state">{t(`fork.cal.state_${eventState(row)}`)}</p>
+    {#if iAmGuest && row.status !== "cancelled"}<div class="rsvp" role="group" aria-label={t("fork.cal.going")}><span class="label">{t("fork.cal.going")}</span>{#each ["accepted", "tentative", "declined"] as const as r (r)}<button class="btn small" class:active={row.self_response === r} aria-pressed={row.self_response === r} disabled={rsvpBusy || !calendar.connected} onclick={() => rsvp(r)}>{t(`fork.cal.rsvp_btn_${r}`)}</button>{/each}</div>{/if}
     {#if row.time_zone}<p class="muted">{row.time_zone}</p>{/if}
     <p class="sync" class:failed={sync?.status === "failed"}>{t(sync?.status === "failed" ? "fork.cal.sync_failed" : sync?.status === "pending" || row.local_only ? "fork.cal.sync_pending" : calendar.syncKnown(row) ? "fork.cal.synced" : "fork.cal.sync_unknown")}</p>
     {#if sync?.status === "failed"}<p class="muted">{sync.message}</p><button class="btn" onclick={retry}>{t("fork.cal.retry")}</button>{/if}
@@ -36,6 +46,10 @@
   <footer><button class="btn primary" onclick={() => calendar.edit(row.id)}>{t(calendar.canEdit(row) ? "fork.cal.edit_event" : "fork.cal.event_details")}</button><button class="btn" disabled={!calendar.connected} onclick={() => calendar.duplicate(row)}>{t("fork.cal.duplicate")}</button>{#if row.html_link}<button class="google" onclick={() => openUrl(row.html_link!)}>{t("fork.cal.open_in_google")}</button>{/if}</footer>
 </aside>
 <style>
+  .rsvp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; margin: 4px 0 12px; border: 1px solid var(--hairline); border-radius: var(--radius-m); background: var(--hover); }
+  .rsvp .btn.small { padding: 4px 10px; font-size: 12px; }
+  .rsvp .btn.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .rsvp .label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); flex: 0 0 64px; }
   .preview { width: 320px; max-width: 100%; flex-shrink: 0; border-left: 1px solid var(--hairline); display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
   header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--hairline); font-size: 12px; color: var(--text-dim); }
   header button { width: 24px; height: 24px; font-size: 20px; }
