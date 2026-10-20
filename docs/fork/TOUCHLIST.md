@@ -270,3 +270,6 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/App.svelte` | Drafts editor branch, `draftHasThread` | Drafts opens the reading pane for a reply draft | D76 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.29 | Signed local release |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.30 | Signed local release |
+| `src-tauri/src/mail/threading.rs` | `subject_fallback` ignores the user as the shared participant; new `split_subject_merges` | separate outreach no longer joins one conversation | D78 |
+| `src-tauri/src/mail/threading_tests.rs` | three tests | D78 | D78 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.31 | Signed local release |

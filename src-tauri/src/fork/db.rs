@@ -50,7 +50,8 @@ pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {
 /// Apply every fork migration past the stored version. Idempotent.
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     migrate_with(conn, FORK_MIGRATIONS)?;
-    rejoin_once(conn)
+    rejoin_once(conn)?;
+    split_once(conn)
 }
 
 /// Settings row set once the D71 split-reply repair has run.
@@ -73,6 +74,29 @@ fn rejoin_once(conn: &mut Connection) -> Result<()> {
     )?;
     tx.commit()?;
     tracing::info!(merged, "rejoined split reply threads");
+    Ok(())
+}
+
+/// Settings row set once the D78 subject-merge repair has run.
+const SPLIT_KEY: &str = "fork_split_subject_merges_v1";
+
+/// Fork (D78): split conversations joined only because the user was on both
+/// messages, once. The court pass at startup then reads the new threads.
+fn split_once(conn: &mut Connection) -> Result<()> {
+    let done: bool = conn
+        .prepare("SELECT 1 FROM settings WHERE key = ?1")?
+        .exists([SPLIT_KEY])?;
+    if done {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    let created = crate::mail::threading::split_subject_merges(&tx)?;
+    tx.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params![SPLIT_KEY, created.to_string()],
+    )?;
+    tx.commit()?;
+    tracing::info!(created, "split subject-merged threads");
     Ok(())
 }
 

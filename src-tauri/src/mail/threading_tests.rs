@@ -242,3 +242,89 @@ fn normalize_subject_strips_prefixes() {
     assert_eq!(normalize_subject("  "), None);
     assert_eq!(normalize_subject("Re:"), None);
 }
+
+/// Fork (D78): the user's own outreach, one subject, many people.
+fn sent_to(uid: u32, message_id: &str, to: &str, date: i64) -> NewMessage {
+    let mut m = msg(uid, message_id, &[], "vertical rollup", date);
+    m.in_reply_to = None;
+    m.from_addr = Some("me@example.com".into());
+    m.to_addrs = vec![Address {
+        name: None,
+        addr: to.into(),
+    }];
+    m
+}
+
+#[test]
+fn own_sends_with_one_subject_stay_apart() {
+    let db = setup();
+    db.with(|c| insert_message(c, &sent_to(1, "<a@x>", "ann@one.example", 1000)).map(|_| ()))
+        .unwrap();
+    db.with(|c| insert_message(c, &sent_to(2, "<b@x>", "bob@two.example", 1100)).map(|_| ()))
+        .unwrap();
+    assert_ne!(thread_of(&db, 1), thread_of(&db, 2));
+    // A second email to the same person under that subject still joins.
+    db.with(|c| insert_message(c, &sent_to(3, "<c@x>", "ann@one.example", 1200)).map(|_| ()))
+        .unwrap();
+    assert_eq!(thread_of(&db, 1), thread_of(&db, 3));
+}
+
+#[test]
+fn repair_splits_threads_joined_only_through_the_user() {
+    let db = setup();
+    db.with(|c| insert_message(c, &sent_to(1, "<a@x>", "ann@one.example", 1000)).map(|_| ()))
+        .unwrap();
+    db.with(|c| insert_message(c, &sent_to(2, "<b@x>", "bob@two.example", 1100)).map(|_| ()))
+        .unwrap();
+    let mut reply = msg(3, "<r@y>", &["<b@x>"], "Re: vertical rollup", 1200);
+    reply.from_addr = Some("bob@two.example".into());
+    db.with(|c| insert_message(c, &reply).map(|_| ())).unwrap();
+    // Recreate the old state: everything in thread 1.
+    let first = thread_of(&db, 1);
+    db.with(|c| {
+        c.execute("UPDATE messages SET thread_id = ?1", params![first])?;
+        c.execute("DELETE FROM threads WHERE id <> ?1", params![first])?;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(thread_count(&db), 1);
+
+    let created = db
+        .with(|c| crate::mail::threading::split_subject_merges(c))
+        .unwrap();
+    assert_eq!(created, 1);
+    assert_ne!(thread_of(&db, 1), thread_of(&db, 2));
+    assert_eq!(thread_of(&db, 2), thread_of(&db, 3));
+    let second = thread_of(&db, 2);
+    let count: i64 = db
+        .with(|c| {
+            c.query_row(
+                "SELECT message_count FROM threads WHERE id = ?1",
+                params![second],
+                |r| r.get(0),
+            )
+        })
+        .unwrap();
+    assert_eq!(count, 2);
+    // A second run finds nothing left to split.
+    assert_eq!(
+        db.with(|c| crate::mail::threading::split_subject_merges(c))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn mail_to_yourself_still_groups_by_subject() {
+    let db = setup();
+    db.with(|c| insert_message(c, &sent_to(1, "<a@x>", "me@example.com", 1000)).map(|_| ()))
+        .unwrap();
+    db.with(|c| insert_message(c, &sent_to(2, "<b@x>", "me@example.com", 1100)).map(|_| ()))
+        .unwrap();
+    assert_eq!(thread_of(&db, 1), thread_of(&db, 2));
+    assert_eq!(
+        db.with(|c| crate::mail::threading::split_subject_merges(c))
+            .unwrap(),
+        0
+    );
+}

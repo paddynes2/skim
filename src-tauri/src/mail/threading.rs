@@ -370,6 +370,19 @@ fn subject_fallback(
     for a in msg.to_addrs.iter().chain(msg.cc_addrs.iter()) {
         participants.insert(a.addr.to_lowercase());
     }
+    // Fork (D78): the user is on every message in the mailbox, so sharing them
+    // proves nothing. Without this, every new email the user sent under one
+    // subject (the same outreach to many people) joined one conversation.
+    // Mail between the user's own addresses only keeps the old match.
+    let own = crate::fork::court::own_addresses(conn)?;
+    let others: BTreeSet<String> = participants
+        .iter()
+        .filter(|p| !own.contains(*p))
+        .cloned()
+        .collect();
+    if !others.is_empty() {
+        participants = others;
+    }
 
     for thread_id in candidates {
         let mut stmt = conn.prepare_cached(
@@ -399,6 +412,167 @@ fn subject_fallback(
         }
     }
     Ok(None)
+}
+
+/// One message as the D78 repair sees it.
+struct SplitRow {
+    id: i64,
+    msgid: Option<String>,
+    refs: BTreeSet<String>,
+    subject: Option<String>,
+    people: BTreeSet<String>,
+    date: i64,
+}
+
+/// Fork (D78): one-time repair for conversations the old subject fallback
+/// joined only because the user was on both messages. Each thread is split
+/// into the groups its own messages support: the same Message-ID, a
+/// reference between them or to a shared ancestor, or the same subject
+/// within the fallback window with a participant other than the user. The
+/// group holding the oldest message keeps the thread id. Returns how many
+/// threads were created.
+pub fn split_subject_merges(conn: &Connection) -> rusqlite::Result<usize> {
+    let own = crate::fork::court::own_addresses(conn)?;
+    let threads: Vec<i64> = conn
+        .prepare("SELECT thread_id FROM messages WHERE thread_id IS NOT NULL GROUP BY thread_id HAVING count(*) > 1")?
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    let mut created = 0;
+    for thread_id in threads {
+        let rows = split_rows(conn, thread_id, &own)?;
+        let groups = split_groups(&rows);
+        if groups.len() < 2 {
+            continue;
+        }
+        let account_id: String = conn.query_row(
+            "SELECT account_id FROM threads WHERE id = ?1",
+            params![thread_id],
+            |r| r.get(0),
+        )?;
+        // `groups` is ordered by each group's oldest message; the first stays.
+        for group in groups.iter().skip(1) {
+            let first = &rows[group[0]];
+            let norm = first.subject.as_deref().and_then(normalize_subject);
+            conn.execute(
+                "INSERT INTO threads (account_id, subject_norm, last_date, message_count, unread_count, starred, snippet)
+                 VALUES (?1, ?2, ?3, 0, 0, 0, NULL)",
+                params![account_id, norm, first.date],
+            )?;
+            let new_id = conn.last_insert_rowid();
+            let mut update =
+                conn.prepare_cached("UPDATE messages SET thread_id = ?1 WHERE id = ?2")?;
+            for &i in group {
+                update.execute(params![new_id, rows[i].id])?;
+            }
+            recompute_thread(conn, new_id)?;
+            created += 1;
+        }
+        recompute_thread(conn, thread_id)?;
+    }
+    Ok(created)
+}
+
+fn split_rows(
+    conn: &Connection,
+    thread_id: i64,
+    own: &std::collections::HashSet<String>,
+) -> rusqlite::Result<Vec<SplitRow>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT id, message_id, subject, from_addr, to_addrs, cc_addrs, date
+         FROM messages WHERE thread_id = ?1 ORDER BY date, id",
+    )?;
+    let mut rows: Vec<SplitRow> = stmt
+        .query_map(params![thread_id], |r| {
+            let mut people = BTreeSet::new();
+            if let Some(f) = r.get::<_, Option<String>>(3)? {
+                people.insert(f.trim().to_lowercase());
+            }
+            for col in [4, 5] {
+                if let Some(json) = r.get::<_, Option<String>>(col)? {
+                    if let Ok(addrs) =
+                        serde_json::from_str::<Vec<crate::db::models::Address>>(&json)
+                    {
+                        people.extend(addrs.into_iter().map(|a| a.addr.trim().to_lowercase()));
+                    }
+                }
+            }
+            // Mail between the user's own addresses keeps matching on them.
+            if people.iter().any(|p| !own.contains(p)) {
+                people.retain(|p| !own.contains(p));
+            }
+            Ok(SplitRow {
+                id: r.get(0)?,
+                msgid: r
+                    .get::<_, Option<String>>(1)?
+                    .as_deref()
+                    .and_then(normalize_msgid),
+                refs: BTreeSet::new(),
+                subject: r.get(2)?,
+                people,
+                date: r.get(6)?,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    let mut refs = conn.prepare_cached("SELECT ref FROM message_refs WHERE message_id = ?1")?;
+    for row in &mut rows {
+        let found: Vec<String> = refs
+            .query_map(params![row.id], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        row.refs = found.iter().filter_map(|s| normalize_msgid(s)).collect();
+    }
+    Ok(rows)
+}
+
+/// Connected groups of `rows` (index lists), ordered by their oldest member.
+fn split_groups(rows: &[SplitRow]) -> Vec<Vec<usize>> {
+    let mut parent: Vec<usize> = (0..rows.len()).collect();
+    fn find(p: &mut [usize], i: usize) -> usize {
+        let mut i = i;
+        while p[i] != i {
+            p[i] = p[p[i]];
+            i = p[i];
+        }
+        i
+    }
+    let norms: Vec<Option<String>> = rows
+        .iter()
+        .map(|r| r.subject.as_deref().and_then(normalize_subject))
+        .collect();
+    let ids: Vec<BTreeSet<String>> = rows
+        .iter()
+        .map(|r| {
+            let mut s = r.refs.clone();
+            s.extend(r.msgid.clone());
+            s
+        })
+        .collect();
+    for a in 0..rows.len() {
+        for b in (a + 1)..rows.len() {
+            let (x, y) = (&rows[a], &rows[b]);
+            let linked = !ids[a].is_disjoint(&ids[b]);
+            let by_subject = norms[a].is_some()
+                && norms[a] == norms[b]
+                && (x.date - y.date).abs() <= SUBJECT_FALLBACK_WINDOW_SECS
+                && !x.people.is_disjoint(&y.people);
+            if linked || by_subject {
+                let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
+                if ra != rb {
+                    parent[ra.max(rb)] = ra.min(rb);
+                }
+            }
+        }
+    }
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut root_at: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    for i in 0..rows.len() {
+        let root = find(&mut parent, i);
+        let g = *root_at.entry(root).or_insert_with(|| {
+            groups.push(Vec::new());
+            groups.len() - 1
+        });
+        groups[g].push(i);
+    }
+    groups
 }
 
 fn merge_threads(conn: &Connection, target: i64, other: i64) -> rusqlite::Result<()> {
