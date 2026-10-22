@@ -273,3 +273,6 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/mail/threading.rs` | `subject_fallback` ignores the user as the shared participant; new `split_subject_merges` | separate outreach no longer joins one conversation | D78 |
 | `src-tauri/src/mail/threading_tests.rs` | three tests | D78 | D78 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.31 | Signed local release |
+
+| `src-tauri/src/mail/sync.rs` | `execute_send` | removes the local Drafts row once the server copy is gone | D80 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.32 | Signed local release |

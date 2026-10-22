@@ -29,6 +29,16 @@ fn hot_pred(alias: &str) -> String {
     )
 }
 
+/// v1.1.32 (D80): a Drafts message whose draft has a send queued (held for
+/// the undo window or going out now) is hidden, so it leaves Drafts the moment
+/// Send is pressed. Undo drops the op and it comes back; a send that failed
+/// for good shows again so it can be fixed.
+pub fn sending_pred(alias: &str) -> String {
+    format!(
+        "{alias}.id NOT IN (SELECT d.origin_message_id FROM drafts d          JOIN pending_ops ps ON ps.kind = 'send' AND ps.state <> 'failed'          AND json_extract(ps.payload, '$.draftId') = d.id          WHERE d.origin_message_id IS NOT NULL)"
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Order {
@@ -100,7 +110,11 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
             );
             // v1.1.1: a snoozed thread is hidden until due; a due reminder
             // pins its thread to the top until it is opened.
-            let hidden = crate::fork::reminders::hidden_pred("t.id");
+            let hidden = format!(
+                "{} AND {}",
+                crate::fork::reminders::hidden_pred("t.id"),
+                sending_pred("m")
+            );
             let pinned = crate::fork::reminders::pinned_expr("t.id");
             let filter = match opts.filter {
                 Filter::All => format!(" AND {hidden}"),
@@ -143,7 +157,11 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
             with_filter.replacen(&om, &order, 1)
         }
         Shape::Flat => {
-            let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
+            let hidden = format!(
+                "{} AND {}",
+                crate::fork::reminders::hidden_pred("m.thread_id"),
+                sending_pred("m")
+            );
             let pinned = crate::fork::reminders::pinned_expr("m.thread_id");
             let filter = match opts.filter {
                 Filter::All => format!(" AND {hidden}"),
@@ -196,7 +214,11 @@ mod tests {
         let g = Shape::Grouped {
             folder_pred: "m3.folder_id = ?1",
         };
-        let hidden = crate::fork::reminders::hidden_pred("t.id");
+        let hidden = format!(
+            "{} AND {}",
+            crate::fork::reminders::hidden_pred("t.id"),
+            sending_pred("m")
+        );
         let pinned = crate::fork::reminders::pinned_expr("t.id");
         assert_eq!(
             apply(GROUPED, ListOpts::default(), g),
@@ -207,7 +229,11 @@ mod tests {
                     &format!(" ORDER BY ({pinned}) DESC, m.date")
                 )
         );
-        let hidden = crate::fork::reminders::hidden_pred("m.thread_id");
+        let hidden = format!(
+            "{} AND {}",
+            crate::fork::reminders::hidden_pred("m.thread_id"),
+            sending_pred("m")
+        );
         let pinned = crate::fork::reminders::pinned_expr("m.thread_id");
         assert_eq!(
             apply(FLAT, ListOpts::default(), Shape::Flat),
@@ -340,6 +366,47 @@ mod query_tests {
 
     fn subjects(rows: &[crate::db::models::ThreadRow]) -> Vec<String> {
         rows.iter().map(|r| r.subject.clone()).collect()
+    }
+
+    #[test]
+    fn a_draft_being_sent_leaves_the_list_and_returns_on_undo_or_failure() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            let folder = seed(conn);
+            let row: i64 = conn
+                .query_row("SELECT id FROM messages WHERE uid = 4", [], |r| r.get(0))
+                .unwrap();
+            conn.execute(
+                "INSERT INTO drafts (id, account_id, updated_at, origin_message_id) VALUES (7, 'a1', 0, ?1)",
+                params![row],
+            )
+            .unwrap();
+            let listed = |conn: &Connection| -> Vec<Vec<String>> {
+                vec![
+                    subjects(&list_threads_opts(conn, folder, 0, 10, ListOpts::default()).unwrap()),
+                    subjects(&list_messages_opts(conn, folder, 0, 10, ListOpts::default()).unwrap()),
+                ]
+            };
+            let all = ["new unread starred", "new read", "old read starred", "old unread"];
+            for l in listed(conn) {
+                assert_eq!(l, all, "a draft at rest stays listed");
+            }
+            crate::db::bodies::enqueue_op(conn, "a1", "send", &serde_json::json!({ "draftId": 7 }))
+                .unwrap();
+            for l in listed(conn) {
+                assert_eq!(l, &all[1..], "Send hides it at once");
+            }
+            conn.execute("UPDATE pending_ops SET state = 'failed'", []).unwrap();
+            for l in listed(conn) {
+                assert_eq!(l, all, "a failed send shows again");
+            }
+            conn.execute("DELETE FROM pending_ops", []).unwrap();
+            for l in listed(conn) {
+                assert_eq!(l, all, "Undo brings it back");
+            }
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

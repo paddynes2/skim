@@ -2277,11 +2277,11 @@ impl Engine {
 
         // A server-backed draft keeps a stable Message-ID so the Sent copy and
         // the draft we're about to remove from the Drafts folder share it.
-        let imap_message_id = self
+        let (origin_row, imap_message_id) = self
             .db
             .call(move |conn| crate::db::drafts::origin_coords(conn, draft_id))
             .await?
-            .and_then(|(_, mid)| mid);
+            .unwrap_or((None, None));
 
         let attachments = self
             .db
@@ -2311,8 +2311,19 @@ impl Engine {
 
         // Remove the now-sent copy from the Drafts folder (server + local).
         if let Some(mid) = &imap_message_id {
-            if let Err(e) = self.remove_server_draft(mid).await {
-                tracing::warn!(error = %e, "cannot remove sent draft from Drafts folder");
+            match self.remove_server_draft(mid).await {
+                // Fork (D80): drop the local Drafts row too, so it does not
+                // show again between the send and the next Drafts sync.
+                Ok(()) => {
+                    if let Some(row) = origin_row {
+                        self.db
+                            .call(move |conn| {
+                                crate::db::bodies::remove_messages_local(conn, &[row])
+                            })
+                            .await?;
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "cannot remove sent draft from Drafts folder"),
             }
         }
 
