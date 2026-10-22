@@ -4,7 +4,11 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-19.**
+**As of 2026-10-22.**
+
+## Version 1.1.32 (October 22)
+
+**A sent draft leaves Drafts the moment Send is pressed** (D80): the owner could not tell whether a draft sent from Drafts had gone, because the row stayed through the 10 s undo hold and until the next Drafts sync. Installed 08:36 (backup `~/.skim-fork/backups/20261022-083558`) and published as the GitHub latest release v1.1.32 (the served `latest.json` reads 1.1.32; v1.1.27 to v1.1.31 were installed but never published). Validation: all gates (626 Rust tests, all frontend tests, Clippy, fmt, Svelte check, build); a new test proves the row hides on Send, returns on Undo and returns on a failed send. Live, read-only on the owner's cache after install: 3 drafts, none hidden. Not yet exercised: a real send from Drafts on the installed app (no test mail is sent). Rollback: install the 1.1.31 installer; no schema change.
 
 ## Version 1.1.26 (October 19)
 
