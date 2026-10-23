@@ -128,7 +128,7 @@
     <div class="line1">
       <span class="from">
         {#if badge}
-          <span class="acct" style:background="var(--acct-{badge.color})">{badge.letter}</span>
+          <span class="acct" style:--c="var(--acct-{badge.color})" title={badge.email}>{badge.label}</span>
         {/if}
         <span class="from-name">{sender}</span>
         {#if thread.messageCount > 1}<span class="mcount">{thread.messageCount}</span>{/if}
@@ -418,18 +418,21 @@
     flex-shrink: 0;
   }
   /* The mailbox mark: the address's first letter in a colored disc. */
+  /* Fork: the mailbox as a word in its colour, so two inboxes read apart at a glance. */
   .acct {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    font-weight: 600;
+    height: 16px;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+    color: color-mix(in srgb, var(--c) 60%, var(--text));
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
     line-height: 1;
-    color: var(--surface);
+    white-space: nowrap;
     flex-shrink: 0;
   }
   .meta {

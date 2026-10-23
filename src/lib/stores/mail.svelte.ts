@@ -104,6 +104,26 @@ function isUnified(): boolean {
   return state.activeAccountId === UNIFIED && state.accounts.length > 1;
 }
 
+// Free mail providers: an address there is a personal mailbox, so its domain
+// says nothing worth showing.
+const PERSONAL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+  "icloud.com", "me.com", "yahoo.com", "proton.me", "protonmail.com",
+]);
+
+/** Short word for a mailbox: "Personal" for a free provider, else the
+ *  domain's first part ("example" for me@example.com). Two mailboxes that
+ *  would share a word fall back to the part before the @. */
+export function accountLabel(email: string, all: string[]): string {
+  const word = (e: string) => {
+    const domain = e.split("@")[1]?.toLowerCase() ?? "";
+    return PERSONAL_DOMAINS.has(domain) ? "Personal" : domain.split(".")[0] || e;
+  };
+  const mine = word(email);
+  const shared = all.filter((e) => word(e) === mine).length > 1;
+  return shared ? email.split("@")[0] : mine;
+}
+
 /** One indicator over every engine: busy wins, then trouble, then quiet. */
 function applyAggregateSyncState() {
   const states = [...syncByAccount.values()];
@@ -883,12 +903,14 @@ export const mail = {
     }
   },
 
-  /** Colored dot + letter identifying a row's mailbox in the unified list.
-   *  Colors follow the stable account order and repeat past five. */
-  accountBadge(accountId: string): { letter: string; color: number } | null {
+  /** Colored tag naming a row's mailbox in the unified list (fork: a word, not
+   *  a one-letter disc). Colors follow the stable account order and repeat
+   *  past five. */
+  accountBadge(accountId: string): { letter: string; label: string; email: string; color: number } | null {
     const i = state.accounts.findIndex((a) => a.id === accountId);
     if (i < 0) return null;
-    return { letter: state.accounts[i].email[0]?.toLowerCase() ?? "?", color: (i % 5) + 1 };
+    const email = state.accounts[i].email;
+    return { letter: email[0]?.toLowerCase() ?? "?", label: accountLabel(email, state.accounts.map((a) => a.email)), email, color: (i % 5) + 1 };
   },
 
   /** Which mailbox a fresh compose should send from: the active one, or in

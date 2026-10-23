@@ -677,6 +677,10 @@
     {/if}
 
     <div class="scroll">
+      {#if mail.unified && mail.selectedThread}
+        {@const acct = mail.accountBadge(mail.selectedThread.accountId)}
+        {#if acct}<div class="acct-line"><span class="acct" style:--c="var(--acct-{acct.color})">{acct.label}</span><span class="acct-addr">{acct.email}</span></div>{/if}
+      {/if}
       <h1 class="subject">{shownSubject}</h1>
       {#if mail.selectedThreadId !== null}
         {#key mail.selectedThreadId}
@@ -1159,6 +1163,30 @@
     flex: 1;
     overflow-y: auto;
     padding: 8px 36px 28px;
+  }
+
+  /* Fork: which mailbox this conversation arrived in (unified view only). */
+  .acct-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .acct {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+    color: color-mix(in srgb, var(--c) 60%, var(--text));
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1;
   }
 
   .subject {
