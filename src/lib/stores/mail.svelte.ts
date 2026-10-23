@@ -104,6 +104,10 @@ function isUnified(): boolean {
   return state.activeAccountId === UNIFIED && state.accounts.length > 1;
 }
 
+// Mailbox colours in account order. Amber (--acct-2) comes last: it reads as
+// the star, and the green heat wash sits under every row.
+const ACCOUNT_COLORS = [1, 4, 3, 5, 2];
+
 // Free mail providers: an address there is a personal mailbox, so its domain
 // says nothing worth showing.
 const PERSONAL_DOMAINS = new Set([
@@ -910,7 +914,7 @@ export const mail = {
     const i = state.accounts.findIndex((a) => a.id === accountId);
     if (i < 0) return null;
     const email = state.accounts[i].email;
-    return { letter: email[0]?.toLowerCase() ?? "?", label: accountLabel(email, state.accounts.map((a) => a.email)), email, color: (i % 5) + 1 };
+    return { letter: email[0]?.toLowerCase() ?? "?", label: accountLabel(email, state.accounts.map((a) => a.email)), email, color: ACCOUNT_COLORS[i % ACCOUNT_COLORS.length] };
   },
 
   /** Which mailbox a fresh compose should send from: the active one, or in
