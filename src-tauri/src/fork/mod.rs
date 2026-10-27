@@ -10,6 +10,7 @@ pub mod court;
 pub mod crm;
 pub mod db;
 pub mod deals;
+pub mod draft_orphans;
 pub mod estate_reply;
 pub mod filing;
 pub mod flags;
@@ -60,6 +61,11 @@ pub fn start(app: AppHandle) {
     // table; `reminders` stays only for the table and the list clauses.
     // 10: full ball-in-court pass at startup, then a pass per `mail:updated`.
     let db = app.state::<crate::state::AppState>().db.clone();
+    // v1.1.35 (D82): clear draft mirrors whose server copy went before this
+    // build, ahead of the court pass that reads them.
+    if let Err(e) = db.with(|conn| draft_orphans::drop_orphaned(conn)) {
+        tracing::warn!(error = %e, "cannot clear orphaned draft mirrors");
+    }
     court::full_pass(app.clone(), db.clone());
     // v1.1.11 (D64): the Priority pass at startup and after each mail change.
     priority::schedule(app.clone());

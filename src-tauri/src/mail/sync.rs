@@ -1679,6 +1679,8 @@ impl Engine {
                     }
                     if !gone.is_empty() {
                         bodies::remove_messages_local(conn, &gone)?;
+                        // Fork (D82): a draft mirror whose server copy went goes too.
+                        crate::fork::draft_orphans::drop_orphaned(conn)?;
                     }
                     Ok(())
                 })
