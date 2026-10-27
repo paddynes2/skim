@@ -4,7 +4,15 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-22.**
+**As of 2026-10-27.**
+
+## Versions 1.1.35 to 1.1.38 (October 27)
+
+All four installed on the owner's machine (backups `~/.skim-fork/backups/20261027-100337`, `-102803`, `-104133`, `-105445`) and pushed to `paddy`; none published as a GitHub release (the served `latest.json` still reads 1.1.32). Every build passed all gates.
+
+- **1.1.35, a draft deleted or sent elsewhere leaves Skim** (D82): local draft mirrors whose Gmail copy was gone stayed forever, and a dead reply mirror kept its thread "on me". Live: 78 of 92 drafts were dead mirrors, 0 after install. Six tests.
+- **1.1.36 and 1.1.37, Drafts nearer real time** (D83): a second IDLE connection per account on Drafts (read-only), five connections per account. Measured live with a draft made and deleted through the Gmail API: Gmail sends no IDLE push for either, so the Drafts watcher's 10 s heartbeat is the clock. A new draft now shows in 14 s (was 34 s); a deletion still takes ~31 s, which is Gmail's IMAP view catching up, not Skim's timers.
+- **1.1.36 to 1.1.38, slow "fetching from server"** (D84): clicks took 4.4 to 5.0 s, under 1 s of it network. 1.1.36 timed every step and logs any writer call that waits or holds 750 ms+ with its caller. It named Filing's `note_moved_back`, which held the writer ~4.3 s every pass (an unindexable match scanned 73k messages per log row). 1.1.38 splits the match onto indexes: 4,191 ms to 4 ms on a copy of the owner's database. Live: Filing writer holds went from 11 in ten minutes to 0 in the two minutes after install. Click times after the fix are not yet measured.
 
 ## Version 1.1.32 (October 22)
 

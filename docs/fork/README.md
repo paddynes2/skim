@@ -150,7 +150,8 @@ Manager under `fork:` keys, never in the database, settings, logs or repo.
 | Migrations, settings allowlist, command list | `db.rs`, `migrations/`, `settings.rs`, `commands.rs`, `mod.rs` | `SettingsFork.svelte`, `keys.ts`, `actions.ts` |
 | Gmail fixes, Starred total | `gmail.rs`, `list.rs` | |
 | Undo and restore | `restore.rs` | `stores/`, `Toast.svelte` |
-| Sent / Drafts freshness | `freshness.rs` | |
+| Sent / Drafts freshness | `freshness.rs`; Drafts IDLE watcher in `mail/sync.rs` (D83) | |
+| Dead draft mirrors | `draft_orphans.rs` | |
 | Search operators | `search_query.rs` | `search/` |
 | Quote folding | `fold.rs` | |
 | Compose HTML, send later, holds | `compose.rs`, `scheduler.rs` | `RichEditor.svelte`, `compose/`, `scheduled/` |
@@ -366,6 +367,12 @@ Screenshots of real mail go to a scratch folder, never into the repo.
   `scripts/fork/contrast.mjs`, not the 3:1 used for icons (D46).
 - `drafts.id` is not AUTOINCREMENT, so ids are reused. Anything keyed on a
   draft id must be removed when the draft is deleted (see `delete_draft`).
+- `messages.id` is reused the same way, so a stored message id can come to
+  point at an unrelated message. A dead draft mirror's `origin_message_id`
+  did exactly that (D82): match on the Message-ID, not on a stored row id.
+- A query that wraps an indexed column in a function (`coalesce(...) = x`)
+  scans the whole messages table. Inside a writer call that blocks every
+  click (D84). `skim-slow.log` "slow db write" lines name the caller.
 - The pop-out compose window (`ComposeRoot.svelte`) is a separate app root. A
   popover or toast mounted only in `App.svelte` does not exist there (D47).
 - Send later needs the app running. Skim autostarts to the tray, and the
