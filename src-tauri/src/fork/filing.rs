@@ -528,9 +528,17 @@ pub fn note_moved_back(conn: &mut Connection, now: i64) -> rusqlite::Result<usiz
              WHERE l.undone_at IS NULL AND l.filed_at < ?1
                AND NOT EXISTS (SELECT 1 FROM pending_ops p WHERE p.account_id = l.account_id
                                AND p.kind = 'move' AND p.state = 'pending')
-               AND EXISTS (SELECT 1 FROM messages m JOIN folders f ON f.id = m.folder_id
-                           WHERE f.role = 'inbox' AND m.account_id = l.account_id
-                             AND coalesce(nullif(m.message_id, ''), 'id:' || m.id) = l.message_id)",
+               -- v1.1.37 (D84): the two halves of the message key, each on an
+               -- index. One coalesce() over every row scanned the whole cache
+               -- per log row and held the writer ~4.3 s each pass.
+               AND (EXISTS (SELECT 1 FROM messages m JOIN folders f ON f.id = m.folder_id
+                            WHERE f.role = 'inbox' AND m.account_id = l.account_id
+                              AND m.message_id = l.message_id AND m.message_id <> '')
+                 OR (l.message_id LIKE 'id:%'
+                     AND EXISTS (SELECT 1 FROM messages m JOIN folders f ON f.id = m.folder_id
+                                 WHERE f.role = 'inbox' AND m.account_id = l.account_id
+                                   AND m.id = CAST(substr(l.message_id, 4) AS INTEGER)
+                                   AND coalesce(m.message_id, '') = '')))",
         )?;
         let rows = stmt.query_map(params![now - SETTLE_SECS], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
@@ -1490,6 +1498,46 @@ mod tests {
             let never: i64 =
                 conn.query_row("SELECT count(*) FROM fork_filing_never", [], |r| r.get(0))?;
             assert_eq!(never, 0);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    // v1.1.37 (D84): a message with no Message-ID is keyed 'id:<pk>'; the
+    // indexed rewrite still finds it back in the Inbox, and only it.
+    #[test]
+    fn a_message_without_a_message_id_is_seen_moved_back() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn);
+            let now = 10_000_000;
+            let bare = add(conn, 1, 1, "bare", &[], BOT, now - 10);
+            let keyed = add(conn, 1, 2, "keyed", &[], BOT, now - 10);
+            let pk = |t: i64| -> rusqlite::Result<i64> {
+                conn.query_row(
+                    "SELECT id FROM messages WHERE thread_id = ?1",
+                    params![t],
+                    |r| r.get(0),
+                )
+            };
+            let (bare_pk, keyed_pk) = (pk(bare)?, pk(keyed)?);
+            conn.execute(
+                "UPDATE messages SET message_id = NULL WHERE id = ?1",
+                params![bare_pk],
+            )?;
+            for (mid, from) in [(bare_pk, "a@x"), (keyed_pk, "b@x")] {
+                conn.execute(
+                    "INSERT INTO fork_filing_log
+                       (account_id, message_id, from_addr, subject, rule, folder, score, filed_at)
+                     VALUES ('a1', ?1, ?2, 's', 'deal-flow', 'Deal Flow', 0.9, ?3)",
+                    params![format!("id:{mid}"), from, now],
+                )?;
+            }
+            // Only the bare one: the keyed message is known by its Message-ID.
+            assert_eq!(note_moved_back(conn, now + SETTLE_SECS + 1)?, 1);
+            let never: String =
+                conn.query_row("SELECT from_addr FROM fork_filing_never", [], |r| r.get(0))?;
+            assert_eq!(never, "a@x");
             Ok(())
         })
         .unwrap();
