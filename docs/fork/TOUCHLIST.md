@@ -280,3 +280,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.35 | Signed local release |
 | `src-tauri/src/mail/sync.rs` | `SyncCommand`, `spawn`, worker loop, IDLE watcher (`spawn_idle_watcher`, `idle_session`, `idle_cycle`), IDLE tests | `IdleTarget`; second IDLE connection on Drafts (EXAMINE) that wakes `SyncFresh` | D83 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.36 | Signed local release |
+| `src-tauri/src/mail/sync.rs` | `FetchPhases`, `fetch_body` | parse, files and store timed in the slow body fetch line | D84 |
+| `src-tauri/src/db/mod.rs` | `Db::call` | `#[track_caller]`; a writer call that waits or holds 750 ms or more is logged with its caller | D84 |

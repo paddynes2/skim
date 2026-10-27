@@ -31,6 +31,8 @@ const MIGRATIONS: &[&str] = &[
 /// A read the user is waiting on has this long to answer before it is worth
 /// knowing about. Well past a healthy query; short enough to catch a stall.
 const SLOW_READ: std::time::Duration = std::time::Duration::from_secs(1);
+// Fork (D84): a writer call that waits or holds this long is logged.
+const SLOW_WRITE: std::time::Duration = std::time::Duration::from_millis(750);
 
 /// Handle to the database (WAL mode), with two connections behind it.
 ///
@@ -96,18 +98,43 @@ impl Db {
     }
 
     /// Run a closure against the writing connection on a blocking thread.
-    pub async fn call<T, F>(&self, f: F) -> Result<T>
+    ///
+    /// Fork (D84): a call that waits for or holds the one writing connection
+    /// long enough to be felt goes to `skim-slow.log` with its caller's
+    /// file:line, so a click held up behind it names what held it.
+    #[track_caller]
+    pub fn call<T, F>(&self, f: F) -> impl std::future::Future<Output = Result<T>>
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> rusqlite::Result<T> + Send + 'static,
     {
         let conn = self.conn.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut guard = conn.lock().expect("db mutex poisoned");
-            f(&mut guard)
-        })
-        .await?;
-        Ok(result?)
+        let caller = std::panic::Location::caller();
+        async move {
+            let result = tokio::task::spawn_blocking(move || {
+                let started = std::time::Instant::now();
+                let mut guard = conn.lock().expect("db mutex poisoned");
+                let waited = started.elapsed();
+                let out = f(&mut guard);
+                drop(guard);
+                let held = started.elapsed() - waited;
+                if waited >= SLOW_WRITE || held >= SLOW_WRITE {
+                    crate::append_log(
+                        "skim-slow.log",
+                        &format!(
+                            "slow db write: {}:{} held {}ms (waited {}ms)",
+                            caller.file(),
+                            caller.line(),
+                            held.as_millis(),
+                            waited.as_millis()
+                        ),
+                    );
+                }
+                out
+            })
+            .await?;
+            Ok(result?)
+        }
     }
 
     /// Run a read-only closure on the reader connection — the path for queries

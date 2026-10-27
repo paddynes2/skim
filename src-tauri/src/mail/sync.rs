@@ -206,19 +206,29 @@ struct FetchPhases {
     select_ms: u128,
     fetch_ms: u128,
     bytes: usize,
+    /// Fork (D84): the steps after the download, untimed before. A click
+    /// waited ~3.5 s more than db + select + fetch added up to.
+    parse_ms: u128,
+    files_ms: u128,
+    /// Saving the body, including the wait for the one writing connection.
+    store_ms: u128,
 }
 
 impl std::fmt::Display for FetchPhases {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "db {}ms, cred {}ms, login {}ms, select {}ms, fetch {}ms, {}KiB",
+            "db {}ms, cred {}ms, login {}ms, select {}ms, fetch {}ms, {}KiB, \
+             parse {}ms, files {}ms, store {}ms",
             self.db_ms,
             self.cred_ms,
             self.login_ms,
             self.select_ms,
             self.fetch_ms,
-            self.bytes / 1024
+            self.bytes / 1024,
+            self.parse_ms,
+            self.files_ms,
+            self.store_ms
         )
     }
 }
@@ -1802,7 +1812,10 @@ impl Engine {
         };
         phases.bytes = raw.len();
 
+        let at = std::time::Instant::now();
         let parsed = parse::parse_body(&raw);
+        phases.parse_ms = at.elapsed().as_millis();
+        let at = std::time::Instant::now();
 
         // Attachments go to the on-disk cache, keyed by message pk.
         let dir = self
@@ -1846,6 +1859,7 @@ impl Engine {
         let html = parsed.html;
         let text = parsed.text;
         let snippet = parsed.snippet;
+        phases.files_ms = at.elapsed().as_millis();
 
         // Messages synced before migration 0008 have no auth columns; the raw
         // payload here starts with the full header block, so backfill them the
@@ -1859,7 +1873,9 @@ impl Engine {
             hdr.auth_dmarc,
         );
 
-        self.db
+        let at = std::time::Instant::now();
+        let stored_at = self
+            .db
             .call(move |conn| {
                 bodies::set_body(
                     conn,
@@ -1880,7 +1896,9 @@ impl Engine {
                 )?;
                 Ok(())
             })
-            .await?;
+            .await;
+        phases.store_ms = at.elapsed().as_millis();
+        stored_at?;
         Ok(())
     }
 
