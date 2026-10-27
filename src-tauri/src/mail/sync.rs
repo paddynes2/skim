@@ -96,6 +96,9 @@ pub enum SyncCommand {
     SyncFolder {
         folder_id: i64,
     },
+    /// Fork (D83): the STATUS-gated Drafts + Sent sweep, now also on a Drafts
+    /// IDLE wake.
+    SyncFresh,
     Stop,
 }
 
@@ -246,7 +249,22 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
     // One OAuth token cache, shared by every connection this account owns.
     let oauth: Arc<Mutex<Option<(String, i64)>>> = Arc::new(Mutex::new(None));
 
-    spawn_idle_watcher(account.clone(), tx.clone(), oauth.clone());
+    spawn_idle_watcher(
+        account.clone(),
+        tx.clone(),
+        oauth.clone(),
+        IdleTarget::Inbox,
+        db.clone(),
+    );
+    // Fork (D83): a second IDLE on Drafts, so a draft made, changed, sent or
+    // deleted anywhere shows within seconds, not at the next minute's sweep.
+    spawn_idle_watcher(
+        account.clone(),
+        tx.clone(),
+        oauth.clone(),
+        IdleTarget::Drafts,
+        db.clone(),
+    );
 
     // Dedicated connection for interactive body fetches. It only ever handles
     // FetchBody, on its own IMAP session, so opening a message stays instant
@@ -420,6 +438,10 @@ pub fn spawn(app: AppHandle, db: Db, account: Account, data_dir: PathBuf) -> Syn
                         }
                         Some(SyncCommand::RunOps) => {
                             engine.drain_ops().await;
+                        }
+                        Some(SyncCommand::SyncFresh) => {
+                            engine.drain_ops().await;
+                            engine.sync_fresh().await;
                         }
                         // Fork (3.4): a pending send/save_draft lands first and
                         // already resyncs its folders; only sync again if the
@@ -2766,10 +2788,48 @@ impl Engine {
 
 // ---- IDLE watcher -------------------------------------------------------
 
+/// Fork (D83): which mailbox an IDLE connection watches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IdleTarget {
+    Inbox,
+    Drafts,
+}
+
+impl IdleTarget {
+    /// What the worker is asked to do on a connect, a wake or a heartbeat.
+    fn wake(self) -> SyncCommand {
+        match self {
+            IdleTarget::Inbox => SyncCommand::SyncInbox,
+            IdleTarget::Drafts => SyncCommand::SyncFresh,
+        }
+    }
+}
+
+/// The IMAP name of the account's Drafts folder, once folder discovery has
+/// found it.
+async fn drafts_mailbox(db: &Db, account_id: &str) -> Option<String> {
+    let account_id = account_id.to_string();
+    db.call(move |conn| {
+        use rusqlite::OptionalExtension;
+        conn.query_row(
+            "SELECT imap_name FROM folders WHERE account_id = ?1 AND role = 'drafts'
+              ORDER BY id LIMIT 1",
+            rusqlite::params![account_id],
+            |r| r.get(0),
+        )
+        .optional()
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 fn spawn_idle_watcher(
     account: Account,
     tx: mpsc::UnboundedSender<SyncCommand>,
     oauth_token: Arc<Mutex<Option<(String, i64)>>>,
+    target: IdleTarget,
+    db: Db,
 ) {
     tauri::async_runtime::spawn(async move {
         let mut backoff = 5u64;
@@ -2777,13 +2837,28 @@ fn spawn_idle_watcher(
             if tx.is_closed() {
                 break;
             }
-            match idle_session(&account, &tx, &oauth_token, &mut backoff).await {
+            let mailbox = match target {
+                IdleTarget::Inbox => "INBOX".to_string(),
+                IdleTarget::Drafts => match drafts_mailbox(&db, &account.id).await {
+                    Some(name) => name,
+                    // A new account: the first sync has not found Drafts yet.
+                    None => {
+                        tokio::time::sleep(std::time::Duration::from_secs(IDLE_RETRY_MAX_SECS))
+                            .await;
+                        continue;
+                    }
+                },
+            };
+            match idle_session(&account, &tx, &oauth_token, &mut backoff, target, &mailbox).await {
                 Ok(()) => backoff = 5,
                 Err(e) => {
-                    tracing::debug!(error = %e, "IDLE connection ended");
+                    tracing::debug!(error = %e, ?target, "IDLE connection ended");
                     crate::append_log(
                         "skim-sync.log",
-                        &format!("IDLE disconnected ({}); retry in {backoff}s", e.code()),
+                        &format!(
+                            "IDLE {target:?} disconnected ({}); retry in {backoff}s",
+                            e.code()
+                        ),
                     );
                 }
             }
@@ -2798,6 +2873,8 @@ async fn idle_session(
     tx: &mpsc::UnboundedSender<SyncCommand>,
     oauth_token: &Arc<Mutex<Option<(String, i64)>>>,
     backoff: &mut u64,
+    target: IdleTarget,
+    mailbox: &str,
 ) -> Result<()> {
     // Same lock discipline as `Engine::session`: Microsoft rotates the refresh
     // token on every use and `resolve_credentials` persists the new one, so two
@@ -2814,23 +2891,39 @@ async fn idle_session(
         &creds,
     )
     .await?;
-    tokio::time::timeout(IDLE_COMMAND_TIMEOUT, session.select("INBOX"))
-        .await
+    // Fork (D83): Drafts is opened read-only, so watching never changes a flag.
+    let opened = match target {
+        IdleTarget::Inbox => {
+            tokio::time::timeout(IDLE_COMMAND_TIMEOUT, session.select(mailbox)).await
+        }
+        IdleTarget::Drafts => {
+            tokio::time::timeout(IDLE_COMMAND_TIMEOUT, session.examine(mailbox)).await
+        }
+    };
+    opened
         .map_err(|_| SkimError::other("network", "IDLE SELECT timed out"))?
         .map_err(|e| SkimError::other("imap", e.to_string()))?;
 
     // Sync once on every (re)connect: mail that arrived while the IDLE
     // connection was down (Gmail rotates them) would otherwise wait for the
     // next push or the poll. This is what keeps new mail near-instant.
-    tracing::info!(account = %account.email, "IDLE connected; syncing inbox");
-    let _ = tx.send(SyncCommand::SyncInbox);
+    tracing::info!(account = %account.email, ?target, "IDLE connected; syncing");
+    let _ = tx.send(target.wake());
 
     loop {
         if tx.is_closed() {
             let _ = session.logout().await;
             return Ok(());
         }
-        session = idle_cycle(session, tx, IDLE_REISSUE, IDLE_COMMAND_TIMEOUT, backoff).await?;
+        session = idle_cycle(
+            session,
+            tx,
+            IDLE_REISSUE,
+            IDLE_COMMAND_TIMEOUT,
+            backoff,
+            target,
+        )
+        .await?;
     }
 }
 
@@ -2841,6 +2934,7 @@ async fn idle_cycle<T>(
     heartbeat: std::time::Duration,
     command_timeout: std::time::Duration,
     backoff: &mut u64,
+    target: IdleTarget,
 ) -> Result<async_imap::Session<T>>
 where
     T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + std::fmt::Debug + Send,
@@ -2861,7 +2955,7 @@ where
     }
     // Notify before DONE: a server can announce mail and then stop answering.
     // Heartbeats also catch up when a provider misses an arrival notification.
-    let _ = tx.send(SyncCommand::SyncInbox);
+    let _ = tx.send(target.wake());
     tokio::time::timeout(command_timeout, idle.done())
         .await
         .map_err(|_| SkimError::other("network", "IDLE completion timed out"))?
@@ -2882,6 +2976,18 @@ mod idle_recovery_tests {
     }
 
     async fn exercise(mode: Server) {
+        exercise_for(mode, IdleTarget::Inbox).await;
+    }
+
+    /// Fork (D83): the wake each target sends.
+    fn is_wake(cmd: &SyncCommand, target: IdleTarget) -> bool {
+        match target {
+            IdleTarget::Inbox => matches!(cmd, SyncCommand::SyncInbox),
+            IdleTarget::Drafts => matches!(cmd, SyncCommand::SyncFresh),
+        }
+    }
+
+    async fn exercise_for(mode: Server, target: IdleTarget) {
         let (client, server) = tokio::io::duplex(4096);
         let silent_start = matches!(mode, Server::SilentStart);
         let silent_done = matches!(mode, Server::ArrivalSilentDone);
@@ -2934,6 +3040,7 @@ mod idle_recovery_tests {
             Duration::from_millis(20),
             Duration::from_millis(200),
             &mut backoff,
+            target,
         );
         let result = tokio::time::timeout(Duration::from_secs(3), async {
             if silent_start {
@@ -2944,12 +3051,12 @@ mod idle_recovery_tests {
                 tokio::select! {
                     biased;
                     cmd = rx.recv() => {
-                        assert!(matches!(cmd, Some(SyncCommand::SyncInbox)));
+                        assert!(cmd.is_some_and(|c| is_wake(&c, target)));
                         cycle.await
                     }
                     result = &mut cycle => {
                         assert!(!silent_done, "arrival waited for a stalled DONE");
-                        assert!(matches!(rx.try_recv(), Ok(SyncCommand::SyncInbox)));
+                        assert!(rx.try_recv().is_ok_and(|c| is_wake(&c, target)));
                         result
                     }
                 }
@@ -2984,6 +3091,13 @@ mod idle_recovery_tests {
     #[tokio::test]
     async fn arrival_resets_backoff_and_preserves_session() {
         exercise(Server::Arrival).await;
+    }
+    // Fork (D83): a change in Drafts asks for the Drafts + Sent sweep, never
+    // the inbox sync, on a push and on the heartbeat.
+    #[tokio::test]
+    async fn drafts_change_wakes_the_fresh_sweep() {
+        exercise_for(Server::Arrival, IdleTarget::Drafts).await;
+        exercise_for(Server::Heartbeat, IdleTarget::Drafts).await;
     }
 }
 

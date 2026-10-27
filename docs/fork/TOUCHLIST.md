@@ -278,3 +278,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.32 | Signed local release |
 | `src-tauri/src/mail/sync.rs` | `reconcile_flags` | after expunged rows go, drops draft mirrors whose server copy is gone | D82 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.35 | Signed local release |
+| `src-tauri/src/mail/sync.rs` | `SyncCommand`, `spawn`, worker loop, IDLE watcher (`spawn_idle_watcher`, `idle_session`, `idle_cycle`), IDLE tests | `IdleTarget`; second IDLE connection on Drafts (EXAMINE) that wakes `SyncFresh` | D83 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.36 | Signed local release |
