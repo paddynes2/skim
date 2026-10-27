@@ -37,6 +37,11 @@ const FRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 // A short heartbeat detects sockets blackholed by sleep or a network change.
 const IDLE_REISSUE: std::time::Duration = std::time::Duration::from_secs(60);
 const IDLE_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+// Fork (D83): measured 27 Oct, Gmail sent no IDLE push for a draft made or
+// deleted through its API (both caught at ~30 s, by the minute timers). The
+// Drafts watcher's heartbeat is the real clock, so it runs every 10 s; each
+// beat costs one STATUS per Drafts and Sent, and syncs only on a change.
+const DRAFTS_IDLE_REISSUE: std::time::Duration = std::time::Duration::from_secs(10);
 const IDLE_RETRY_MAX_SECS: u64 = 30;
 // Ceiling on one whole trip to the server for a body — login, SELECT and the
 // FETCH — so a stalled socket can't wedge the worker (and thus every later
@@ -2936,7 +2941,10 @@ async fn idle_session(
         session = idle_cycle(
             session,
             tx,
-            IDLE_REISSUE,
+            match target {
+                IdleTarget::Inbox => IDLE_REISSUE,
+                IdleTarget::Drafts => DRAFTS_IDLE_REISSUE,
+            },
             IDLE_COMMAND_TIMEOUT,
             backoff,
             target,
