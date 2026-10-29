@@ -48,7 +48,7 @@
     if (busy) return;
     busy = true; error = "";
     try {
-      await invoke("fork_block_sender", { messageId: message.id });
+      await invoke("fork_block_sender", { messageId: message.id, sender: message.from.addr, folderId: message.folderId });
       result = "blocked";
     } catch (e) { error = errorMessage(e); }
     finally { busy = false; }

@@ -24,13 +24,19 @@ fn write_rules(conn: &Connection, value: &Rules) -> rusqlite::Result<()> {
     queries::set_setting(conn, SETTING, &json!(value).to_string())
 }
 
-fn block_message(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+fn block_message(
+    conn: &Connection,
+    id: i64,
+    expected_sender: &str,
+    folder_id: i64,
+) -> rusqlite::Result<()> {
     let (account, sender, own): (String, String, bool) = conn.query_row(
         "SELECT m.account_id, lower(trim(coalesce(m.from_addr,''))),
          EXISTS(SELECT 1 FROM accounts a WHERE lower(a.email)=lower(trim(m.from_addr)))
          FROM messages m JOIN folders f ON f.id=m.folder_id
-         WHERE m.id=?1 AND coalesce(f.role,'') NOT IN ('sent','drafts')",
-        params![id],
+         WHERE m.id=?1 AND m.folder_id=?2 AND lower(trim(m.from_addr))=lower(trim(?3))
+         AND coalesce(f.role,'') NOT IN ('sent','drafts')",
+        params![id, folder_id, expected_sender],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
     if own || sender.is_empty() || !sender.contains('@') {
@@ -126,11 +132,20 @@ pub async fn fork_block_sender(
     app: AppHandle,
     state: State<'_, AppState>,
     message_id: i64,
+    sender: String,
+    folder_id: i64,
 ) -> Result<()> {
     state
         .db
-        .call(move |conn| block_message(conn, message_id))
-        .await?;
+        .call(move |conn| block_message(conn, message_id, &sender, folder_id))
+        .await
+        .map_err(|e| match e {
+            SkimError::Db(rusqlite::Error::QueryReturnedNoRows) => SkimError::other(
+                "block",
+                "This message changed. Reopen it before blocking the sender.",
+            ),
+            other => other,
+        })?;
     schedule(app);
     Ok(())
 }
@@ -211,9 +226,12 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         db.with(|conn| {
             seed(conn);
-            block_message(conn, 1)?;
-            block_message(conn, 1)?;
+            block_message(conn, 1, "news@list.example", 1)?;
+            block_message(conn, 1, "news@list.example", 1)?;
             assert_eq!(rules(conn)?["a"], vec!["news@list.example"]);
+            assert!(block_message(conn, 2, "news@list.example", 1).is_err());
+            assert!(block_message(conn, 3, "news@list.example", 1).is_err());
+            assert!(!rules(conn)?.contains_key("b"));
             assert_eq!(sweep(conn)?, vec!["a"]);
             assert!(sweep(conn)?.is_empty());
             let remaining: i64 =
@@ -228,8 +246,8 @@ mod tests {
                 serde_json::from_str::<serde_json::Value>(&payload).unwrap()["uids"],
                 json!([1])
             );
-            assert!(block_message(conn, 6).is_err());
-            assert!(block_message(conn, 4).is_err());
+            assert!(block_message(conn, 6, "other@example.com", 1).is_err());
+            assert!(block_message(conn, 4, "news@list.example", 2).is_err());
             conn.execute("UPDATE pending_ops SET state='failed'", [])?;
             assert!(sweep(conn)?.is_empty());
             assert_eq!(
@@ -257,7 +275,7 @@ mod tests {
     fn future_mail_is_queued_until_unblocked_and_invalid_rules_preserve_mail() {
         let db = Db::open_in_memory().unwrap();
         db.with(|conn| {
-            seed(conn); block_message(conn, 1)?; sweep(conn)?;
+            seed(conn); block_message(conn, 1, "news@list.example", 1)?; sweep(conn)?;
             conn.execute("INSERT INTO messages (id,account_id,folder_id,uid,date,from_addr) VALUES (7,'a',1,7,0,'news@list.example')", [])?;
             assert_eq!(sweep(conn)?, vec!["a"]);
             write_rules(conn, &Rules::new())?;

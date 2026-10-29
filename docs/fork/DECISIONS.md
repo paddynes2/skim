@@ -252,6 +252,7 @@ Parse in an inert template, ignore quoted content and unsafe URL schemes, and pr
 Do not send an email or POST to a URL inferred from body text. Missing bodies and operational errors remain retryable errors.
 
 If no link exists, explicitly offer Block sender with its mailbox scope. The block matches one exact address in one account.
+Bind the block command to the displayed sender and folder as well as the message ID. Refuse a stale cache reference.
 Store rules in the local fork_blocked_senders setting. At startup and mail updates, queue at most 200 matching Inbox messages through the existing Spam operation.
 Keep each cached message visible until its server move succeeds. Pending and failed operations prevent duplicate queue entries.
 Other senders, accounts, Sent, drafts and archived mail are excluded. Settings lists blocks with their mailbox and an Unblock action.

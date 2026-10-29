@@ -42,7 +42,7 @@ async function render(fixture = {}, header = false, width = 820, settings = fals
   await page.setContent(`<style>${readFileSync(root + "src/styles/tokens.css", "utf8")} body {font-family: 'Segoe UI'; background:var(--surface); color:var(--text); padding:24px} button:focus-visible{outline:2px solid var(--focus)}</style><main id="app"></main>`);
   await page.evaluate(f => { window.fixture=f; window.calls=[]; }, fixture);
   await page.addScriptTag({ content: js });
-  await page.evaluate(({header,settings}) => window.testApp.mount(settings ? window.testApp.Settings : window.testApp.Action, {target: document.getElementById('app'), props: { message: {id:42,canUnsubscribe:header,from:{addr:'news@list.example'}}}}), {header,settings});
+  await page.evaluate(({header,settings}) => window.testApp.mount(settings ? window.testApp.Settings : window.testApp.Action, {target: document.getElementById('app'), props: { message: {id:42,folderId:7,canUnsubscribe:header,from:{addr:'news@list.example'}}}}), {header,settings});
 }
 const button = name => page.getByRole("button", { name, exact: true });
 
@@ -78,7 +78,7 @@ test("no link offers an explicit block with a cancel and a mailbox scope", async
   await button("Unsubscribe").click();
   await button("Block sender").click();
   await button("Sender blocked").waitFor();
-  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1), ["fork_block_sender",{messageId:42}]);
+  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1), ["fork_block_sender",{messageId:42,sender:"news@list.example",folderId:7}]);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth), true);
 });
 

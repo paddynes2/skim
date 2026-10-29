@@ -6,7 +6,7 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-29.**
 
-## Version 1.1.39 (October 29)
+## Versions 1.1.39 and 1.1.40 (October 29)
 
 D85 makes Unsubscribe available on every incoming message. Existing header actions remain; messages without a usable header can open a footer unsubscribe or preference page. A missing link offers an explicit Block sender action, scoped to one exact address in one mailbox. Settings lists blocks and provides Unblock. Skim applies these rules while running. Sent messages, drafts, archived mail and other senders are excluded from automatic moves.
 
@@ -16,7 +16,7 @@ Prepared in an isolated worktree. Focused validation: nine browser tests of the 
 
 Test proof: `PROVE_TEST: mode=mutate status=PROVEN base=f09db4d0b550 mutants=6 killed=6 survived=0 timeout=0 invalid=0 sampled=6/6`. The first proof exposed a missing username-only URL case; that case and the password-only case were added before the successful proof. Two manual Rust mutations were also rejected by assertions: removal of the mailbox restriction, and removal of the local copy before server success. Both source files were restored byte-for-byte. The proof tool does not mutate Rust or Svelte files.
 
-Installation is in progress. This paragraph is not installation evidence.
+1.1.39 installed at 16:34 SAST, backup `~/.skim-fork/backups/20261029-163439`. Version 1.1.40 adds sender and folder binding to the Block action so a reused cache ID cannot block a different sender or mailbox. Its installation is in progress.
 
 Memory used for orientation: project_skim_fork.md. Current implementation and installation procedure were checked against this repository. No live unsubscribe, sender block or email send was used for verification.
 
