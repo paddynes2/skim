@@ -4,7 +4,20 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-27.**
+**As of 2026-10-29.**
+
+## Version 1.1.39 (October 29)
+
+D85 makes Unsubscribe available on every incoming message. Existing header actions remain; messages without a usable header can open a footer unsubscribe or preference page. A missing link offers an explicit Block sender action, scoped to one exact address in one mailbox. Settings lists blocks and provides Unblock. Skim applies these rules while running. Sent messages, drafts, archived mail and other senders are excluded from automatic moves.
+
+A queued unsubscribe request is labelled as requested. Opening a page no longer claims success. Failed body loads, browser launches and block writes remain visible. A blocked message stays visible until the server accepts its move to Spam, and a failed queued move is not queued repeatedly.
+
+Prepared in an isolated worktree. Focused validation: nine browser tests of the actual Svelte components and link parser, two Rust database tests, Svelte check and frontend build. The full fictional app was exercised at 1440 by 900 in Base dark, including the no-header button and Block sender prompt. Narrow component width 390 and Base light were also checked. The only Svelte warning is the existing ComposeForm smell state warning. Full gates and installation are in progress; this paragraph is not installation evidence.
+
+Memory used for orientation: project_skim_fork.md. Current implementation and installation procedure were checked against this repository. No live unsubscribe, sender block or email send was used for verification.
+
+Rollback: install the retained 1.1.38 installer. That version ignores the new local setting. Already completed moves to Spam are not undone.
+
 
 ## Versions 1.1.35 to 1.1.38 (October 27)
 

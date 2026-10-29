@@ -9,6 +9,7 @@
   import { untrack, tick } from "svelte";
   import ConversationTools from "../fork/reading/ConversationTools.svelte";
   import ThreadFiles from "../fork/reading/ThreadFiles.svelte";
+  import UnsubscribeAction from "../fork/reading/UnsubscribeAction.svelte";
   import FiledBar from "../fork/filing/FiledBar.svelte";
   import AiAsk from "./AiAsk.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
@@ -92,8 +93,6 @@
     targetSecurity !== null &&
       (targetSecurity.sender.length > 0 || targetSecurity.links.length > 0),
   );
-  // Per-message unsubscribe state: true once the user clicks the chip.
-  let unsubscribed = $state<Record<number, boolean>>({});
   // Which view each message is being shown in. Kept so one toggle can't undo the
   // other: "show images" must not drop a translation, nor the reverse.
   let viewOpts = $state<Record<number, { images: boolean; translated: boolean }>>({});
@@ -534,14 +533,6 @@
     if (row) removeThread(row, "spam", allIds);
   }
 
-  function unsubscribe(id: number) {
-    if (unsubscribed[id]) return;
-    unsubscribed[id] = true; // optimistic; the backend queues the actual op
-    void api.unsubscribe(id).catch(() => {
-      unsubscribed[id] = false; // let the user try again if it never queued
-    });
-  }
-
   // The picker itself does the optimistic removal once a destination is picked
   // — until then nothing has happened yet.
   function openMove() {
@@ -810,7 +801,7 @@
       </div>
     {/if}
 
-    {#if offerTranslate || message.canUnsubscribe}
+    {#if offerTranslate || (!message.isDraft && !isOutgoing(message))}
       <!-- One row for the chips that act on this message. The meta line above is
            identity — sender, recipients, date — so a button in it was a squatter;
            the framed bars below are the app telling the user something. -->
@@ -846,14 +837,8 @@
               : t("ai.translate")}<kbd>T</kbd>
           </button>
         {/if}
-        {#if message.canUnsubscribe}
-          {#if unsubscribed[message.id]}
-            <span class="chip done">{t("reading.unsubscribed")} ✓</span>
-          {:else}
-            <button class="chip" onclick={() => unsubscribe(message.id)}>
-              {t("reading.unsubscribe")}
-            </button>
-          {/if}
+        {#if !message.isDraft && !isOutgoing(message)}
+          {#key message.id}<UnsubscribeAction {message} />{/key}
         {/if}
       </div>
     {/if}
@@ -1408,10 +1393,6 @@
   button.chip.ai:hover {
     background: var(--accent-soft);
     color: var(--accent);
-  }
-  .chip.done {
-    color: var(--success);
-    border-color: transparent;
   }
   .chip kbd {
     margin-left: 6px;

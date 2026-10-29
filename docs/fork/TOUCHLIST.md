@@ -285,3 +285,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/mail/sync.rs` | constants, `idle_session` | `DRAFTS_IDLE_REISSUE` 10 s for the Drafts watcher | D83 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.37 | Signed local release |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version only | 1.1.38 | Signed local release |
+
+| `src/components/ReadingPane.svelte` | message chips | mount keyed fork UnsubscribeAction for incoming mail; remove optimistic success label | consistent action and truthful outcomes (D85) |
+| `src-tauri/src/mail/sync.rs` | successful junk operation | complete the fork block cache update after the server accepts the move | failed automatic moves remain visible (D85) |
+| `src-tauri/src/lib.rs` | generate_handler | three blocked-sender commands | exact mailbox block and unblock (D85) |

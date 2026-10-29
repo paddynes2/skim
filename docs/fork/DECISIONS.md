@@ -238,3 +238,24 @@ Read-state changes made elsewhere still wait for the five-minute poll on folders
 - **2026-10-27 D84 (v1.1.36, measure the wait on opening a message):** The owner: "inbox messages take long, says 'fetching from server'". `skim-slow.log` showed clicks at 4.4 to 5.0 s while db + select + fetch added to under 1 s; the rest, a steady ~3.5 s, falls after the download in steps nothing timed. The body save itself takes ~15 ms on a copy of his database, so the likely cause is a wait for the one writing connection, but that is not proven. This release measures instead of guessing: the slow body fetch line now carries parse, files and store (store includes the wait for the writer), and every `Db::call` that waits for or holds the writer 750 ms or more is logged with its caller's file:line (`#[track_caller]` on a plain fn returning the future, since it cannot sit on an async fn). The fix follows from what the log names.
 - **2026-10-27 D83 addendum (v1.1.37, the Drafts heartbeat is the clock):** Measured live on 1.1.36 with a draft made, then deleted, through the Gmail API: it appeared in Skim after 34 s and left after 31 s, so Gmail sent no IDLE push for either change and the minute timers caught both. The Drafts watcher now re-issues IDLE every 10 s (`DRAFTS_IDLE_REISSUE`); each beat sends `SyncFresh`, one STATUS per Drafts and Sent, syncing only a folder that moved. The Inbox watcher stays at 60 s. Expected: a Drafts change shows within about 10 s.
 - **2026-10-27 D84 result (v1.1.38, the wait was Filing):** Within minutes of 1.1.36 the new writer log named it: `fork/filing.rs` `apply` held the writing connection 4.27 to 4.52 s on every pass, and every other writer (folder sync, calendar, a click's body save) waited 3 to 4 s behind it. The cost was `note_moved_back`: its "is this filed message back in the Inbox" test matched `coalesce(nullif(m.message_id, ''), 'id:' || m.id) = l.message_id`, which no index can serve, so each of the 502 log rows scanned all 72,989 cached messages. Rewritten as two indexed halves (a real Message-ID on `idx_messages_msgid`; an `id:<pk>` key on the primary key, only for a message with no Message-ID). On a copy of the owner's database: 4,191 ms to 4 ms, same rows. New test for the `id:` half; disabling that half fails it. The two other queries with the same expression filter by `thread_id` first and stay as they are.
+
+
+## D85: Unsubscribe on every incoming message (2026-10-29)
+
+The owner asked for the button on every email and chose Block sender when no unsubscribe route exists.
+The existing chip remains visible for incoming messages, including those without List-Unsubscribe.
+Sent messages and drafts do not offer it. Header actions retain their existing queue and browser behavior.
+A queued request says Unsubscribe requested. An opened page asks the owner to finish any steps there.
+
+Without a usable header, inspect the original sanitized body for a web unsubscribe or preference link.
+Parse in an inert template, ignore quoted content and unsafe URL schemes, and preserve the suspicious-link confirmation.
+Do not send an email or POST to a URL inferred from body text. Missing bodies and operational errors remain retryable errors.
+
+If no link exists, explicitly offer Block sender with its mailbox scope. The block matches one exact address in one account.
+Store rules in the local fork_blocked_senders setting. At startup and mail updates, queue at most 200 matching Inbox messages through the existing Spam operation.
+Keep each cached message visible until its server move succeeds. Pending and failed operations prevent duplicate queue entries.
+Other senders, accounts, Sent, drafts and archived mail are excluded. Settings lists blocks with their mailbox and an Unblock action.
+This is a Skim rule, effective while Skim runs, not a provider-side filter. Unblocking stops new queued moves; already queued actions can finish.
+
+Validation and installation evidence: STATUS.md. No mailbox unsubscribe or block is performed during testing.
+Rollback: install 1.1.38. It ignores the new setting. Mail already moved to Spam must be moved back by the owner if wanted.

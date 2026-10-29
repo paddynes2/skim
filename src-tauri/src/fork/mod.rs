@@ -3,6 +3,7 @@
 //! call each, logged in `docs/fork/TOUCHLIST.md`.
 
 pub mod availability;
+pub mod blocked_senders;
 pub mod calendar;
 pub mod commands;
 pub mod compose;
@@ -69,6 +70,7 @@ pub fn start(app: AppHandle) {
     court::full_pass(app.clone(), db.clone());
     // v1.1.11 (D64): the Priority pass at startup and after each mail change.
     priority::schedule(app.clone());
+    blocked_senders::schedule(app.clone());
     // v1.1.12 (D65): keep the fetch connections awake while the window shows.
     prefetch::start(app.clone());
     let app2 = app.clone();
@@ -80,6 +82,7 @@ pub fn start(app: AppHandle) {
             .unwrap_or_default();
         court::on_mail_updated(app2.clone(), db.clone(), touched);
         priority::schedule(app2.clone());
+        blocked_senders::schedule(app2.clone());
     });
 }
 

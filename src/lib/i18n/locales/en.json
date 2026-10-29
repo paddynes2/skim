@@ -1170,5 +1170,16 @@
   "fork.filing.preview_heading": "Would file now: {n}",
   "fork.filing.preview_empty": "Nothing to file right now.",
   "fork.filing.not_loaded": "Filing settings did not load.",
-  "fork.filing.undo_nothing": "Skim has not synced this folder yet. Try again in a minute."
+  "fork.filing.undo_nothing": "Skim has not synced this folder yet. Try again in a minute.",
+  "fork.unsubscribe.working": "Checking...",
+  "fork.unsubscribe.queued": "Unsubscribe requested",
+  "fork.unsubscribe.opened": "Unsubscribe page opened. Finish any steps there.",
+  "fork.unsubscribe.missing": "No unsubscribe link found. Block {addr}? Skim will move this sender's Inbox mail to Spam in this mailbox, including new mail while Skim is running.",
+  "fork.unsubscribe.flagged": "Skim flagged this link as suspicious: {host}.",
+  "fork.unsubscribe.block": "Block sender",
+  "fork.unsubscribe.blocked": "Sender blocked",
+  "fork.unsubscribe.settings": "Blocked senders",
+  "fork.unsubscribe.settings_note": "Skim moves Inbox mail from these exact addresses to Spam while it is running. Each block applies only to the mailbox shown. Unblocking stops future moves; mail already in Spam stays there.",
+  "fork.unsubscribe.empty": "No blocked senders.",
+  "fork.unsubscribe.unblock": "Unblock"
 }

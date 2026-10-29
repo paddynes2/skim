@@ -1951,6 +1951,19 @@ impl Engine {
             };
             match self.execute_op(&kind, &parsed).await {
                 Ok(folder_ids) => {
+                    if kind == "junk" && parsed["forkBlocked"] == true {
+                        let account = self.account.id.clone();
+                        let payload = parsed.clone();
+                        if let Err(e) = self
+                            .db
+                            .call(move |conn| {
+                                crate::fork::blocked_senders::complete(conn, &account, &payload)
+                            })
+                            .await
+                        {
+                            tracing::warn!(error = %e, "blocked mail cache could not be refreshed");
+                        }
+                    }
                     affected.extend(folder_ids);
                     // Fork (3.4): Sent/Drafts change on the server when a
                     // send or draft save lands (Gmail files Sent itself).
