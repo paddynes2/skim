@@ -38,6 +38,7 @@ after(async () => { await browser?.close(); });
 async function render(fixture = {}, header = false, width = 820, settings = false) {
   await page?.close();
   page = await browser.newPage({ viewport: { width, height: 520 } });
+  page.setDefaultTimeout(5000);
   await page.setContent(`<style>${readFileSync(root + "src/styles/tokens.css", "utf8")} body {font-family: 'Segoe UI'; background:var(--surface); color:var(--text); padding:24px} button:focus-visible{outline:2px solid var(--focus)}</style><main id="app"></main>`);
   await page.evaluate(f => { window.fixture=f; window.calls=[]; }, fixture);
   await page.addScriptTag({ content: js });
@@ -114,6 +115,8 @@ test("unsafe, quoted and unrelated links are ignored without loading resources",
     '<a href="javascript:alert(1)">Unsubscribe</a>',
     '<a href="file:///C:/Windows/test">Unsubscribe</a>',
     '<a href="https://user:pass@example.com/u">Unsubscribe</a>',
+    '<a href="https://user@example.com/u">Unsubscribe</a>',
+    '<a href="https://:pass@example.com/u">Unsubscribe</a>',
     '<blockquote><a href="https://list.example/u">Unsubscribe</a></blockquote>',
     '<div id="divRplyFwdMsg">Forwarded</div><a href="https://list.example/u">Unsubscribe</a>',
     '<a href="https://list.example/article">Read this article</a>',
