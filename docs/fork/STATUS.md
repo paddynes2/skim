@@ -12,7 +12,11 @@ D85 makes Unsubscribe available on every incoming message. Existing header actio
 
 A queued unsubscribe request is labelled as requested. Opening a page no longer claims success. Failed body loads, browser launches and block writes remain visible. A blocked message stays visible until the server accepts its move to Spam, and a failed queued move is not queued repeatedly.
 
-Prepared in an isolated worktree. Focused validation: nine browser tests of the actual Svelte components and link parser, two Rust database tests, Svelte check and frontend build. The full fictional app was exercised at 1440 by 900 in Base dark, including the no-header button and Block sender prompt. Narrow component width 390 and Base light were also checked. The only Svelte warning is the existing ComposeForm smell state warning. Full gates and installation are in progress; this paragraph is not installation evidence.
+Prepared in an isolated worktree. Focused validation: nine browser tests of the actual Svelte components and link parser, two Rust database tests, Svelte check and frontend build. The full fictional app was exercised at 1440 by 900 in Base dark, including the no-header button and Block sender prompt. Narrow component width 390 and Base light were also checked. The only Svelte warning is the existing ComposeForm smell state warning. Full gates passed: 636 Rust tests passed, one pre-existing ignored test, every frontend test passed, Clippy and fmt passed, and all 216 contrast ratios passed. The build script reruns these checks before installation.
+
+Test proof: `PROVE_TEST: mode=mutate status=PROVEN base=f09db4d0b550 mutants=6 killed=6 survived=0 timeout=0 invalid=0 sampled=6/6`. The first proof exposed a missing username-only URL case; that case and the password-only case were added before the successful proof. Two manual Rust mutations were also rejected by assertions: removal of the mailbox restriction, and removal of the local copy before server success. Both source files were restored byte-for-byte. The proof tool does not mutate Rust or Svelte files.
+
+Installation is in progress. This paragraph is not installation evidence.
 
 Memory used for orientation: project_skim_fork.md. Current implementation and installation procedure were checked against this repository. No live unsubscribe, sender block or email send was used for verification.
 
