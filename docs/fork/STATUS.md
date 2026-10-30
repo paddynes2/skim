@@ -8,7 +8,7 @@ this file, and its date, whenever the state moves.
 
 ## Version 1.1.43 (October 30)
 
-A successful draft save now clears previous failed save operations for that same draft and account. Pending work, send failures, other drafts and other accounts remain intact. This prevents a successful Retry from leaving an obsolete failure in the footer. Full release gates passed again: 641 Rust tests and the complete frontend, lint, formatting, build and contrast suite. Regression proof and installation are pending.
+A successful draft save now clears previous failed save operations for that same draft and account. Pending work, send failures, other drafts and other accounts remain intact. This prevents a successful Retry from leaving an obsolete failure in the footer. Full release gates passed again: 641 Rust tests and the complete frontend, lint, formatting, build and contrast suite. Regression proof passed: `PROVE_TEST: status=PROVEN base=4468c7f41adc reverted=10 tests=1 exit_without_fix=101`. The test confirms that only the recovered save failure is removed and four unrelated or pending operations remain. Installation is pending.
 
 ## Version 1.1.42 (October 30)
 
