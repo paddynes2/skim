@@ -63,7 +63,7 @@ test('draft status errors and stale receipts never become a false confirmation',
 
 
 test('opening rich text is not an edit; typed changes preserve existing formatting',async()=>{
- await setup({html:''},'Rich');await page.waitForTimeout(250);assert.deepEqual(await page.evaluate(()=>window.calls),[]);
+ await setup({html:''},'Rich');await page.waitForTimeout(50);await page.locator('[contenteditable=true]').evaluate(el=>{const node=document.createComment('normalization');el.append(node);node.remove();});await page.waitForTimeout(250);assert.deepEqual(await page.evaluate(()=>window.calls),[]);
  await setup({},'Rich');const editor=page.locator('[contenteditable=true]');await editor.waitFor();
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  assert.deepEqual(await page.evaluate(()=>window.calls),[]);
