@@ -29,7 +29,7 @@ async function setup(fixture={},type='Files',dark=false){
  const png=existsSync(root+'.cache/pdf-proof.png')?'data:image/png;base64,'+readFileSync(root+'.cache/pdf-proof.png').toString('base64'):'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
  await page.evaluate(({fixture,png,dark})=>{window.fixture={png,...fixture};window.calls=[];window.listeners={};document.documentElement.dataset.theme=dark?'base-dark':'base-light';},{fixture,png,dark});
  await page.addScriptTag({content:js});
- await page.evaluate(type=>{const props=type==='Rich'?{html:'<p>Keep <b>this</b> link</p>',onchange:(html,text)=>window.calls.push(['edit',html,text])}:type==='Files'?{attachments:[{id:3,filename:'Review.pdf',mimeType:'application/pdf',size:124000}]}:{draftId:42,localStatus:'saved',revision:0,refreshKey:0,onSave:async()=>{window.calls.push(['saveDraft']);window.fixture.state='pending';},onRetryLocal:()=>window.calls.push(['retryLocal'])};window.props=props;window.instance=window.testApp.mount(window.testApp[type],{target:document.getElementById('app'),props});},type);
+ await page.evaluate(type=>{const props=type==='Rich'?{html:window.fixture.html??'<p>Keep <b>this</b> link</p>',onchange:(html,text)=>window.calls.push(['edit',html,text])}:type==='Files'?{attachments:[{id:3,filename:'Review.pdf',mimeType:'application/pdf',size:124000}]}:{draftId:42,localStatus:'saved',revision:0,refreshKey:0,onSave:async()=>{window.calls.push(['saveDraft']);window.fixture.state='pending';},onRetryLocal:()=>window.calls.push(['retryLocal'])};window.props=props;window.instance=window.testApp.mount(window.testApp[type],{target:document.getElementById('app'),props});},type);
 }
 const button=name=>page.getByRole('button',{name,exact:true});
 async function emit(state){await page.evaluate(state=>{window.fixture.state=state;for(const fn of window.listeners['draft:sync']??[])fn({payload:{draftId:42}});},state);}
@@ -63,6 +63,7 @@ test('draft status errors and stale receipts never become a false confirmation',
 
 
 test('opening rich text is not an edit; typed changes preserve existing formatting',async()=>{
+ await setup({html:''},'Rich');await page.waitForTimeout(250);assert.deepEqual(await page.evaluate(()=>window.calls),[]);
  await setup({},'Rich');const editor=page.locator('[contenteditable=true]');await editor.waitFor();
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  assert.deepEqual(await page.evaluate(()=>window.calls),[]);
