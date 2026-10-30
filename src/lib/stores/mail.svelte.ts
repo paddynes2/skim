@@ -25,6 +25,7 @@ import { undo } from "../../fork/stores/undo.svelte";
 import { insertAt, withoutPending } from "../../fork/undo-filter";
 import { folderSelected } from "../../fork/freshness";
 import { SCHEDULED_FOLDER_ID } from "../../fork/compose/api";
+import { forkApi } from "../../fork/api";
 
 /** Fork (3.1): which rows the list shows. */
 export type ListFilter = "all" | "unread" | "starred" | "hot";
@@ -40,6 +41,7 @@ const state = $state({
   accounts: [] as Account[],
   activeAccountId: null as string | null,
   folders: [] as Folder[],
+  draftCount: null as number | null,
   threads: [] as ThreadRow[],
   selectedFolderId: null as number | null,
   selectedThreadId: null as number | null,
@@ -305,20 +307,24 @@ async function refreshAccounts() {
   }
 }
 
+let folderRequest = 0;
 async function refreshFolders() {
+  const request = ++folderRequest;
   const accountId = state.activeAccountId;
   if (accountId === null) {
     missedRefresh = true;
     return;
   }
-  const folders = await guard(() =>
-    accountId === UNIFIED ? api.listUnifiedFolders() : api.listFolders(accountId),
-  );
+  const [folders, draftCount] = await Promise.all([
+    guard(() => accountId === UNIFIED ? api.listUnifiedFolders() : api.listFolders(accountId)),
+    forkApi.roleTotal("drafts", accountId === UNIFIED ? null : accountId).catch(() => null),
+  ]);
   if (folders === null) return;
   // The user may have switched accounts mid-fetch — these folders belong to
   // the previous mailbox.
-  if (state.activeAccountId !== accountId) return;
+  if (state.activeAccountId !== accountId || request !== folderRequest) return;
   state.folders = folders;
+  state.draftCount = draftCount;
   // Fork (4.3): the search folder is never in this list; a sync must not
   // bounce an open search back to the inbox.
   if (state.selectedFolderId === SEARCH_FOLDER_ID) return;
@@ -351,6 +357,7 @@ async function switchAccount(id: string) {
   state.selectedThreadId = null;
   state.selectedMessageId = null;
   state.folders = [];
+  state.draftCount = null;
   state.threads = [];
   state.fetched = 0;
   clearSelection();
@@ -718,6 +725,9 @@ export const mail = {
   },
   get folders() {
     return state.folders;
+  },
+  get draftCount() {
+    return state.draftCount;
   },
   get threads() {
     return state.threads;

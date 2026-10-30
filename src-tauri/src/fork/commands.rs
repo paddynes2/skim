@@ -27,9 +27,17 @@ pub fn role_total(
     role: &str,
     account_id: Option<&str>,
 ) -> rusqlite::Result<i64> {
+    // Match the Drafts list during the undo-send hold and after a failed send.
+    let visible = if role == "drafts" {
+        crate::fork::list::sending_pred("m")
+    } else {
+        "1".into()
+    };
     conn.query_row(
-        "SELECT count(*) FROM messages m JOIN folders f ON f.id = m.folder_id
-         WHERE f.role = ?1 AND (?2 IS NULL OR f.account_id = ?2)",
+        &format!(
+            "SELECT count(*) FROM messages m JOIN folders f ON f.id = m.folder_id
+         WHERE f.role = ?1 AND (?2 IS NULL OR f.account_id = ?2) AND {visible}"
+        ),
         rusqlite::params![role, account_id],
         |r| r.get(0),
     )
@@ -64,6 +72,37 @@ mod tests {
             assert_eq!(role_total(conn, "starred", None)?, 3);
             assert_eq!(role_total(conn, "inbox", None)?, 1);
             assert_eq!(role_total(conn, "junk", None)?, 0);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn draft_total_includes_read_drafts_and_tracks_send_undo_and_failure() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            seed(conn)?;
+            conn.execute_batch(
+                "INSERT INTO folders (id, account_id, imap_name, role, display_name, sort_order)
+                   VALUES (4,'a1','Drafts','drafts','Drafts',2),
+                          (5,'a2','Drafts','drafts','Drafts',2);
+                 INSERT INTO messages (id, account_id, folder_id, uid, date, is_read)
+                   VALUES (5,'a1',4,1,14,1),(6,'a1',4,2,15,0),(7,'a2',5,1,16,1);
+                 INSERT INTO drafts (id, account_id, updated_at, origin_message_id)
+                   VALUES (1,'a1',0,5);",
+            )?;
+            assert_eq!(role_total(conn, "drafts", Some("a1"))?, 2);
+            assert_eq!(role_total(conn, "drafts", Some("a2"))?, 1);
+            assert_eq!(role_total(conn, "drafts", None)?, 3);
+            crate::db::bodies::enqueue_op(conn, "a1", "send", &serde_json::json!({"draftId":1}))?;
+            assert_eq!(role_total(conn, "drafts", Some("a1"))?, 1);
+            assert_eq!(role_total(conn, "drafts", None)?, 2);
+            conn.execute("UPDATE pending_ops SET state = 'failed'", [])?;
+            assert_eq!(role_total(conn, "drafts", None)?, 3);
+            conn.execute("DELETE FROM pending_ops", [])?;
+            assert_eq!(role_total(conn, "drafts", None)?, 3);
+            conn.execute("DELETE FROM messages WHERE folder_id IN (4,5)", [])?;
+            assert_eq!(role_total(conn, "drafts", None)?, 0);
             Ok(())
         })
         .unwrap();

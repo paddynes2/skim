@@ -79,6 +79,8 @@
     <span class="name">{name}</span>
     {#if folder.role === "starred"}
       {#if starredTotal > 0}<span class="count total">{starredTotal}</span>{/if}
+    {:else if folder.role === "drafts"}
+      {#if mail.draftCount !== null && mail.draftCount > 0}<span class="count total">{mail.draftCount}</span>{/if}
     {:else if folder.unreadCount > 0 && showsUnread(folder.role)}
       <span class="count">{folder.unreadCount}</span>
     {/if}

@@ -260,3 +260,9 @@ This is a Skim rule, effective while Skim runs, not a provider-side filter. Unbl
 
 Validation and installation evidence: STATUS.md. No mailbox unsubscribe or block is performed during testing.
 Rollback: install 1.1.38. It ignores the new setting. Mail already moved to Spam must be moved back by the owner if wanted.
+
+### D86: Drafts shows its total (2026-10-30)
+
+The sidebar shows the number of draft messages, including read drafts, in the active mailbox or across all mailboxes. Zero and unavailable counts have no badge, consistent with existing folder badges. Use the existing role-total query and refresh it with folder data. Ignore late responses after a newer request or an account switch. A count failure must not prevent folders from loading.
+
+Exclude drafts with an active queued send through the same predicate as the Drafts list. Undo and a failed send restore the count. This uses cached Drafts messages, so it follows the existing server synchronization. No new polling or mailbox writes are added. Validation and installation evidence are in STATUS.md.

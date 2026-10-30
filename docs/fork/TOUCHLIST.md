@@ -289,3 +289,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/components/ReadingPane.svelte` | message chips | mount keyed fork UnsubscribeAction for incoming mail; remove optimistic success label | consistent action and truthful outcomes (D85) |
 | `src-tauri/src/mail/sync.rs` | successful junk operation | complete the fork block cache update after the server accepts the move | failed automatic moves remain visible (D85) |
 | `src-tauri/src/lib.rs` | generate_handler | three blocked-sender commands | exact mailbox block and unblock (D85) |
+| `src/components/Sidebar.svelte` | `folderRow` | show `mail.draftCount` for Drafts with the existing count styles | total drafts including read messages (D86) |
+| `src/lib/stores/mail.svelte.ts` | `refreshFolders`, `switchAccount`, `draftCount` | fetch draft totals with folders and discard stale responses | mailbox-scoped count follows sync events (D86) |

@@ -4,7 +4,15 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-29.**
+**As of 2026-10-30.**
+
+## Version 1.1.41 (October 30)
+
+D86 adds the total number of draft messages beside Drafts, using the existing badge appearance in expanded and collapsed navigation. It includes read drafts and respects the selected mailbox or unified view. Active queued sends are excluded. Undo and failed sends restore them. The count refreshes with the existing folder events. No new poller, schema change or mailbox mutation is added.
+
+Prepared in an isolated worktree from 6f19941. Focused checks passed: account and unified totals, stale responses, unavailable count with usable folders, read drafts, queued sends, Undo, failed sends and an empty folder. The actual Sidebar rendered with fictional data in Base dark and light, at 1440 by 900, including the collapsed rail and keyboard navigation. Captures are in the task worktree's .cache/drafts-sidebar-*.png. Svelte check reports zero errors and the existing ComposeForm smell warning.
+
+Installation and full release verification are pending. Memory used for orientation: project_skim_fork.md and feedback_email_draft_formatting_survives_skim.md. Repository sources determined this change. Rollback: install the retained 1.1.40 installer. No database rollback is needed.
 
 ## Versions 1.1.39 and 1.1.40 (October 29)
 

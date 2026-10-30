@@ -26,12 +26,13 @@ let serial=0;
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return{promise,resolve,reject};}
 function row(id){return{id,messageId:null,accountId:"a",fromName:"Person",fromAddr:"person@example.com",subject:`Mail ${id}`,date:id,isRead:true,isStarred:false,messageCount:1,hasAttachments:false,snippet:""};}
 async function store(){
-  const control={read:async()=>[],errors:[],company:""};
+  const control={read:async()=>[],errors:[],company:"",count:async()=>0};
   const call=(kind)=>(...args)=>control.read(kind,args);
   const prefs={listOrder:"date",setListOrder(value){this.listOrder=value;}};
   const stubs={
     listen:async()=>()=>{},reportError:(...e)=>control.errors.push(e),t:key=>key,
-    api:{listThreads:call("folder"),listMessages:call("flat"),listUnifiedThreads:call("unified"),listUnifiedMessages:call("unified-flat"),setSetting:async()=>{},getSettings:async()=>({active_account:"a"}),listAccounts:async()=>[{id:"a",email:"me@example.com"},{id:"b",email:"second@example.com"}],listFolders:async(account)=>[{id:account==="b"?2:1,role:"inbox",accountId:account}],takePendingOpen:async()=>null},
+    forkApi:{roleTotal:(...args)=>control.count(...args)},
+    api:{listThreads:call("folder"),listMessages:call("flat"),listUnifiedThreads:call("unified"),listUnifiedMessages:call("unified-flat"),setSetting:async()=>{},getSettings:async()=>({active_account:"a"}),listAccounts:async()=>[{id:"a",email:"me@example.com"},{id:"b",email:"second@example.com"}],listFolders:async(account)=>[{id:account==="b"?2:1,role:"inbox",accountId:account}],listUnifiedFolders:async()=>[{id:-1,role:"inbox",accountId:"*"}],takePendingOpen:async()=>null},
     prefs,searchApi:{searchThreads:call("search")},SEARCH_FOLDER_ID:-900,withoutToken:(q,t)=>q.replace(t,""),
     COURT_UPDATED:"court",courtApi:{list:call("court")},VF_ON_ME:-920,VF_WAITING:-921,courtCounts:{refresh:async()=>{}},
     dealsApi:{list:call("deals")},VF_DEALS:-924,dealsStore:{get selectedCompany(){return control.company;}},dealsCount:{refresh:async()=>{}},
@@ -129,4 +130,24 @@ test("account switches save the latest view and an empty view replaces its old s
   control.read=async()=>[];await mail.refreshThreads();await mail.selectFolder(2);
   control.read=async()=>{throw new Error("offline");};await mail.selectFolder(1);
   assert.deepEqual(mail.threads,[]);assert.equal(mail.loadFailed,true);
+});
+
+test("draft count follows the mailbox and ignores late responses",async()=>{
+  const {mail,control}=await store();
+  const calls=[];
+  control.count=async(role,account)=>{calls.push([role,account]);return account==='a'?2:account==='b'?4:6;};
+  await mail.boot();
+  for(let i=0;i<8&&mail.draftCount===null;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(mail.draftCount,2);
+  await mail.switchAccount('b');assert.equal(mail.draftCount,4);
+  await mail.switchAccount('*');assert.equal(mail.draftCount,6);
+  assert.deepEqual(calls,[['drafts','a'],['drafts','b'],['drafts',null]]);
+  const old=deferred();control.count=(_role,account)=>account==='a'?old.promise:Promise.resolve(4);
+  const pending=mail.switchAccount('a');assert.equal(mail.draftCount,null);
+  await mail.switchAccount('b');old.resolve(99);await pending;
+  assert.equal(mail.draftCount,4);
+  control.count=async()=>{throw Error('count unavailable');};
+  await mail.switchAccount('a');
+  assert.equal(mail.draftCount,null);assert.equal(mail.folders[0].accountId,'a');
+  assert.equal(mail.loadFailed,false);
 });
