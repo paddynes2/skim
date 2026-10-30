@@ -2,6 +2,32 @@ use super::draft_sync::*;
 use crate::db::{bodies, draft_attachments, drafts, Db};
 
 #[test]
+fn successful_retry_clears_only_matching_failed_draft_saves() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|conn| {
+        conn.execute("INSERT INTO accounts (id,email,provider,imap_host,smtp_host,created_at) VALUES ('a','one@example.com','gmail','imap.gmail.com','smtp',0),('b','two@example.com','custom','imap.example.com','smtp',0)", [])?;
+        let draft = drafts::create(conn, "a", "new", None, "", "Subject", "Words")?;
+        let other = drafts::create(conn, "a", "new", None, "", "Other", "Words")?;
+        for (account, id, kind, state) in [
+            ("a", draft.id, "save_draft", "failed"),
+            ("a", draft.id, "save_draft", "pending"),
+            ("a", draft.id, "send", "failed"),
+            ("a", other.id, "save_draft", "failed"),
+            ("b", draft.id, "save_draft", "failed"),
+        ] {
+            bodies::enqueue_op(conn, account, kind, &serde_json::json!({"draftId":id}))?;
+            conn.execute("UPDATE pending_ops SET state=?1 WHERE id=last_insert_rowid()", [state])?;
+        }
+        let current = snapshot(conn, draft.id)?.unwrap();
+        confirm(conn, draft.id, &current.digest)?;
+        assert_eq!(conn.query_row("SELECT count(*) FROM pending_ops", [], |r| r.get::<_,i64>(0))?, 4);
+        assert_eq!(conn.query_row("SELECT count(*) FROM pending_ops WHERE kind='save_draft' AND state='failed' AND account_id='a' AND json_extract(payload,'$.draftId')=?1", [draft.id], |r| r.get::<_,i64>(0))?, 0);
+        assert_eq!(status(conn, draft.id)?.state, "synced");
+        Ok(())
+    }).unwrap();
+}
+
+#[test]
 fn receipt_only_confirms_exact_content_including_same_size_replaced_files() {
     let db = Db::open_in_memory().unwrap();
     db.with(|conn| {

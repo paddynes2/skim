@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "project": "C:\\Users\\Patrick\\Projects\\skim-improvements-20261030",
+  "project": "C:\\Users\\Patrick\\Projects\\skim",
   "task": "Skim draft confirmations, older drafts and PDF pages",
   "inputs": {
     "src/components/AttachmentChips.svelte": "4f2e40f5a97ff978581176383f3d781622d199dfbe96785b2e6283529130cffe",
     "src/components/ComposeForm.svelte": "765e8814b02a9dd40e4d946450cce1b90513840677f26a0fff340d637cdc60f0",
     "src/components/MessageList.svelte": "78c4da5b3b595c771b054ccc75273a810cb44b76f16bb68e2ba2156f289ce4d2",
-    "src/fork/compose/DraftSyncStatus.svelte": "cbc2c51f43a5f80716dd679e1b0a8726d3a229de8402e903107eec886123a5b1",
+    "src/fork/compose/DraftSyncStatus.svelte": "f674b940add7e6e1f3f370550d91364733707187c9716f56b135f8fd52bac160",
     "src/fork/RichEditor.svelte": "c26c13e51c1a06c2ccbc2920f09a47084d6a469f4c93f34604c6a005f03ac749",
     "docs/fork/README.md": "5b92ecbec9901e27097b33ff925faa80946b269cd2b1edd532c70aea6127c14c",
     "src/styles/tokens.css": "9a67b272f2c5b4e7cd4a97b3e8ef4ad9e7857c89e15f5a75cb702edd0f717e04"

@@ -66,6 +66,14 @@ pub fn confirm(conn: &Connection, id: i64, digest: &str) -> rusqlite::Result<()>
     conn.execute("INSERT INTO settings (key, value) SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM drafts WHERE id = ?3)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         rusqlite::params![format!("fork_draft_receipt:{id}"), digest, id])?;
+    // A successful retry resolves only this draft's previous save failures.
+    // Keep pending work and failures for sends, other drafts and other accounts.
+    conn.execute(
+        "DELETE FROM pending_ops WHERE kind = 'save_draft' AND state = 'failed'
+         AND account_id = (SELECT account_id FROM drafts WHERE id = ?1)
+         AND json_valid(payload) AND json_extract(payload, '$.draftId') = ?1",
+        [id],
+    )?;
     Ok(())
 }
 

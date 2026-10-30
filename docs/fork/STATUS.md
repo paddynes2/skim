@@ -6,6 +6,10 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-30.**
 
+## Version 1.1.43 (October 30)
+
+A successful draft save now clears previous failed save operations for that same draft and account. Pending work, send failures, other drafts and other accounts remain intact. This prevents a successful Retry from leaving an obsolete failure in the footer. Full release gates passed again: 641 Rust tests and the complete frontend, lint, formatting, build and contrast suite. Regression proof and installation are pending.
+
 ## Version 1.1.42 (October 30)
 
 Prepared in the isolated skim-improvements-20261030 worktree from 36d0bd9. D87-D89 add exact-content server-save confirmation, older drafts and local PDF page previews. The existing draft-count badge remains in place.
@@ -22,7 +26,7 @@ Full release gates passed: 640 Rust tests, one existing ignored test, all fronte
 
 `PROVE_TEST: status=PROVEN base=b1c7667442e5 reverted=3 tests=2 exit_without_fix=101`
 
-Installed-app verification is pending. No live email save or send was used in the fixture tests. Memory priors used: project_skim_fork.md and feedback_email_draft_formatting_survives_skim.md; source code and current instructions determined the implementation.
+Version 1.1.42 was installed and verified through the native WebView. Drafts showed 36 cached draft messages; the older filter returned 32 rows in ascending age order. Existing local drafts reported device-only status. A cached nine-page PDF rendered pages one and two through native IPC. The filter cleared on returning to Inbox. No editor was left open. Backup: ~/.skim-fork/backups/20261030-162536. The retry-cleanup follow-up is tracked under 1.1.43 above. No live email save or send was used in the fixture tests. Memory priors used: project_skim_fork.md and feedback_email_draft_formatting_survives_skim.md; source code and current instructions determined the implementation.
 
 Rollback: reinstall the retained 1.1.41 installer. No schema migration is required. That version ignores saved-content receipts. Existing message edits remain saved.
 

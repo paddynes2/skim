@@ -303,3 +303,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/Cargo.toml` | windows features | native PDF and WinRT stream features | D89 |
 | `demo/mock/tauri-core.ts` | list and draft status fixtures | exercise older drafts and queued confirmation in the composed app | D87, D88 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.42 | signed local release |
+
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.43 | recovered draft-save failures leave the footer (D87) |
