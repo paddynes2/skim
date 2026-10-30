@@ -14,7 +14,15 @@ Focused checks passed: queued and failed saves, stale receipts, rich HTML, same-
 
 The assembled Base light app and Base light/dark PDF dialog were inspected. The source search examined 55 registry entries and 61 files with no suitable result. Existing Skim controls and tokens were reused. See review-1.1.42.json and shots/1.1.42. Runtime evidence that contains mailbox data remains in the private task cache.
 
-Full release gates passed: 640 Rust tests, one existing ignored test, all frontend tests, fmt, Clippy, Svelte check, build and 216 contrast checks. The existing smell-state warning and build chunk advisory remain. Regression proof and installed-app verification are pending. No live email save or send was used in the fixture tests. Memory priors used: project_skim_fork.md and feedback_email_draft_formatting_survives_skim.md; source code and current instructions determined the implementation.
+Full release gates passed: 640 Rust tests, one existing ignored test, all frontend tests, fmt, Clippy, Svelte check, build and 216 contrast checks. The existing smell-state warning and build chunk advisory remain. Regression proof passed. The list test fails against 36d0bd9. To check the new modules without import-only failures, temporary verification branches retained the modules and introduced specific regressions: any receipt counted as saved, every PDF request rendered page one, pending UI saves looked confirmed, Next requested the previous page, and harmless editor notifications marked a draft edited. Both native tests and all three affected UI cases failed, then the tool restored the checked source. These verification branches are separate from the release history.
+
+`PROVE_TEST: status=PROVEN base=36d0bd9e482e reverted=32 tests=5 exit_without_fix=1`
+
+`PROVE_TEST: status=PROVEN base=708b4598be52 reverted=3 tests=1 exit_without_fix=1`
+
+`PROVE_TEST: status=PROVEN base=b1c7667442e5 reverted=3 tests=2 exit_without_fix=101`
+
+Installed-app verification is pending. No live email save or send was used in the fixture tests. Memory priors used: project_skim_fork.md and feedback_email_draft_formatting_survives_skim.md; source code and current instructions determined the implementation.
 
 Rollback: reinstall the retained 1.1.41 installer. No schema migration is required. That version ignores saved-content receipts. Existing message edits remain saved.
 
