@@ -90,5 +90,12 @@ pub mod mail_status;
 pub mod reading;
 
 pub mod attachments;
+pub mod draft_sync;
+pub mod pdf_preview;
 
 mod unsent_drafts;
+
+#[cfg(test)]
+mod draft_sync_tests;
+#[cfg(test)]
+mod pdf_preview_tests;

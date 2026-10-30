@@ -20,6 +20,8 @@ pub struct Preview {
     data_url: Option<String>,
     text: Option<String>,
     truncated: bool,
+    page: Option<u32>,
+    page_count: Option<u32>,
 }
 
 fn image_type(bytes: &[u8]) -> Option<&'static str> {
@@ -40,6 +42,7 @@ fn image_type(bytes: &[u8]) -> Option<&'static str> {
 pub async fn fork_attachment_preview(
     state: State<'_, AppState>,
     attachment_id: i64,
+    page: Option<u32>,
 ) -> Result<Preview> {
     let file = state
         .db
@@ -74,36 +77,30 @@ pub async fn fork_attachment_preview(
                 )),
                 text: None,
                 truncated: false,
+                page: None,
+                page_count: None,
             });
         }
         if bytes.starts_with(b"%PDF-") {
-            let document = lopdf::Document::load_mem(&bytes).map_err(|_| {
+            let number = page.unwrap_or(1);
+            let rendered = super::pdf_preview::render(&bytes, number).map_err(|_| {
                 SkimError::other(
                     "attachment",
-                    "This PDF cannot be read. Open the original file.",
+                    "This PDF page cannot be previewed. The file may be protected or damaged. Open the original file.",
                 )
             })?;
-            let pages: Vec<u32> = document.get_pages().keys().copied().collect();
-            let text = document
-                .extract_text(&pages[..pages.len().min(50)])
-                .map_err(|_| {
-                    SkimError::other(
-                        "attachment",
-                        "This PDF has no readable text. Open the original file.",
-                    )
-                })?;
-            let truncated = pages.len() > 50 || text.chars().count() > 80000;
-            let text = text.chars().take(80000).collect::<String>();
             return Ok(Preview {
-                kind: "pdf-text",
-                data_url: None,
-                text: Some(text),
-                truncated,
+                kind: "pdf",
+                data_url: Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(rendered.png))),
+                text: None,
+                truncated: false,
+                page: Some(number),
+                page_count: Some(rendered.count),
             });
         }
         Err(SkimError::other(
             "attachment",
-            "Preview supports PNG, JPEG, GIF, WebP and PDF text. Open this file in its usual app.",
+            "Preview supports PNG, JPEG, GIF, WebP and PDF. Open this file in its usual app.",
         ))
     })
     .await?

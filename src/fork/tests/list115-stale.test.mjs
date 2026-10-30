@@ -151,3 +151,15 @@ test("draft count follows the mailbox and ignores late responses",async()=>{
   assert.equal(mail.draftCount,null);assert.equal(mail.folders[0].accountId,'a');
   assert.equal(mail.loadFailed,false);
 });
+
+
+test("older drafts cannot leak into Inbox or a search",async()=>{
+  const {mail}=await store();await mail.boot();
+  for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));
+  mail.folders.push({id:7,role:"drafts",accountId:"a"});
+  await mail.setListFilter("older_drafts");assert.equal(mail.listFilter,"all");
+  await mail.selectFolder(7);await mail.setListFilter("older_drafts");assert.equal(mail.listFilter,"older_drafts");
+  await mail.selectFolder(1);assert.equal(mail.listFilter,"all");
+  await mail.selectFolder(7);await mail.setListFilter("older_drafts");
+  await mail.enterSearch("subject:meeting");assert.equal(mail.listFilter,"all");
+});

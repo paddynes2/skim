@@ -38,9 +38,11 @@ The inbox groups date-ordered mail into Today, Yesterday and Earlier. Recent vie
 
 **Search & filters** includes attachment filename. The command palette and list retain the query and show matching passages. Search opens the matching message. Coverage labels distinguish cached mail from messages not yet downloaded.
 
-**Files** provides image previews and PDF text previews. Use **Open original** for the original document. **Save all** avoids filename collisions. Equal content hashes group identical cached files. Same-name files with different contents remain separate. Preview size is limited to 25 MB. Hash checks cover at most 200 files and 128 MB.
+**Files** provides image previews and PDF page previews with Previous, Next and zoom. Use **Open original** for the original document. **Save all** avoids filename collisions. Equal content hashes group identical cached files. Same-name files with different contents remain separate. Preview size is limited to 25 MB. Hash checks cover at most 200 files and 128 MB.
 
-**Snippets** in compose stores reusable text. The composer warns when the text mentions an attachment but no file is present. Local-save feedback and Retry expose failures. Popout waits for the latest draft save, including rich text and staged attachments. A local save is not confirmation that the mail server has the draft.
+**Snippets** in compose stores reusable text. The composer warns when the text mentions an attachment but no file is present. Local-save feedback and Retry expose failures. Popout waits for the latest draft save, including rich text and staged attachments. The status line distinguishes Saved on this device, waiting for the server, failed saves and Saved to Gmail (or the mail server). Only server acceptance of the current content produces that confirmation. Save to Gmail and Retry use the existing draft queue.
+
+**Drafts** includes an Older drafts filter for messages untouched for at least seven days, oldest first. Local edits reset the age; opening an unchanged draft does not. The filter respects the selected mailbox, unified view and queued sends.
 
 Calendar includes recurrence, reminders, guests and permissions, availability, visibility, colours and event time zones. A second time-zone column is optional. Short and overlapping events retain readable labels. Crowded all-day rows scroll. Event files and meeting notes are HTTPS links. Existing remote attachments are preserved. Room booking, appointment schedules and complex exceptions still require Google Calendar.
 

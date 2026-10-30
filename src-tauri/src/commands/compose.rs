@@ -273,7 +273,14 @@ pub async fn add_draft_attachment(
     }
     state
         .db
-        .call(move |conn| draft_attachments::add(conn, draft_id, &filename, &mime_type, &data))
+        .call(move |conn| {
+            let attachment = draft_attachments::add(conn, draft_id, &filename, &mime_type, &data)?;
+            conn.execute(
+                "UPDATE drafts SET updated_at = unixepoch() WHERE id = ?1",
+                [draft_id],
+            )?;
+            Ok(attachment)
+        })
         .await
 }
 
@@ -292,7 +299,10 @@ pub async fn list_draft_attachments(
 pub async fn remove_draft_attachment(state: State<'_, AppState>, attachment_id: i64) -> Result<()> {
     state
         .db
-        .call(move |conn| draft_attachments::remove(conn, attachment_id))
+        .call(move |conn| {
+            conn.execute("UPDATE drafts SET updated_at = unixepoch() WHERE id = (SELECT draft_id FROM draft_attachments WHERE id = ?1)", [attachment_id])?;
+            draft_attachments::remove(conn, attachment_id)
+        })
         .await
 }
 

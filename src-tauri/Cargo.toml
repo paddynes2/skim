@@ -1,6 +1,6 @@
 [package]
 name = "skim"
-version = "1.1.41"
+version = "1.1.42"
 description = "A fast, minimalist, AI-native email client for Windows"
 authors = ["Skim contributors"]
 license = "MIT"
@@ -59,6 +59,9 @@ tauri-winrt-notification = "0.7"
 # compile in, and no mail domain handed to a third-party DNS service.
 windows = { version = "0.61", features = [
   "Data_Xml_Dom",
+  "Data_Pdf",
+  "Storage_Streams",
+  "Win32_System_WinRT",
   "UI_Notifications",
   "Foundation_Collections",
   "Win32_NetworkManagement_Dns",

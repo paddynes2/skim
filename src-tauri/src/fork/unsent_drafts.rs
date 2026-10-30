@@ -229,3 +229,45 @@ fn a_sent_reply_does_not_move_the_inbox_row_and_copies_count_once() {
     })
     .unwrap();
 }
+
+#[test]
+fn older_drafts_are_scoped_oldest_first_and_opening_does_not_count_as_editing() {
+    use crate::db::{drafts, queries::*};
+    use crate::fork::list::ListOpts;
+    let db = Db::open_in_memory().unwrap();
+    db.with(|conn| {
+        seed(conn)?;
+        conn.execute("INSERT INTO accounts (id,email,provider,imap_host,smtp_host,created_at) VALUES ('a2','second@example.com','custom','imap','smtp',0)",[])?;
+        conn.execute("INSERT INTO folders (account_id,imap_name,role,display_name) VALUES ('a1','Drafts','drafts','Drafts'),('a2','Drafts','drafts','Drafts')",[])?;
+        let folder=folder_id(conn,"a1","Drafts");
+        let other=folder_id(conn,"a2","Drafts");
+        let inbox=folder_id(conn,"a1","INBOX");
+        let now:i64=conn.query_row("SELECT unixepoch()",[],|r|r.get(0))?;
+        for (id,account,fid,age) in [(1,"a1",folder,10),(2,"a1",folder,8),(3,"a1",folder,6),(4,"a1",inbox,20),(5,"a2",other,15)] {
+            insert_message(conn,&NewMessage {account_id:account.into(),folder_id:fid,uid:id,message_id:Some(format!("old{id}@example.com")),subject:Some(format!("Draft {id}")),date:now-age*86400,..Default::default()})?;
+        }
+        let opts=ListOpts::parse(Some("older_drafts"),Some("unread_first"));
+        for rows in [list_threads_opts(conn,folder,0,10,opts)?,list_messages_opts(conn,folder,0,10,opts)?] {
+            assert_eq!(rows.iter().map(|r|r.subject.as_str()).collect::<Vec<_>>(),["Draft 1","Draft 2"]);
+            assert_eq!(rows[0].date,now-10*86400);
+        }
+        for rows in [list_unified_threads_opts(conn,Some("drafts"),None,0,10,opts)?,list_unified_messages_opts(conn,Some("drafts"),None,0,10,opts)?] {
+            assert_eq!(rows.iter().map(|r|r.subject.as_str()).collect::<Vec<_>>(),["Draft 5","Draft 1","Draft 2"]);
+        }
+        assert!(list_threads_opts(conn,inbox,0,10,opts)?.is_empty());
+        assert_eq!(list_threads_opts(conn,folder,1,1,opts)?[0].subject,"Draft 2");
+        let message=conn.query_row("SELECT id FROM messages WHERE message_id='old1@example.com'",[],|r|r.get(0))?;
+        let mut draft=drafts::create_server_draft(conn,"a1","new",None,"","","","Draft 1","",message,"old1@example.com")?;
+        drafts::update(conn,&draft)?;
+        assert_eq!(list_threads_opts(conn,folder,0,10,opts)?.len(),2,"opening and unchanged saves keep its age");
+        draft.body="New words".into();drafts::update(conn,&draft)?;
+        assert_eq!(list_threads_opts(conn,folder,0,10,opts)?[0].subject,"Draft 2");
+        let message=conn.query_row("SELECT id FROM messages WHERE message_id='old2@example.com'",[],|r|r.get(0))?;
+        let draft=drafts::create_server_draft(conn,"a1","new",None,"","","","Draft 2","",message,"old2@example.com")?;
+        crate::db::bodies::enqueue_op(conn,"a1","send",&serde_json::json!({"draftId":draft.id}))?;
+        assert!(list_threads_opts(conn,folder,0,10,opts)?.is_empty());
+        conn.execute("UPDATE pending_ops SET state='failed'",[])?;
+        assert_eq!(list_threads_opts(conn,folder,0,10,opts)?.len(),1);
+        Ok(())
+    }).unwrap();
+}

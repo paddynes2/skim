@@ -497,6 +497,7 @@ pub fn run() {
             fork::mcp::fork_mcp_set_enabled,
             fork::smell::fork_smell_rewrite,
             fork::compose::fork_draft_html_get,
+            fork::draft_sync::fork_draft_sync_status,
             fork::compose::fork_draft_html_set,
             fork::compose::fork_draft_source,
             fork::scheduler::fork_cancel_scheduled,

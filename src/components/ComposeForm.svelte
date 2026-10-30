@@ -3,6 +3,7 @@
   // its own native window (Composer.svelte, `chrome` on) and inline in the
   // reading pane for editing a draft from the Drafts folder (`chrome` off).
   import { onDestroy, onMount } from "svelte";
+  import DraftSyncStatus from "../fork/compose/DraftSyncStatus.svelte";
   import { aiStream, api, errorMessage } from "../lib/api";
   import { t } from "../lib/i18n/index.svelte";
   import { createSlowStart } from "../lib/slow-start.svelte";
@@ -80,8 +81,10 @@
   // HTML draft, flatten it to plain text on the server).
   let dirty = false;
   // Explicit-save state for the standalone compose window (`chrome`): 'clean'
-  // shows nothing, 'dirty' shows the Save button, 'saved' shows "Saved". Editing
-  // after a save flips it back to 'dirty'. Unused in the inline editor.
+  // shows nothing and 'dirty' shows the Save button. Server confirmation
+  // appears in DraftSyncStatus. Editing makes the Save button available again.
+  let serverSaveVersion = $state(0);
+  let serverSaving = $state(false);
   let saveState = $state<"clean" | "dirty" | "saved">("clean");
   // Set once the draft has been committed to the Drafts folder, so closing the
   // window keeps it instead of dropping the (now real) draft.
@@ -694,7 +697,8 @@
    *  folder so it becomes a real, reopenable message. Optimistic — if offline
    *  the queued op drains later. */
   async function save() {
-    if (!draft || saveState !== "dirty") return;
+    if (!draft || serverSaving) return;
+    serverSaving = true;
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -703,11 +707,12 @@
     try {
       await saveLocal();
       await api.saveServerDraft($state.snapshot(draft) as Draft);
+      serverSaveVersion++;
       if(revision===at){dirty=false;saveState="saved";}
       committed = true;
     } catch (e) {
       error = errorMessage(e);
-    }
+    } finally { serverSaving = false; }
   }
 
   function onWindowKeydown(e: KeyboardEvent) {
@@ -1044,7 +1049,7 @@
     {/if}
 
     {#if attachmentPrompt}<div class="attachment-check" role="alert"><strong>{t("fork.compose.missing_file")}</strong><div><button onclick={()=>{attachmentPrompt=false;fileInput?.click();}}>{t("fork.compose.attach_file")}</button><button onclick={()=>{attachmentApprovedText=draft!.body;void send(attachmentPendingWhen,attachmentPendingSmell);}}>{t("fork.compose.send_without_file")}</button><button onclick={()=>attachmentPrompt=false}>{t("fork.compose.keep_editing")}</button></div></div>{/if}
-    <div class="compose-state" role="status"><span>{attachmentBusy?t("fork.compose.adding_files"):localStatus==="saving"?t("fork.compose.saving_local"):localStatus==="saved"?t("fork.compose.saved_local"):localStatus==="error"?t("fork.compose.save_failed"):t("fork.compose.unsaved")}</span>{#if localStatus==="error"}<button onclick={()=>void saveLocal().catch(()=>{})}>{t("fork.compose.retry_save")}</button>{/if}<span class="recipient-summary" title={`${t("compose.to")}: ${draft.to}${draft.cc?`; ${t("compose.cc")}: ${draft.cc}`:""}${draft.bcc?`; ${t("compose.bcc")}: ${draft.bcc}`:""}`}>{t("compose.to")}: {draft.to||t("fork.compose.add_recipient")}{#if draft.cc} &middot; {t("compose.cc")}: {draft.cc}{/if}{#if draft.bcc} &middot; {t("compose.bcc")}: {draft.bcc}{/if}</span></div>
+    <div class="compose-state" role="status"><DraftSyncStatus draftId={draft.id} {localStatus} {revision} refreshKey={serverSaveVersion} busy={!!attachmentBusy} onSave={save} onRetryLocal={()=>void saveLocal().catch(()=>{})}/><span class="recipient-summary" title={`${t("compose.to")}: ${draft.to}${draft.cc?`; ${t("compose.cc")}: ${draft.cc}`:""}${draft.bcc?`; ${t("compose.bcc")}: ${draft.bcc}`:""}`}>{t("compose.to")}: {draft.to||t("fork.compose.add_recipient")}{#if draft.cc} &middot; {t("compose.cc")}: {draft.cc}{/if}{#if draft.bcc} &middot; {t("compose.bcc")}: {draft.bcc}{/if}</span></div>
     <footer class="bar">
       <!-- Fork (6.4): a split button — Send, and a caret for later. -->
       <div class="send-split">
@@ -1074,15 +1079,12 @@
       {/if}
       {#if chrome}
         <!-- Fork (6.1): closing the window keeps an edited draft, so editing
-             reveals an explicit Save; a saved draft shows a confirmation until
-             the next edit. -->
+             reveals an explicit Save. The status line confirms server acceptance. -->
         {#if saveState === "dirty"}
-          <button class="save" onclick={save} title={t("compose.save")}>
+          <button class="save" disabled={serverSaving} onclick={save} title={t("compose.save")}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 8.5l3.5 3.5L13 4.5" /></svg>
             <kbd>Ctrl S</kbd>
           </button>
-        {:else if saveState === "saved"}
-          <span class="saved-label">{t("compose.saved")}</span>
         {/if}
       {/if}
       <!-- Fork (6.1): Discard everywhere, on a second click. -->
@@ -1107,7 +1109,7 @@
 </div>
 
 <style>
-  .compose-state{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:9px 16px;border-top:1px solid var(--hairline);color:var(--text-dim);font-size:11px;line-height:1.5}.compose-state button{color:var(--primary)}.recipient-summary{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attachment-check{margin:12px 16px;padding:12px;border:1px solid var(--hairline-strong);border-radius:var(--radius-s);font-size:13px}.attachment-check div{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px}.attachment-check button{color:var(--primary);font-size:12px}
+  .compose-state{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:9px 16px;border-top:1px solid var(--hairline);color:var(--text-dim);font-size:11px;line-height:1.5}.recipient-summary{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attachment-check{margin:12px 16px;padding:12px;border:1px solid var(--hairline-strong);border-radius:var(--radius-s);font-size:13px}.attachment-check div{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px}.attachment-check button{color:var(--primary);font-size:12px}
 
   .compose-form {
     height: 100%;
@@ -1506,14 +1508,6 @@
   .save kbd {
     font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--text-faint);
-  }
-  .saved-label {
-    display: flex;
-    align-items: center;
-    height: 34px;
-    padding: 0 12px;
-    font-size: 12.5px;
     color: var(--text-faint);
   }
 

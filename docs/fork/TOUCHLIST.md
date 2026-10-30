@@ -291,3 +291,15 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/lib.rs` | generate_handler | three blocked-sender commands | exact mailbox block and unblock (D85) |
 | `src/components/Sidebar.svelte` | `folderRow` | show `mail.draftCount` for Drafts with the existing count styles | total drafts including read messages (D86) |
 | `src/lib/stores/mail.svelte.ts` | `refreshFolders`, `switchAccount`, `draftCount` | fetch draft totals with folders and discard stale responses | mailbox-scoped count follows sync events (D86) |
+
+| `src-tauri/src/db/drafts.rs` | create_server_draft, update, delete | preserve untouched draft age; clear server receipt on deletion | D87, D88 |
+| `src-tauri/src/commands/compose.rs` | attachment add and remove | advance draft age for actual attachment edits | D88 |
+| `src-tauri/src/mail/sync.rs` | execute_save_draft | capture consistent MIME inputs and confirm accepted content | D87 |
+| `src-tauri/src/lib.rs` | generate_handler | register draft synchronization status | D87 |
+| `src/components/ComposeForm.svelte` | explicit save and status line | show server acceptance separately from local persistence | D87 |
+| `src/components/AttachmentChips.svelte` | preview dialog | PDF pages, pagination, zoom and retry | D89 |
+| `src/components/MessageList.svelte`, `src/lib/stores/mail.svelte.ts` | filter control and scope | older drafts, clear on folder exit, oldest first | D88 |
+| `src/lib/i18n/locales/en.json` | fork keys | status, older draft and PDF controls | D87-D89 |
+| `src-tauri/Cargo.toml` | windows features | native PDF and WinRT stream features | D89 |
+| `demo/mock/tauri-core.ts` | list and draft status fixtures | exercise older drafts and queued confirmation in the composed app | D87, D88 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.42 | signed local release |

@@ -34,6 +34,7 @@
   // What the editor last reported, so a `html` prop echoing our own change
   // does not reset the cursor with a setHTML.
   let reported = "";
+  let rendered = "";
 
   $effect(() => {
     const el = host;
@@ -50,9 +51,14 @@
     const initial = untrack(() => html);
     sq.setHTML(initial || "<div><br></div>");
     reported = initial;
+    rendered = sq.getHTML();
     empty = !sq.getRoot().textContent;
     sq.addEventListener("input", () => {
       const h = sq.getHTML();
+      // Squire can report its initial normalization as input. Only a content
+      // change marks the draft edited or invalidates a server save receipt.
+      if (h === rendered) return;
+      rendered = h;
       reported = h;
       html = h;
       empty = !sq.getRoot().textContent;
@@ -87,6 +93,7 @@
     if (!sq || h === reported) return;
     reported = h;
     sq.setHTML(h || "<div><br></div>");
+    rendered = sq.getHTML();
     empty = !sq.getRoot().textContent;
   });
 
@@ -138,6 +145,7 @@
     html = h;
     reported = h;
     editor?.setHTML(h || "<div><br></div>");
+    rendered = editor?.getHTML() ?? "";
     empty = !editor?.getRoot().textContent;
   }
 

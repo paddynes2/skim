@@ -44,6 +44,7 @@ pub fn set_words_html(
     draft_id: i64,
     words_html: Option<&str>,
 ) -> rusqlite::Result<()> {
+    let changed = get_words_html(conn, draft_id)?.as_deref() != words_html;
     match words_html {
         Some(html) => {
             conn.execute(
@@ -61,6 +62,12 @@ pub fn set_words_html(
                 rusqlite::params![draft_id],
             )?;
         }
+    }
+    if changed {
+        conn.execute(
+            "UPDATE drafts SET updated_at = unixepoch() WHERE id = ?1",
+            [draft_id],
+        )?;
     }
     Ok(())
 }

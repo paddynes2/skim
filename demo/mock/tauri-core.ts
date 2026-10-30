@@ -154,6 +154,7 @@ function listOpts<T extends { isRead: boolean; isStarred: boolean; date: number 
   args: { filter?: string; order?: string },
 ): T[] {
   let out = rows;
+  if (args.filter === "older_drafts") return rows.filter(r=>r.date <= Date.now()/1000-7*86400).sort((a,b)=>a.date-b.date);
   if (args.filter === "unread") out = out.filter((r) => !r.isRead);
   else if (args.filter === "starred") out = out.filter((r) => r.isStarred);
   if (args.order === "unread_first")
@@ -403,7 +404,8 @@ ${args.name}: ${args.entry}`);
       const file={id:Date.now(),draftId:args.draftId,filename:args.filename,mimeType:args.mimeType,size:args.data.length};files.push(file);localStorage.setItem(key,JSON.stringify(files));return ok(file);
     }
     case "remove_draft_attachment": {for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i)!;if(key.startsWith("skimdemo.draft_files."))localStorage.setItem(key,JSON.stringify(JSON.parse(localStorage.getItem(key)??"[]").filter((f:any)=>f.id!==args.attachmentId)));}return ok(undefined);}
-    case "save_server_draft": db.updateDraft(structuredClone(args.draft));return ok(undefined);
+    case "fork_draft_sync_status": return ok({state:localStorage.getItem("skimdemo.draft_sync")??"local",gmail:true});
+    case "save_server_draft": localStorage.setItem("skimdemo.draft_sync","pending");db.updateDraft(structuredClone(args.draft));return ok(undefined);
     case "open_compose_window": {
       if(localStorage.getItem("skimdemo.compose_open_error")==="on")return Promise.reject({message:"Demo window could not open"});
       localStorage.setItem("skimdemo.opened_draft",JSON.stringify({draft:db.getDraft(args.draftId),attachments:JSON.parse(localStorage.getItem(`skimdemo.draft_files.${args.draftId}`)??"[]"),html:forkComposeInvoke("fork_draft_html_get",{draftId:args.draftId})?.value}));return ok(undefined);

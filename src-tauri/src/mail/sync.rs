@@ -2444,37 +2444,28 @@ impl Engine {
         let Some(draft_id) = payload["draftId"].as_i64() else {
             return Ok(None);
         };
-        let draft = self
+        let snapshot = self
             .db
-            .call(move |conn| crate::db::drafts::get(conn, draft_id))
+            .call(move |conn| crate::fork::draft_sync::snapshot(conn, draft_id))
             .await?;
-        let Some(draft) = draft else {
+        let Some(snapshot) = snapshot else {
             return Ok(None); // sent or discarded before this op drained
         };
-        let imap_message_id = self
-            .db
-            .call(move |conn| crate::db::drafts::origin_coords(conn, draft_id))
-            .await?
-            .and_then(|(_, mid)| mid);
-        let Some(imap_message_id) = imap_message_id else {
+        let Some(imap_message_id) = snapshot.message_id else {
             return Ok(None); // not a server-backed draft; nothing to write
         };
 
-        let refs = self.outgoing_refs(draft.reply_to_message_id).await?;
-        let attachments = self
-            .db
-            .call(move |conn| crate::db::draft_attachments::load_for_send(conn, draft_id))
+        let refs = self
+            .outgoing_refs(snapshot.draft.reply_to_message_id)
             .await?;
-        // Fork (6.3): the HTML rendition, when the rich editor wrote one.
-        let html = crate::fork::compose::outgoing_html(&self.db, draft_id).await;
         let raw = smtp::build_message_with_html(
             &self.account,
-            &draft,
+            &snapshot.draft,
             &refs,
-            &attachments,
+            &snapshot.attachments,
             Some(&imap_message_id),
             true,
-            html.as_deref(),
+            snapshot.html.as_deref(),
         )?;
 
         let drafts_name = self.role_folder("drafts", "Drafts").await?;
@@ -2490,6 +2481,10 @@ impl Engine {
         if !old_uids.is_empty() {
             self.delete_and_expunge(&old_uids).await?;
         }
+        self.db
+            .call(move |conn| crate::fork::draft_sync::confirm(conn, draft_id, &snapshot.digest))
+            .await?;
+        let _ = self.app.emit("draft:sync", json!({ "draftId": draft_id }));
         Ok(self.folder_id_by_name(&drafts_name).await)
     }
 

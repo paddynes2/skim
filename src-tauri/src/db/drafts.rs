@@ -78,7 +78,8 @@ pub fn create_server_draft(
     conn.execute(
         "INSERT INTO drafts (account_id, reply_to_message_id, mode, to_addrs, cc_addrs, bcc_addrs,
                              subject, body_text, origin_message_id, imap_message_id, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, unixepoch())",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                 COALESCE((SELECT date FROM messages WHERE id = ?9 AND account_id = ?1), unixepoch()))",
         params![
             account_id,
             reply_to,
@@ -185,7 +186,8 @@ pub fn update(conn: &Connection, draft: &Draft) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE drafts SET to_addrs = ?2, cc_addrs = ?3, bcc_addrs = ?4, subject = ?5,
                            body_text = ?6, updated_at = unixepoch()
-         WHERE id = ?1",
+         WHERE id = ?1 AND (to_addrs IS NOT ?2 OR cc_addrs IS NOT ?3 OR bcc_addrs IS NOT ?4
+                           OR subject IS NOT ?5 OR body_text IS NOT ?6)",
         params![
             draft.id,
             draft.to,
@@ -200,6 +202,10 @@ pub fn update(conn: &Connection, draft: &Draft) -> rusqlite::Result<()> {
 
 pub fn delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM drafts WHERE id = ?1", params![id])?;
+    conn.execute(
+        "DELETE FROM settings WHERE key = ?1",
+        [format!("fork_draft_receipt:{id}")],
+    )?;
     Ok(())
 }
 

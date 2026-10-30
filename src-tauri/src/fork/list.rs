@@ -15,6 +15,7 @@ pub enum Filter {
     Starred,
     /// v1.1.17 (D68): conversations with a Jev score of [`HOT_SCORE`] or more.
     Hot,
+    OlderDrafts,
 }
 
 /// The Hot filter's floor: mint and seafoam rows. The reply floor
@@ -66,6 +67,7 @@ impl ListOpts {
                 Some("unread") => Filter::Unread,
                 Some("starred") => Filter::Starred,
                 Some("hot") => Filter::Hot,
+                Some("older_drafts") => Filter::OlderDrafts,
                 _ => Filter::All,
             },
             order: match order {
@@ -103,6 +105,32 @@ pub const ROW_DATE: &str = "m.date";
 /// Those are the exact strings upstream's four queries carry; a missing marker
 /// is a programming error and panics in tests (see below).
 pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
+    if opts.filter == Filter::OlderDrafts {
+        // A local edit can be newer than the cached server message. Match its
+        // stable identity because cache row IDs can be reused after a sync.
+        let changed = "max(m.date, COALESCE((SELECT max(d.updated_at) FROM drafts d WHERE d.account_id = m.account_id AND d.imap_message_id = m.message_id), m.date))";
+        let cutoff = 7 * 24 * 60 * 60;
+        let predicate = format!(
+            " AND EXISTS (SELECT 1 FROM folders df WHERE df.id = m.folder_id AND df.role = 'drafts') AND {changed} <= unixepoch() - {cutoff} AND {}",
+            sending_pred("m")
+        );
+        let marker = match shape {
+            Shape::Grouped { .. } => " GROUP BY t.id",
+            Shape::Flat => " ORDER BY m.date DESC, m.id DESC",
+        };
+        assert!(
+            base.contains(marker),
+            "draft list SQL lost its insertion marker"
+        );
+        let sql = base
+            .replacen("m.snippet, m.date,", &format!("m.snippet, {changed},"), 1)
+            .replacen(marker, &format!("{predicate}{marker}"), 1);
+        let order = match shape {
+            Shape::Grouped { .. } => " ORDER BY m.date DESC",
+            Shape::Flat => " ORDER BY m.date DESC, m.id DESC",
+        };
+        return sql.replacen(order, &format!(" ORDER BY {changed} ASC, m.id ASC"), 1);
+    }
     match shape {
         Shape::Grouped { folder_pred } => {
             let unread = format!(
@@ -117,7 +145,7 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
             );
             let pinned = crate::fork::reminders::pinned_expr("t.id");
             let filter = match opts.filter {
-                Filter::All => format!(" AND {hidden}"),
+                Filter::All | Filter::OlderDrafts => format!(" AND {hidden}"),
                 Filter::Unread => format!(" AND {hidden} AND {unread}"),
                 Filter::Starred => format!(" AND {hidden} AND t.starred = 1"),
                 Filter::Hot => format!(
@@ -164,7 +192,7 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
             );
             let pinned = crate::fork::reminders::pinned_expr("m.thread_id");
             let filter = match opts.filter {
-                Filter::All => format!(" AND {hidden}"),
+                Filter::All | Filter::OlderDrafts => format!(" AND {hidden}"),
                 Filter::Unread => format!(" AND {hidden} AND m.is_read = 0"),
                 Filter::Starred => format!(" AND {hidden} AND m.is_starred = 1"),
                 Filter::Hot => format!(" AND {hidden} AND {}", hot_pred("m")),
@@ -186,7 +214,13 @@ pub fn apply(base: &str, opts: ListOpts, shape: Shape) -> String {
 /// exhaustive checks.
 pub fn all_opts() -> Vec<ListOpts> {
     let mut out = Vec::new();
-    for filter in [Filter::All, Filter::Unread, Filter::Starred, Filter::Hot] {
+    for filter in [
+        Filter::All,
+        Filter::Unread,
+        Filter::Starred,
+        Filter::Hot,
+        Filter::OlderDrafts,
+    ] {
         for order in [Order::Date, Order::UnreadFirst] {
             for priority in [false, true] {
                 out.push(ListOpts {
@@ -297,7 +331,7 @@ mod tests {
     #[test]
     fn every_combination_is_enumerated_once() {
         let all = all_opts();
-        assert_eq!(all.len(), 16);
+        assert_eq!(all.len(), 20);
         let mut seen = std::collections::HashSet::new();
         for o in all {
             assert!(seen.insert((o.filter as u8, o.order as u8, o.priority)));

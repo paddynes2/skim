@@ -148,7 +148,7 @@
     const r = priority.reason(thread.id);
     return r === "deal" ? t("fork.priority.tag_deal") : r === "always" ? t("fork.priority.tag_always") : null;
   }
-  const layout = $derived(listLayout(mail.threads, rowH, !mail.searching && !mail.courtView && prefs.listOrder === "date", nowSecs * 1000, inInbox ? priority.section : undefined));
+  const layout = $derived(listLayout(mail.threads, rowH, !mail.searching && !mail.courtView && prefs.listOrder === "date" && mail.listFilter !== "older_drafts", nowSecs * 1000, inInbox ? priority.section : undefined));
   const range = $derived(listWindow(layout.items, scrollTop, viewH, OVERSCAN));
   const visibleItems = $derived(layout.items.slice(range.start, range.end));
   const visible = $derived(visibleItems.flatMap(item => item.thread ? [item.thread] : []));
@@ -311,6 +311,9 @@
       </div>
     {/if}
   </header>
+  {#if mail.selectedFolder?.role === "drafts"}
+    <div class="draft-filter"><button class="chip" class:active={mail.listFilter === "older_drafts"} aria-pressed={mail.listFilter === "older_drafts"} title={t("fork.drafts.older_hint")} onclick={() => void mail.setListFilter(mail.listFilter === "older_drafts" ? "all" : "older_drafts")}>{t("fork.drafts.older")}</button>{#if mail.listFilter === "older_drafts"}<span>{t("fork.drafts.older_hint")}</span>{/if}</div>
+  {/if}
   {#if mail.dealsView}
     <DealsToolbar onselect={() => {mail.selectedThreadId=null; mail.selectedMessageId=null; if(rowsEl) rowsEl.scrollTop=0; scrollTop=0; void mail.selectFolder(mail.selectedFolderId!);}} onthread={(id, messageId) => {mail.selectedThreadId=id; mail.selectedMessageId=messageId??null;}} onevent={(id, startTs) => {calendar.goto(new Date(startTs * 1000)); ui.showCalendar(); calendar.open(id);}} onsearch={query => void mail.enterSearch(query)} />
   {:else if !mail.courtView}
@@ -334,6 +337,8 @@
           <button class="retry" onclick={() => ui.openSettings()}>{t("fork.deals.empty")}</button>
         {:else if mail.courtView === "to_reply"}
           {t("fork.replies.empty")}
+        {:else if mail.listFilter === "older_drafts"}
+          {t("fork.drafts.older_empty")}
         {:else}
           {mail.syncState === "syncing" ? t("sync.syncing") : t("list.empty")}
         {/if}
@@ -388,6 +393,7 @@
 {#if context}<MessageMenu thread={context.thread} x={context.x} y={context.y} onclose={closeMenu} />{/if}
 
 <style>
+  .draft-filter { display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 10px;color:var(--text-dim);font-size:11px;line-height:1.5; }
   .list {
     position: relative;
     width: var(--list-w);

@@ -28,7 +28,7 @@ import { SCHEDULED_FOLDER_ID } from "../../fork/compose/api";
 import { forkApi } from "../../fork/api";
 
 /** Fork (3.1): which rows the list shows. */
-export type ListFilter = "all" | "unread" | "starred" | "hot";
+export type ListFilter = "all" | "unread" | "starred" | "hot" | "older_drafts";
 
 const PAGE = 100;
 
@@ -446,6 +446,7 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
 /** Fork (3.1): change the list filter (or order) and reload the current folder
  *  from the top. Selection and paging reset, like a folder switch. */
 async function setListFilter(filter: ListFilter) {
+  if (filter === "older_drafts" && state.folders.find(f => f.id === state.selectedFolderId)?.role !== "drafts") return;
   if (state.listFilter === filter) return;
   state.listFilter = filter;
   await reloadList();
@@ -509,6 +510,8 @@ async function refreshThreads() {
 
 async function selectFolder(id: number) {
   rememberView();
+  const drafts = state.folders.find(f => f.id === id)?.role === "drafts";
+  if (!drafts && state.listFilter === "older_drafts") state.listFilter = "all";
   const request = ++listRequest;
   state.selectedFolderId = id;
   activeViewKey = listIdentity();

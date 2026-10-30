@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "project": "C:\\Users\\Patrick\\Projects\\skim-improvements-20261030",
+  "task": "Skim draft confirmations, older drafts and PDF pages",
+  "inputs": {
+    "src/components/AttachmentChips.svelte": "4f2e40f5a97ff978581176383f3d781622d199dfbe96785b2e6283529130cffe",
+    "src/components/ComposeForm.svelte": "765e8814b02a9dd40e4d946450cce1b90513840677f26a0fff340d637cdc60f0",
+    "src/components/MessageList.svelte": "78c4da5b3b595c771b054ccc75273a810cb44b76f16bb68e2ba2156f289ce4d2",
+    "src/fork/compose/DraftSyncStatus.svelte": "cbc2c51f43a5f80716dd679e1b0a8726d3a229de8402e903107eec886123a5b1",
+    "src/fork/RichEditor.svelte": "c26c13e51c1a06c2ccbc2920f09a47084d6a469f4c93f34604c6a005f03ac749",
+    "docs/fork/README.md": "5b92ecbec9901e27097b33ff925faa80946b269cd2b1edd532c70aea6127c14c",
+    "src/styles/tokens.css": "9a67b272f2c5b4e7cd4a97b3e8ef4ad9e7857c89e15f5a75cb702edd0f717e04"
+  },
+  "reference_files": [
+    "docs/fork/README.md",
+    "src/styles/tokens.css"
+  ],
+  "intended_improvement": "Show confirmed draft persistence, surface older unfinished drafts and preview document layout without leaving Skim.",
+  "selection": {
+    "outcome": "adapt",
+    "reason": "Reuse the approved Base controls, composer status line and attachment dialog. Search examined 55 entries and 61 harvested files with no compatible result. No new UI package.",
+    "sources": []
+  },
+  "inspection": {
+    "component": "Actual Svelte components: PDF bounds, zoom, keyboard close and focus return, stale results, save retries and editor normalization.",
+    "screen": "Built application inspected at 1440 by 960 in Base light. PDF dialog inspected in Base light and dark at 1000 by 900.",
+    "journey": "Drafts to Older drafts to Inbox, explicit Save to pending confirmation, failed preview to retry, page navigation to original file and Escape.",
+    "product": "Keep the existing mail hierarchy, list filters and compose workflow. Native PDF rendering uses the existing Windows dependency."
+  },
+  "evidence": [
+    {
+      "path": "docs/fork/shots/1.1.42/older-drafts-screen.png",
+      "sha256": "58aae1184d54021e19455f5323c458835c444b37418e0e14b7aedc8277ab1c1b",
+      "description": "Older drafts empty state in the complete Base light app"
+    },
+    {
+      "path": "docs/fork/shots/1.1.42/compose-pending-screen.png",
+      "sha256": "f32d776a37f340d6203dec3c919770ef943119d7570017dff9df4adcf96e8a96",
+      "description": "Complete composer with separate device save and server pending status"
+    },
+    {
+      "path": "docs/fork/shots/1.1.42/pdf-preview-light.png",
+      "sha256": "c28e95aeda89d8581c50c52058fb0f953b2c22c183530677adaaf5df930846cd",
+      "description": "PDF page preview with pagination and zoom in Base light"
+    },
+    {
+      "path": "docs/fork/shots/1.1.42/pdf-preview-dark.png",
+      "sha256": "231adcec71329a8f47c5a21dcffbf479affd3fcdad78f552c05953ff7e013e40",
+      "description": "Same dialog in Base dark"
+    }
+  ],
+  "limitations": [
+    "Server acceptance is tested with local fixtures and content receipts; no live email write is performed solely for verification.",
+    "PDF preview displays page images. Open original provides native document text selection."
+  ],
+  "human_feedback": null
+}

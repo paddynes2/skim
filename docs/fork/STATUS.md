@@ -6,6 +6,18 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-10-30.**
 
+## Version 1.1.42 (October 30)
+
+Prepared in the isolated skim-improvements-20261030 worktree from 36d0bd9. D87-D89 add exact-content server-save confirmation, older drafts and local PDF page previews. The existing draft-count badge remains in place.
+
+Focused checks passed: queued and failed saves, stale receipts, rich HTML, same-size replacement attachments, reused IDs, mailbox and unified older-draft lists, unchanged draft opening, local edits, queued sends, failure recovery, pagination and leaving Drafts. Windows rendered a fictional two-page PDF into distinct PNGs and rejected invalid page indexes and malformed bytes. Actual Svelte components passed keyboard close and focus return, page bounds, zoom, preview retry, stale response disposal, provider wording, status retry and editor normalization tests.
+
+The assembled Base light app and Base light/dark PDF dialog were inspected. The source search examined 55 registry entries and 61 files with no suitable result. Existing Skim controls and tokens were reused. See review-1.1.42.json and shots/1.1.42. Runtime evidence that contains mailbox data remains in the private task cache.
+
+Full release gates passed: 640 Rust tests, one existing ignored test, all frontend tests, fmt, Clippy, Svelte check, build and 216 contrast checks. The existing smell-state warning and build chunk advisory remain. Regression proof and installed-app verification are pending. No live email save or send was used in the fixture tests. Memory priors used: project_skim_fork.md and feedback_email_draft_formatting_survives_skim.md; source code and current instructions determined the implementation.
+
+Rollback: reinstall the retained 1.1.41 installer. No schema migration is required. That version ignores saved-content receipts. Existing message edits remain saved.
+
 ## Version 1.1.41 (October 30)
 
 D86 adds the total number of draft messages beside Drafts, using the existing badge appearance in expanded and collapsed navigation. It includes read drafts and respects the selected mailbox or unified view. Active queued sends are excluded. Undo and failed sends restore them. The count refreshes with the existing folder events. No new poller, schema change or mailbox mutation is added.

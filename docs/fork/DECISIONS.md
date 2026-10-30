@@ -266,3 +266,15 @@ Rollback: install 1.1.38. It ignores the new setting. Mail already moved to Spam
 The sidebar shows the number of draft messages, including read drafts, in the active mailbox or across all mailboxes. Zero and unavailable counts have no badge, consistent with existing folder badges. Use the existing role-total query and refresh it with folder data. Ignore late responses after a newer request or an account switch. A count failure must not prevent folders from loading.
 
 Exclude drafts with an active queued send through the same predicate as the Drafts list. Undo and a failed send restore the count. This uses cached Drafts messages, so it follows the existing server synchronization. No new polling or mailbox writes are added. Validation and installation evidence are in STATUS.md.
+
+### D87: Confirm the draft accepted by the server (2026-10-30)
+
+Keep automatic saves local. Explicit Save and the existing close behavior queue the server write. Capture the draft, rich HTML and attachment bytes together under the database guard. Hash the content and stable server identity with length-delimited fields. Store the receipt in the existing settings table only after IMAP APPEND and replacement cleanup succeed. The current draft must match that receipt before the UI says Saved to Gmail or Saved to mail server. An older completion, a changed attachment with the same name and size, or a reused draft ID must not certify newer content. Pending and failed writes remain visible and retryable. No schema change or new poller is needed. Squire normalization on opening is not a user edit.
+
+### D88: Review older drafts in the existing folder (2026-10-30)
+
+Add an Older drafts filter beside the existing list controls. Show drafts untouched for seven days, oldest first, within the current mailbox or unified view. Use the newer of the server message date and local edit time. Preserve the server date when creating an editor mirror and do not advance it for unchanged updates. Actual text, formatting and attachment changes advance the local edit time. Exclude active queued sends. Keep grouping and draft actions intact, omit descending date buckets, and clear this filter when leaving Drafts.
+
+### D89: Render PDF pages locally (2026-10-30)
+
+Use Windows.Data.Pdf through the existing windows crate. Render one page to a PNG in a blocking worker, bounded to 1600 by 2200 pixels. Keep the existing 25 MB file limit. Add page navigation, fit-width and larger zoom options inside the existing dialog. Preserve Open original and Save file. Unreadable or protected files show a retryable error. Stale render results cannot reopen a closed dialog. This adds crate features, with no new package or browser PDF runtime. The native API reference is https://learn.microsoft.com/en-us/uwp/api/windows.data.pdf.pdfdocument.loadfromstreamasync. Installation and validation evidence are in STATUS.md.
