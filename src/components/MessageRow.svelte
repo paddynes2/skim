@@ -34,7 +34,11 @@
   // Which mailbox this row came from — shown only in the unified view, where
   // rows from every account interleave.
   const sender = $derived(mail.myEmails.includes(thread.fromAddr.toLowerCase()) ? (recipientLabel ? `${t("reading.you")} → ${recipientLabel}` : t("reading.you")) : thread.fromName);
-  const badge = $derived(mail.unified ? mail.accountBadge(thread.accountId) : null);
+  // Fork (D94): only rows from a second mailbox carry its tag; the first
+  // mailbox is the default and needs no label on every row.
+  const badge = $derived(
+    mail.unified && thread.accountId !== mail.accounts[0]?.id ? mail.accountBadge(thread.accountId) : null,
+  );
   const compact = $derived(prefs.density === "compact");
   const avatar = $derived(
     prefs.avatars && !companyIdentity ? { text: initials(thread.fromName, thread.fromAddr), color: avatarColor(thread.fromAddr) } : null,

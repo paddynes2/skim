@@ -7,10 +7,11 @@ import { parseTokens } from "../../../scripts/fork/contrast.mjs";
 test("pastel rows: deal, then needs you, then a person, else automated", () => {
   assert.equal(heatCategory(0.2, true), "deal");
   assert.equal(heatCategory(1, false), "deal");
-  assert.equal(heatCategory(0.72, false), "hot");
-  assert.equal(heatCategory(0.5, false), "hot");
-  assert.equal(heatCategory(0.45, false), "people");
-  assert.equal(heatCategory(0.01, false), "people");
+  assert.equal(heatCategory(0.72, false, true), "hot");
+  assert.equal(heatCategory(0.5, false, true), "hot");
+  assert.equal(heatCategory(0.45, false, true), "people");
+  assert.equal(heatCategory(undefined, false, true), "people");
+  assert.equal(heatCategory(0.72, false, false), "auto", "a scored login notice stays plain");
   assert.equal(heatCategory(0, false), "auto");
   assert.equal(heatCategory(undefined, false), "auto");
 });

@@ -36,13 +36,17 @@ pub const REPLIED_FLOOR: f64 = 0.45;
 #[serde(rename_all = "camelCase")]
 pub struct Heat {
     pub thread_id: i64,
-    pub heat: f64,
+    /// `None`: a person wrote but there is no heat yet.
+    pub heat: Option<f64>,
+    /// Pastel (D92): a person, not a machine, wrote in this conversation.
+    pub person: bool,
 }
 
 /// One message as the heat rule needs it.
 #[derive(Debug, Clone, Default)]
 pub struct Msg {
     pub thread_id: i64,
+    pub from_name: String,
     pub from_addr: String,
     pub subject: String,
     pub preview: String,
@@ -62,6 +66,199 @@ pub fn cold_by_rule(m: &Msg, exclude: &[String]) -> bool {
         || is_calendar(&m.subject, &m.from_addr)
         || is_sensitive(&m.subject, &m.preview)
         || !authenticated(&m.spf, &m.dkim, &m.dmarc)
+}
+
+/// Pastel (D92): local parts that mean a role or a machine, not a person.
+const ROLE_LOCALS: &[&str] = &[
+    "noreply",
+    "no-reply",
+    "no_reply",
+    "donotreply",
+    "do-not-reply",
+    "notifications",
+    "notification",
+    "notify",
+    "alerts",
+    "alert",
+    "mailer",
+    "mailer-daemon",
+    "postmaster",
+    "bounce",
+    "bounces",
+    "support",
+    "help",
+    "team",
+    "news",
+    "newsletter",
+    "newsletters",
+    "marketing",
+    "updates",
+    "update",
+    "billing",
+    "invoices",
+    "invoice",
+    "accounts",
+    "receipts",
+    "security",
+    "admin",
+    "system",
+    "automated",
+    "digest",
+    "reply",
+    "replies",
+    "feedback",
+    "community",
+    "events",
+    "hello",
+    "info",
+    "sales",
+    "service",
+    "services",
+    "welcome",
+    "orders",
+    "order",
+    "shop",
+    "store",
+    "careers",
+    "jobs",
+    "consulting",
+    "enquiries",
+    "forms",
+    "form",
+    "contact",
+    "website",
+    "webmaster",
+];
+/// Words in a display name that mean a company or a product, not a person.
+const ORG_WORDS: &[&str] = &[
+    "support",
+    "team",
+    "developers",
+    "developer",
+    "news",
+    "newsletter",
+    "notifications",
+    "billing",
+    "inc",
+    "ltd",
+    "llc",
+    "pty",
+    "app",
+    "hq",
+    "updates",
+    "digest",
+    "platform",
+    "advertising",
+    "academy",
+    "community",
+    "events",
+    "official",
+    "the",
+    "via",
+    "from",
+    "at",
+    "and",
+    "of",
+    "for",
+    "&",
+    "|",
+    "-",
+    "+",
+    "store",
+    "shop",
+    "group",
+    "service",
+    "services",
+    "labs",
+    "club",
+    "products",
+    "executive",
+    "search",
+    "consulting",
+    "debtors",
+    "enquiries",
+    "form",
+    "forms",
+    "contact",
+    "website",
+    "submission",
+    "submissions",
+];
+/// Jev scores under this, on mail with an unsubscribe header, read as a mailing.
+const BULK_PERSON_FLOOR: f64 = 0.3;
+
+/// The sender reads as a person: a display name of two to four capitalised
+/// words with no company word and no digits, at an address that is not a role.
+pub fn personal_sender(name: &str, addr: &str) -> bool {
+    let local = addr.trim().to_ascii_lowercase();
+    let local = local.split('@').next().unwrap_or("");
+    let base = local.split(['+', '.']).next().unwrap_or("");
+    let machine = [
+        "noreply",
+        "no-reply",
+        "notification",
+        "alerts",
+        "news",
+        "bounce",
+        "mailer",
+    ];
+    if ROLE_LOCALS.contains(&local)
+        || ROLE_LOCALS.contains(&base)
+        || machine.iter().any(|m| {
+            local.starts_with(&format!("{m}-"))
+                || local.starts_with(&format!("{m}_"))
+                || local.ends_with(&format!("_{m}"))
+                || local.ends_with(&format!("-{m}"))
+        })
+    {
+        return false;
+    }
+    let name = name.trim().trim_matches('"');
+    if name.is_empty() || name.contains('@') || name.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    let words: Vec<&str> = name.split([' ', ',']).filter(|w| !w.is_empty()).collect();
+    if !(2..=4).contains(&words.len()) {
+        return false;
+    }
+    if words
+        .iter()
+        .any(|w| ORG_WORDS.contains(&w.trim_matches(['(', ')', '.']).to_lowercase().as_str()))
+    {
+        return false;
+    }
+    words.iter().all(|w| {
+        w.chars()
+            .find(|c| c.is_alphabetic())
+            .is_none_or(|c| c.is_uppercase())
+    })
+}
+
+/// Conversations in which a person wrote: a personal sender who is not the
+/// user, not on the exclude list and not sending calendar mail. A person on a
+/// mailing (unsubscribe header) counts only when Jev scored the conversation
+/// at least [`BULK_PERSON_FLOOR`].
+pub fn people(
+    msgs: &[Msg],
+    own: &HashSet<String>,
+    exclude: &[String],
+    heat: &BTreeMap<i64, f64>,
+) -> HashSet<i64> {
+    let mut out = HashSet::new();
+    for m in msgs {
+        if own.contains(&m.from_addr.trim().to_ascii_lowercase())
+            || excluded(&m.from_addr, exclude)
+            || is_calendar(&m.subject, &m.from_addr)
+            || !personal_sender(&m.from_name, &m.from_addr)
+        {
+            continue;
+        }
+        if m.bulk && heat.get(&m.thread_id).copied().unwrap_or(0.0) < BULK_PERSON_FLOOR {
+            continue;
+        }
+        out.insert(m.thread_id);
+    }
+    out
 }
 
 /// Pure: the tests drive it.
@@ -132,7 +329,7 @@ coalesce(nullif(m.message_id, ''), 'id:' || m.id)";
         "SELECT m.thread_id, coalesce(m.from_addr, ''), coalesce(m.subject, ''),
                 coalesce(m.snippet, ''), coalesce(m.list_unsubscribe, '') <> '',
                 coalesce(m.auth_spf, ''), coalesce(m.auth_dkim, ''), coalesce(m.auth_dmarc, ''),
-                s.msg_key IS NOT NULL, s.score
+                s.msg_key IS NOT NULL, s.score, coalesce(m.from_name, '')
          FROM messages m
          JOIN folders f ON f.id = m.folder_id
          LEFT JOIN fork_priority_score s ON s.msg_key = {key}
@@ -143,6 +340,7 @@ coalesce(nullif(m.message_id, ''), 'id:' || m.id)";
         let asked: bool = r.get(8)?;
         Ok(Msg {
             thread_id: r.get(0)?,
+            from_name: r.get(10)?,
             from_addr: r.get(1)?,
             subject: r.get(2)?,
             preview: r.get(3)?,
@@ -164,10 +362,19 @@ pub fn heat_for(
     let ids: Vec<i64> = ids.iter().copied().take(MAX_IDS).collect();
     let own = crate::fork::court::own_addresses(conn)?;
     let l = lists(conn)?;
-    let out = decide(&load(conn, &ids)?, &own, &l.exclude, &l.always, deals);
-    Ok(out
+    let msgs = load(conn, &ids)?;
+    let out = decide(&msgs, &own, &l.exclude, &l.always, deals);
+    let persons = people(&msgs, &own, &l.exclude, &out);
+    let mut ids: Vec<i64> = out.keys().chain(persons.iter()).copied().collect();
+    ids.sort_unstable();
+    ids.dedup();
+    Ok(ids
         .into_iter()
-        .map(|(thread_id, heat)| Heat { thread_id, heat })
+        .map(|thread_id| Heat {
+            thread_id,
+            heat: out.get(&thread_id).copied(),
+            person: persons.contains(&thread_id),
+        })
         .collect())
 }
 
@@ -280,5 +487,61 @@ mod tests {
         bulk.bulk = true;
         let out = run(&[bulk, msg(1, "a@b.com", Some(Some(0.6)))]);
         assert_eq!(out.get(&1), Some(&0.6));
+    }
+
+    #[test]
+    fn a_person_is_a_capitalised_name_at_a_personal_address() {
+        assert!(personal_sender("Nora Quill", "hi@quillhouse.example"));
+        assert!(personal_sender("Ted Marlow", "ted@marlowtrips.example"));
+        assert!(personal_sender("Renée Voss", "renee@vossworks.example"));
+        assert!(!personal_sender("Acme Support", "support@acme.example"));
+        assert!(!personal_sender(
+            "Acme Developers",
+            "acmedevelopers-noreply@acme.example"
+        ));
+        assert!(!personal_sender("Digest", "digest@send.acme.example"));
+        assert!(!personal_sender("", "bot@hey.example"));
+        assert!(!personal_sender(
+            "Jo Lane Executive Search",
+            "info@jolane.example"
+        ));
+        assert!(!personal_sender(
+            "Dr Ines van Dam",
+            "clinic.noreply@clinic.example"
+        ));
+        assert!(!personal_sender("Mia + Lou", "hello@mialou.example"));
+    }
+
+    #[test]
+    fn people_skips_own_excluded_calendar_and_low_scored_mailings() {
+        let own: HashSet<String> = ["me@x.com".to_string()].into();
+        let exclude = vec!["warmup.example".to_string()];
+        let m = |t: i64, name: &str, addr: &str, subject: &str, bulk: bool| Msg {
+            thread_id: t,
+            from_name: name.into(),
+            from_addr: addr.into(),
+            subject: subject.into(),
+            bulk,
+            ..Msg::default()
+        };
+        let msgs = vec![
+            m(1, "Ann Lee", "ann@client.com", "Question", false),
+            m(2, "Me Myself", "me@x.com", "Hi", false),
+            m(3, "Pat Nes", "pat@warmup.example", "RE: hi", false),
+            m(
+                4,
+                "Ann Lee",
+                "ann@client.com",
+                "Invitation: call @ Tue",
+                false,
+            ),
+            m(5, "Ann Lee", "ann@list.com", "Newsletter", true),
+            m(6, "Ann Lee", "ann@list.com", "Reply on list", true),
+        ];
+        let heat: BTreeMap<i64, f64> = [(5, 0.1), (6, 0.6)].into();
+        let p = people(&msgs, &own, &exclude, &heat);
+        let mut got: Vec<i64> = p.into_iter().collect();
+        got.sort();
+        assert_eq!(got, vec![1, 6]);
     }
 }

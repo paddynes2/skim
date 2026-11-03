@@ -88,13 +88,19 @@ pub const SETTING_COLLEAGUES: &str = "fork_colleagues";
 const USED_KEY: &str = "fork_reply_used";
 
 /// Fitted on the owner's mail (module comment): 0.5 would drop 13 of the 49.
-pub const THRESHOLD_DEFAULT: f64 = 0.4;
+/// v1.1.46 (D93): 0.5 anyway. At 0.4 the list held 98 conversations and went
+/// unread; the owner picked "owed this week" over catching every reply.
+pub const THRESHOLD_DEFAULT: f64 = 0.5;
 /// The bar for a Deals conversation: lower, not none. On the owner's mailbox
 /// on October 14 (1.1.19 live check) "always" listed 32 Deals rows, 8 of them
 /// notices (a signature receipt at 0.06, a portal login at 0.07, an
 /// auto-acknowledgement at 0.31); at 0.2 the people's mail stays (0.23 to
 /// 0.36) and the receipts go.
-pub const DEAL_FLOOR: f64 = 0.2;
+/// v1.1.46 (D93): 0.35. At 0.2 "Join Teams meeting in progress" was listed.
+pub const DEAL_FLOOR: f64 = 0.35;
+/// v1.1.46 (D93): rows older than this fold under "older" in the view and
+/// leave the sidebar count. Marks and reply drafts never fold.
+pub const RECENT_DAYS: i64 = 7;
 /// Messages asked about per local day. The first fill is about 160.
 pub const DAILY_CAP: i64 = 500;
 /// Messages per pass; a full pass asks `priority::schedule` to run again.
@@ -152,8 +158,12 @@ pub struct Row {
     /// The court's reason (`filed`, `draft started`, ...).
     pub reason: Option<String>,
     /// The last message: sender, subject and sender authentication.
+    pub from_name: String,
     pub from_addr: String,
     pub subject: String,
+    /// v1.1.46 (D93): a calendar event with the sender as a guest started
+    /// after the last message and before now: the call settled it.
+    pub met: bool,
     pub spf: String,
     pub dkim: String,
     pub dmarc: String,
@@ -209,6 +219,13 @@ pub fn decide(
                     || is_sensitive(&r.subject, "")
                     || !authenticated(&r.spf, &r.dkim, &r.dmarc)
                 {
+                    continue;
+                } else if r.met
+                    || (!deals.contains(&r.thread_id)
+                        && !crate::fork::heat::personal_sender(&r.from_name, &r.from_addr))
+                {
+                    // D93: a meeting with them since, or not a person (a form,
+                    // a support desk, a renewal). A deal's contact is a person.
                     continue;
                 } else if deals.contains(&r.thread_id) && r.score.is_some_and(|s| s >= DEAL_FLOOR) {
                     Some(TAG_DEAL)
@@ -312,7 +329,13 @@ fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
                         JOIN messages dm ON dm.id = d.reply_to_message_id
                                          OR dm.id = d.origin_message_id
                         WHERE dm.thread_id = c.thread_id AND d.updated_at >= m.date),
-                s.msg_key IS NOT NULL, s.score, k.mark, m.to_addrs, m.cc_addrs
+                s.msg_key IS NOT NULL, s.score, k.mark, m.to_addrs, m.cc_addrs,
+                coalesce(m.from_name, ''),
+                coalesce(m.from_addr, '') <> '' AND EXISTS (
+                    SELECT 1 FROM fork_cal_events e
+                    WHERE e.start_ts > m.date AND e.start_ts < unixepoch()
+                      AND coalesce(e.status, '') <> 'cancelled'
+                      AND instr(lower(coalesce(e.attendees_json, '')), lower(m.from_addr)) > 0)
          FROM fork_court c
          JOIN messages m ON m.id = c.last_message_id
          LEFT JOIN fork_reply_score s ON s.msg_key = {key}
@@ -330,6 +353,8 @@ fn rows(conn: &Connection, floor: i64) -> rusqlite::Result<Vec<Row>> {
             reason: r.get(3)?,
             from_me: own.contains(&from_addr.trim().to_ascii_lowercase()),
             colleague: company.answered(&from_addr, to.as_deref(), cc.as_deref()),
+            from_name: r.get(15)?,
+            met: r.get(16)?,
             from_addr,
             subject: r.get(5)?,
             spf: r.get(6)?,
@@ -682,15 +707,42 @@ pub async fn fork_replies_list(
     state: State<'_, AppState>,
     offset: i64,
     limit: i64,
+    older: Option<bool>,
 ) -> Result<Vec<CourtRow>> {
     let cache = state.fork.deals.clone();
     state
         .db
         .read("fork_replies_list", move |conn| {
-            let m = member_set(conn, &cache)?;
+            let mut m = member_set(conn, &cache)?;
+            let old = older_ids(conn, &m, now_ts())?;
+            let want_old = older.unwrap_or(false);
+            m.retain(|id, _| old.contains(id) == want_old);
             list(conn, &m, offset.max(0), limit.clamp(1, 200))
         })
         .await
+}
+
+/// D93: members listed by the Jev rule or as a deal whose last message is
+/// older than [`RECENT_DAYS`]. Marks and reply drafts are never older.
+pub fn older_ids(
+    conn: &Connection,
+    members: &BTreeMap<i64, Option<&'static str>>,
+    now: i64,
+) -> rusqlite::Result<HashSet<i64>> {
+    let cutoff = now - RECENT_DAYS * 86_400;
+    let mut stmt =
+        conn.prepare_cached("SELECT coalesce(since, 0) FROM fork_court WHERE thread_id = ?1")?;
+    let mut out = HashSet::new();
+    for (id, tag) in members {
+        if matches!(tag, Some(t) if *t == TAG_MARKED || *t == REASON_DRAFT) {
+            continue;
+        }
+        let since: Option<i64> = stmt.query_row([id], |r| r.get(0)).optional()?;
+        if since.is_some_and(|s| s < cutoff) {
+            out.insert(*id);
+        }
+    }
+    Ok(out)
 }
 
 /// What the sidebar count, the `D` key, the row menu and the view header read.
@@ -699,6 +751,8 @@ pub async fn fork_replies_list(
 pub struct RepliesState {
     /// Every conversation in To reply.
     pub ids: Vec<i64>,
+    /// D93: the ones folded under "older" (a subset of `ids`).
+    pub older: Vec<i64>,
     /// Why new mail is not being checked, when it is not: `priority_off`,
     /// `no_key` or `paused`. The list then holds only marks, drafts and
     /// Deals, and the view says so rather than looking clear.
@@ -726,8 +780,11 @@ pub async fn fork_replies_state(state: State<'_, AppState>) -> Result<RepliesSta
     state
         .db
         .read("fork_replies_state", move |conn| {
+            let m = member_set(conn, &cache)?;
+            let older = older_ids(conn, &m, now_ts())?.into_iter().collect();
             Ok(RepliesState {
-                ids: member_set(conn, &cache)?.into_keys().collect(),
+                older,
+                ids: m.into_keys().collect(),
                 off: scoring_off(priority::enabled(conn)?, key, paused),
             })
         })
@@ -769,6 +826,7 @@ mod tests {
             thread_id,
             state: STATE_ON_ME.into(),
             since: 1_000,
+            from_name: "Anna Client".into(),
             from_addr: "anna@client.com".into(),
             subject: "Proposal".into(),
             dmarc: "pass".into(),
@@ -780,6 +838,38 @@ mod tests {
 
     fn run(rows: &[Row]) -> BTreeMap<i64, Option<&'static str>> {
         decide(rows, &[7].into(), 0.4, 500, &["alerts.com".into()])
+    }
+
+    #[test]
+    fn a_meeting_since_or_a_sender_who_is_not_a_person_takes_it_out() {
+        let met = Row {
+            met: true,
+            ..r(1, Some(0.9))
+        };
+        let form = Row {
+            from_name: "Contact Form".into(),
+            from_addr: "forms@site.com".into(),
+            ..r(2, Some(0.9))
+        };
+        let deal_form = Row {
+            from_name: String::new(),
+            from_addr: "rob@client.com".into(),
+            ..r(7, Some(0.9))
+        };
+        let marked = Row {
+            met: true,
+            mark: Some(MARK_NEEDS.into()),
+            ..r(3, Some(0.9))
+        };
+        let out = run(&[met, form, deal_form, marked]);
+        assert!(!out.contains_key(&1), "met since");
+        assert!(!out.contains_key(&2), "a form is not a person");
+        assert_eq!(
+            out.get(&7),
+            Some(&Some(TAG_DEAL)),
+            "a deal contact is a person"
+        );
+        assert_eq!(out.get(&3), Some(&Some(TAG_MARKED)), "a mark wins");
     }
 
     #[test]
@@ -1173,7 +1263,7 @@ com, co.za, ai, firm.ai, sales",
                 message_id: Some(format!("<{}>", m.msgid)),
                 references: m.refs.iter().map(|r| format!("<{r}>")).collect(),
                 subject: Some(m.subject.into()),
-                from_name: Some("Someone".into()),
+                from_name: Some("Sam Someone".into()),
                 from_addr: Some(m.from.into()),
                 date: m.date,
                 snippet: Some("Can you send the deck?".into()),

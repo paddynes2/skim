@@ -3,13 +3,27 @@
 // mail store can import it without a cycle (toggle imports the mail store).
 import { repliesApi, type ScoringOff } from "./api";
 
-const state = $state({ ids: [] as number[], off: null as ScoringOff | null });
+const state = $state({ ids: [] as number[], older: [] as number[], off: null as ScoringOff | null, showOlder: false });
 let inflight: Promise<void> | null = null;
 let again = false;
 
 export const replies = {
+  /** D93: this week's rows; older ones are folded and not counted. */
   get count() {
-    return state.ids.length;
+    return state.ids.length - state.older.length;
+  },
+  get olderCount() {
+    return state.older.length;
+  },
+  get olderIds(): number[] {
+    return state.older;
+  },
+  /** The view lists the older rows instead of this week's. */
+  get showOlder() {
+    return state.showOlder;
+  },
+  set showOlder(v: boolean) {
+    state.showOlder = v;
   },
   /** Why new mail is not being checked, when it is not. */
   get off() {
@@ -31,6 +45,8 @@ export const replies = {
       .then((s) => {
         if (!s || !Array.isArray(s.ids)) return;
         state.ids = s.ids;
+        state.older = Array.isArray(s.older) ? s.older : [];
+        if (!state.older.length) state.showOlder = false;
         state.off = s.off ?? null;
       })
       .catch(() => {})

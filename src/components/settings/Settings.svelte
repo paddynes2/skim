@@ -703,7 +703,7 @@
           <div class="axis">{t("theme.cold")}</div>
           <div class="axis">{t("theme.warm")}</div>
           <div class="axis">{t("theme.base")}</div>
-          <div class="axis">{t("fork.theme.pastel")}</div>
+          <div class="axis">{t("theme.pastel")}</div>
 
           {#each [{ light: "light" as Lightness }, { light: "dark" as Lightness }] as row (row.light)}
             <div class="axis right">{t(`theme.${row.light}`)}</div>

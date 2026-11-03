@@ -319,3 +319,16 @@ moving sent copies to Trash while deleting grouped drafts.
 | `scripts/fork/contrast.mjs` | `THEMES` | adds `pastel-light` | D91 |
 | `src/lib/i18n/locales/en.json` | `fork.theme.pastel` | new string | D91 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.45 | Pastel theme (D91) |
+| `src-tauri/src/fork/heat.rs` | `Heat`, `Msg`, `heat_for` | `person`, `from_name`; `personal_sender`, `people` | D92 |
+| `src/fork/heat/store.svelte.ts`, `src/fork/heat/colour.ts` | `person()`, `heatCategory(heat, deal, person)` | D92 |
+| `src-tauri/src/fork/replies.rs` | `decide`, `rows`, list/state commands | person and met tests, 0.5 / 0.35, `older_ids`, `older` param and field | D93 |
+| `src/fork/replies/*`, `src/lib/stores/mail.svelte.ts` | older fold, `toggleOlder`, `clearOlder`; `mail.reloadList` exported | D93 |
+| `src/components/MessageList.svelte` | To reply header | this week / older / Clear all | D93 |
+| `src/components/Sidebar.svelte` | `noUnreadRoles`, Starred total | D94 |
+| `src/components/MessageRow.svelte` | `badge` | second mailbox only | D94 |
+| `src/components/ReadingPane.svelte` | `.subject` | two-line clamp + title | D94 |
+| `src/fork/sync/SyncStatus.svelte` | actions | Dismiss all | D94 |
+| `src/fork/reading/ConversationTools.svelte` | count | singular | D94 |
+| `src/fork/priority/SettingsPriority.svelte`, `src/fork/filing/SettingsFiling.svelte` | `.stack .label` | `flex: none` | D94 |
+| `src/lib/i18n/locales/en.json` | strings | restored ellipses; new D93/D94 strings; `theme.pastel` replaces `fork.theme.pastel` | D93, D94 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.46 | D92-D94 |

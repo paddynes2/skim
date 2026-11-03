@@ -151,6 +151,10 @@
     flex-direction: column;
     gap: 6px;
   }
+  /* D94: the same 120px-tall gap as Priority's. */
+  .stack .label {
+    flex: none;
+  }
   .modes {
     display: flex;
     gap: 6px;

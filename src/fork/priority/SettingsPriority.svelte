@@ -231,6 +231,10 @@
     flex-direction: column;
     gap: 6px;
   }
+  /* D94: in a column the 120px basis became 120px of height under each heading. */
+  .stack .label {
+    flex: none;
+  }
   input,
   textarea {
     padding: 4px 8px;

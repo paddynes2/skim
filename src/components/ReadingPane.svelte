@@ -672,7 +672,7 @@
         {@const acct = mail.accountBadge(mail.selectedThread.accountId)}
         {#if acct}<div class="acct-line"><span class="acct" style:--c="var(--acct-{acct.color})">{acct.label}</span><span class="acct-addr">{acct.email}</span></div>{/if}
       {/if}
-      <h1 class="subject">{shownSubject}</h1>
+      <h1 class="subject" title={shownSubject}>{shownSubject}</h1>
       {#if mail.selectedThreadId !== null}
         {#key mail.selectedThreadId}
           <DealTool threadId={mail.selectedThreadId} mode="status" />
@@ -1180,6 +1180,12 @@
     letter-spacing: -0.02em;
     line-height: 1.25;
     margin-bottom: 8px;
+    /* D94: a long subject stops at two lines; the full one is the tooltip. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .message {

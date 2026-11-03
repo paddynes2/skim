@@ -426,7 +426,7 @@ function fetchPage(folderId: number, offset: number, limit = PAGE): Promise<Thre
   // (a court row IS a thread), oldest first, across every account.
   const court = courtStateOf(folderId);
   // v1.1.19 (D70): To reply, newest first, from `fork_replies_list`.
-  if (court === "to_reply") return repliesApi.list(offset, limit);
+  if (court === "to_reply") return repliesApi.list(offset, limit, replies.showOlder);
   if (court !== null) return courtApi.list(court, offset, limit);
   // Fork (v1.1.3): Deals, by thread, newest first, across every folder.
   if (folderId === VF_DEALS) return dealsApi.list(offset, limit, dealsStore.selectedCompany || undefined);
@@ -948,6 +948,7 @@ export const mail = {
   },
   setListFilter,
   setListOrder,
+  reloadList,
   // Fork (4.3): search as a virtual folder.
   /** The query the list is showing results for; `null` outside search mode. */
   get searchQuery(): string | null {

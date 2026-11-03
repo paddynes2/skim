@@ -18,12 +18,15 @@ export type ScoringOff = "priority_off" | "no_key" | "paused";
 
 export interface RepliesState {
   ids: number[];
+  /** D93: the ones older than 7 days, folded under "older" (a subset of `ids`). */
+  older?: number[];
   off: ScoringOff | null;
 }
 
 export const repliesApi = {
   /** The view's rows, newest first: court rows whose reason is the tag. */
-  list: (offset: number, limit: number) => invoke<CourtRow[]>("fork_replies_list", { offset, limit }),
+  list: (offset: number, limit: number, older = false) =>
+    invoke<CourtRow[]>("fork_replies_list", { offset, limit, older }),
   /** Every conversation in To reply, and whether new mail is being checked. */
   state: () => invoke<RepliesState>("fork_replies_state"),
   /** Set or clear (null) the mark; resolves to the previous mark, for Undo. */

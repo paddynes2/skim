@@ -64,6 +64,7 @@ export function replyKey(row: ThreadRow): Promise<void> {
 }
 
 export function openToReply(): void {
+  replies.showOlder = false;
   ui.showMail();
   void mail.selectCourt("to_reply");
 }
@@ -75,4 +76,38 @@ export function startReplies(): () => void {
   return () => {
     delete navHooks.toReply;
   };
+}
+
+/** D93: open or close the older rows in the To reply view. */
+export async function toggleOlder(): Promise<void> {
+  replies.showOlder = !replies.showOlder;
+  await mail.reloadList();
+}
+
+/** D93: mark every older row done, with one Undo for the lot. */
+export async function clearOlder(): Promise<void> {
+  const ids = [...replies.olderIds];
+  if (!ids.length) return;
+  const prev: [number, ReplyMark | null][] = [];
+  for (const id of ids) {
+    try {
+      prev.push([id, await repliesApi.mark(id, "done")]);
+    } catch {
+      // A conversation that changed meanwhile keeps its place.
+    }
+  }
+  replies.showOlder = false;
+  await replies.refresh();
+  await mail.reloadList();
+  toast.show({
+    text: t("fork.replies.cleared_older", { n: prev.length }),
+    action: {
+      label: t("fork.replies.undo"),
+      run: () =>
+        void Promise.all(prev.map(([id, mark]) => repliesApi.mark(id, mark)))
+          .then(() => replies.refresh())
+          .then(() => mail.reloadList()),
+    },
+    ms: 8000,
+  });
 }

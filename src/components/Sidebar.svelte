@@ -10,7 +10,6 @@
   import { ui } from "../lib/stores/ui.svelte";
   import { updater } from "../lib/stores/update.svelte";
   import Settings from "./settings/Settings.svelte";
-  import { starredCount } from "../fork/stores/starred.svelte";
   // Fork (v1.1.3): Deals with its unread count, above the folders.
   import { VF_DEALS } from "../fork/deals/api";
   import { dealsCount } from "../fork/deals/count.svelte";
@@ -28,7 +27,9 @@
 
   // "Отправленные" и "Черновики" содержат письма, написанные самим
   // пользователем, — счётчик непрочитанных для них бессмысленен.
-  const noUnreadRoles = new Set(["sent", "drafts"]);
+  // Fork (D94): Trash, Spam and Archive counts are noise; only the Inbox, To
+  // reply and Drafts carry a number.
+  const noUnreadRoles = new Set(["sent", "drafts", "trash", "spam", "junk", "archive", "all"]);
   const showsUnread = (role: string | null) => !(role && noUnreadRoles.has(role));
 
   // Fork: Starred is shown (Mimestream rule: total count, not unread);
@@ -36,10 +37,6 @@
   const mainFolders = $derived(
     mail.folders.filter((f) => f.role !== null && f.role !== "all" && f.role !== "important"),
   );
-  const starredTotal = $derived.by(() => {
-    const starred = mail.folders.find((f) => f.role === "starred");
-    return starred ? starredCount.for(starred, mail.unified ? null : mail.account?.id ?? null) : 0;
-  });
   // The user's own folders, as a tree: a nested folder prints only what its
   // parent row does not already say, and leans on an indent for the rest.
   const labels = $derived(folderTree(mail.folders.filter((f) => f.role === null)));
@@ -78,7 +75,7 @@
     </svg>
     <span class="name">{name}</span>
     {#if folder.role === "starred"}
-      {#if starredTotal > 0}<span class="count total">{starredTotal}</span>{/if}
+      <!-- D94: no total on Starred. -->
     {:else if folder.role === "drafts"}
       {#if mail.draftCount !== null && mail.draftCount > 0}<span class="count total">{mail.draftCount}</span>{/if}
     {:else if folder.unreadCount > 0 && showsUnread(folder.role)}

@@ -16,6 +16,8 @@
   const label=$derived(mail.syncState==="syncing"?t("fork.sync.refreshing"):mail.syncState==="offline"?t("fork.sync.offline"):mail.syncState==="error"?t("fork.sync.trouble"):queue?.failed?t("fork.sync.failed",{n:queue.failed}):queue?.pending?t("fork.sync.pending",{n:queue.pending}):!queue?t("fork.sync.checking"):t("fork.sync.ready"));
   async function retry(id:number){busy=true;error="";try{await syncStatusApi.retry(id);await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
   async function dismiss(id:number){busy=true;error="";try{await syncStatusApi.dismiss(id);await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
+  // D94: one button for the whole failure list (the 30 shown, as the server lists them).
+  async function dismissAll(){if(!queue)return;busy=true;error="";try{for(const item of queue.failures)await syncStatusApi.dismiss(item.id);await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
   async function sync(){busy=true;error="";try{await mail.syncNow();await refresh();}catch(e){error=String((e as {message?:string})?.message??e);}finally{busy=false;}}
   const known=new Set(["read","unread","star","unstar","send","rsvp","unsubscribe","save_draft","move","delete","archive","junk","rename_folder","delete_folder"]);
   function action(value:string){return known.has(value)?t(`fork.sync.action_${value}`):value.replaceAll("_"," ");}
@@ -34,7 +36,7 @@
         {#if queue.failed>queue.failures.length}<p>{t("fork.sync.first_failures")}</p>{/if}
       {/if}
       {#if error}<p role="alert" class="error">{error}</p>{/if}
-      <div class="actions"><button disabled={busy || mail.syncState==="syncing"} onclick={()=>void sync()}>{t("fork.sync.now")}</button><button disabled={busy} onclick={()=>void refresh()}>{t("fork.sync.refresh_status")}</button></div>
+      <div class="actions">{#if queue?.failures?.length}<button disabled={busy} onclick={()=>void dismissAll()}>{t("fork.sync.dismiss_all")}</button>{/if}<button disabled={busy || mail.syncState==="syncing"} onclick={()=>void sync()}>{t("fork.sync.now")}</button><button disabled={busy} onclick={()=>void refresh()}>{t("fork.sync.refresh_status")}</button></div>
     </div>
   {/if}
 </div>

@@ -13,6 +13,7 @@
   import CourtRow from "../fork/court/CourtRow.svelte";
   import type { CourtRow as CourtRowShape } from "../fork/court/types";
   import { replies } from "../fork/replies/store.svelte";
+  import { clearOlder, toggleOlder } from "../fork/replies/toggle";
   // Fork (v1.1.3): Deals header and per-row deal name.
   import DealBadge from "../fork/deals/DealBadge.svelte";
   import type { DealRow } from "../fork/deals/api";
@@ -229,7 +230,13 @@
         {#if mail.courtView === "to_reply"}
           <!-- v1.1.19 (D70): To reply. Newest first; D marks one done. -->
           <h1>{t("fork.nav.to_reply")}</h1>
-          <span class="court-sub">{t("fork.replies.sub", { n: replies.count })}</span>
+          <span class="court-sub">
+            {replies.showOlder ? t("fork.replies.sub_older", { n: replies.olderCount }) : t("fork.replies.sub_week", { n: replies.count })}
+            {#if replies.olderCount > 0}
+              &middot; <button class="older-link" onclick={() => void toggleOlder()}>{replies.showOlder ? t("fork.replies.back_to_week") : t("fork.replies.older_n", { n: replies.olderCount })}</button>
+              {#if replies.showOlder}&middot; <button class="older-link" onclick={() => void clearOlder()}>{t("fork.replies.clear_older")}</button>{/if}
+            {/if}
+          </span>
           {#if replies.off}
             <!-- The Jev check cannot run: say so, so an empty list is not read as nothing owed. -->
             <span class="court-sub replies-off" role="status">{t(`fork.replies.off_${replies.off}`)}</span>
@@ -356,7 +363,7 @@
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} class:heated={heat.of(thread.id) !== undefined} data-cat={heatCategory(heat.of(thread.id), deal !== null)} style:background-image={ui.temperature === "pastel" ? undefined : heatBackground(heat.of(thread.id), ui.lightness === "light")}>
+        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} class:heated={heat.of(thread.id) !== undefined} data-cat={heatCategory(heat.of(thread.id), deal !== null, heat.person(thread.id))} style:background-image={ui.temperature === "pastel" ? undefined : heatBackground(heat.of(thread.id), ui.lightness === "light")}>
           <MessageRow
             {thread}
             companyIdentity={deal !== null}
@@ -543,6 +550,13 @@
     gap: 2px;
     min-width: 0;
     margin-right: auto;
+  }
+  .older-link {
+    color: var(--primary-text, var(--text));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font: inherit;
+    letter-spacing: inherit;
   }
   .court-sub {
     font-family: var(--font-mono);
