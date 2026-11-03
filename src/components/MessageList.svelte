@@ -29,7 +29,7 @@
   import { priorityApi } from "../fork/priority/api";
   // Fork (v1.1.15, D67): every row tinted by its conversation's heat.
   import { heat, heatShown } from "../fork/heat/store.svelte";
-  import { heatBackground } from "../fork/heat/colour";
+  import { heatBackground, heatCategory } from "../fork/heat/colour";
   import { tick, untrack } from "svelte";
   import MessageMenu from "../fork/layout/MessageMenu.svelte";
   import type { ThreadRow } from "../lib/types";
@@ -356,7 +356,7 @@
         <!-- Fork (10): in a court view the row gets its age + reason as an
              overlay in a wrapper of its own, so MessageRow (and the fixed
              height the windowing measures) stays exactly upstream's. -->
-        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} class:heated={heat.of(thread.id) !== undefined} style:background-image={heatBackground(heat.of(thread.id), ui.lightness === "light")}>
+        <div class="court-wrap" title={deal ?? undefined} class:court={court !== null} class:deal={deal !== null} class:prio-tagged={tag !== null} class:compact={prefs.density === "compact"} class:heated={heat.of(thread.id) !== undefined} data-cat={heatCategory(heat.of(thread.id), deal !== null)} style:background-image={ui.temperature === "pastel" ? undefined : heatBackground(heat.of(thread.id), ui.lightness === "light")}>
           <MessageRow
             {thread}
             companyIdentity={deal !== null}

@@ -122,6 +122,7 @@
     void ui.temperature; // re-resolve when the palette changes
     void ui.lightness;
     return (
+      getComputedStyle(document.documentElement).getPropertyValue("--mail-surface").trim() ||
       getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() ||
       "#ffffff"
     );
@@ -189,7 +190,7 @@
     display: flow-root;
     box-sizing: border-box;
     max-width: ${wideLayout ? "none" : "76ch"};
-    padding: ${ownColors ? "20px 24px" : "0"};
+    padding: ${ownColors ? (ui.temperature === "pastel" ? "16px 0" : "20px 24px") : "0"};
     font-family: 'Hanken Grotesk', 'Segoe UI', sans-serif;
     font-size: 14px; line-height: 1.6; color: ${colors.text};
     word-wrap: break-word; overflow-wrap: break-word;

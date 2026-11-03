@@ -55,7 +55,8 @@ function parseTheme(raw: string | undefined): { temperature: Temperature; lightn
     case "warm-light":
     case "warm-dark":
     case "base-light":
-    case "base-dark": {
+    case "base-dark":
+    case "pastel-light": {
       const [temperature, lightness] = raw.split("-") as [Temperature, Lightness];
       return { temperature, lightness };
     }
@@ -100,6 +101,8 @@ export const ui = {
   },
   /** Apply both axes. Does not persist — callers persist (mirrors old contract). */
   setTheme(temperature: Temperature, lightness: Lightness) {
+    // Fork (D91): Pastel is light only; its dark side is Base dark.
+    if (temperature === "pastel" && lightness === "dark") temperature = "base";
     state.temperature = temperature;
     state.lightness = lightness;
     applyTheme();

@@ -284,3 +284,11 @@ Use Windows.Data.Pdf through the existing windows crate. Render one page to a PN
 The owner asked for a button to view an attachment while composing. Each staged-file chip in the composer now has a View button, and its filename is clickable too. Both open the file in its usual app, the same as a click on a received attachment (D66).
 
 A staged file exists only as bytes in `draft_attachments`. `fork_open_draft_attachment` writes it to `%TEMP%/skim-draft-files/<first 16 hex of its SHA-256>/<safe filename>` and opens that path. The hash folder means a second View of the same file reuses the copy and does not fail when an app such as Word holds it open; changed bytes get a new folder. The copy is a view only: edits made in the other app do not change the draft. Windows clears the temp folder on its own schedule.
+
+### D91: Pastel theme (2026-11-03)
+
+The owner picked this look from a review-page mock ("I love this style and colours") and asked for the whole app in it, after a live preview injected over CDP into the installed 1.1.44. Pastel is a fourth temperature beside Cold, Warm and Base, light only: warm paper (`--bg` #f4f1ea), ink text and outlines (#16181d), and pastel fills. Choosing its dark cell is not offered; `setTheme("pastel", "dark")` and Toggle theme land on Base dark.
+
+Tokens are in `tokens.css` (`pastel-light`, under the contrast gate). The shape is in `src/fork/theme/pastel.css`, every rule scoped to `:root[data-theme="pastel-light"]` (a test enforces it), so the other six themes are unchanged. List rows become outlined cards. Their fill is a category, not the D67 ramp: `heatCategory` gives deal (a Deals row or heat 1) deep mint, heat 0.5 and up mint, any other scored mail periwinkle, and heat 0 or unscored plain with grey text. Heat 0 is mail Jev is never asked about, so plain means automated; a person whose mail carries bulk headers also shows plain. The heat gradient is not drawn under Pastel.
+
+The mail viewer paints its page from `--mail-surface` (white under Pastel, else `--surface`), so the message card is white on paper. Emails with their own colours lose the 24 px side padding under Pastel, so their text lines up with the sender row inside the card. Rollback: pick any other theme; install 1.1.44 to remove it.

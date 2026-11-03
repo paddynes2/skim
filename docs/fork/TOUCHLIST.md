@@ -309,3 +309,13 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/lib.rs` | `generate_handler!` | `fork::attachments::fork_open_draft_attachment` | D90 |
 | `src/lib/i18n/locales/en.json` | `fork.compose.view_file` | new string | D90 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.44 | View button on staged draft files (D90) |
+| `src/styles/tokens.css` | end | `pastel-light` block | D91 |
+| `src/main.ts` | imports | `./fork/theme/pastel.css` after base.css | D91 |
+| `src/lib/types.ts` | `Temperature` | adds `"pastel"` | D91 |
+| `src/lib/stores/ui.svelte.ts` | `parseTheme`, `setTheme` | accepts `pastel-light`; pastel + dark becomes base-dark | D91 |
+| `src/components/settings/Settings.svelte` | theme matrix | Pastel column (light cell only), preview literals, 4-column grid | D91 |
+| `src/components/MessageList.svelte` | `.court-wrap` | `data-cat={heatCategory(...)}`; no heat gradient under Pastel | D91 |
+| `src/components/HtmlViewer.svelte` | `surface`, `buildDoc` padding | reads `--mail-surface` first; own-colour mail has no side padding under Pastel | D91 |
+| `scripts/fork/contrast.mjs` | `THEMES` | adds `pastel-light` | D91 |
+| `src/lib/i18n/locales/en.json` | `fork.theme.pastel` | new string | D91 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.45 | Pastel theme (D91) |

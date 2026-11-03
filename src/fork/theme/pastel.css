@@ -1,0 +1,81 @@
+/* Fork (v1.1.45, D91): the Pastel theme's shape. Tokens live in
+   src/styles/tokens.css; these rules only apply under pastel-light, so the
+   other six themes are untouched. List rows are outlined cards whose fill
+   comes from `data-cat` (fork/heat/colour.ts heatCategory). */
+/* Primary buttons: pastel fill, ink outline, ink text. */
+:root[data-theme="pastel-light"] .compose,
+:root[data-theme="pastel-light"] button.send,
+:root[data-theme="pastel-light"] .send-split > button {
+  background: var(--p-mint) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--ink) !important;
+  box-shadow: none !important;
+}
+
+/* Chips and segmented controls become outlined pills. */
+:root[data-theme="pastel-light"] .chips { background: transparent !important; gap: 6px; padding: 0 !important; border: 0 !important; }
+:root[data-theme="pastel-light"] .chip {
+  border: 1px solid var(--ink) !important;
+  border-radius: 99px !important;
+  background: #fff !important;
+  color: var(--ink) !important;
+  padding: 3px 10px !important;
+}
+:root[data-theme="pastel-light"] .chip.active { background: var(--ink) !important; color: #fff !important; }
+:root[data-theme="pastel-light"] .recap-chip { background: var(--p-lilac) !important; color: var(--ink) !important; border: 1px solid var(--ink) !important; }
+
+/* Sidebar: the selected folder is a mint pill with an ink outline. */
+:root[data-theme="pastel-light"] .sidebar { background: var(--bg) !important; }
+:root[data-theme="pastel-light"] .sidebar .item.selected {
+  background: var(--p-mint) !important;
+  box-shadow: inset 0 0 0 1px var(--ink) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="pastel-light"] .sidebar .search { background: #fff !important; border: 1px solid var(--ink) !important; }
+
+/* Message list: every conversation is an outlined card. */
+:root[data-theme="pastel-light"] .court-wrap {
+  margin: 0 10px 6px !important;
+  border: 1px solid #b9b4aa;
+  border-radius: 9px;
+  overflow: hidden;
+  background-image: none !important;
+  background: #fff;
+}
+:root[data-theme="pastel-light"] .court-wrap .row { border-bottom: 0 !important; background: transparent !important; box-shadow: none !important; padding-top: 10px !important; padding-bottom: 10px !important; }
+:root[data-theme="pastel-light"] .court-wrap[data-cat="deal"] { background: var(--p-mint-2); border-color: var(--ink); }
+:root[data-theme="pastel-light"] .court-wrap[data-cat="hot"] { background: var(--p-mint); border-color: var(--ink); }
+:root[data-theme="pastel-light"] .court-wrap[data-cat="people"] { background: var(--p-peri); border-color: var(--ink); }
+:root[data-theme="pastel-light"] .court-wrap[data-cat="auto"] :is(.from-name, .subject, .snippet, .line2, .line3) { color: #8a867f !important; font-weight: 450 !important; }
+:root[data-theme="pastel-light"] .court-wrap:has(.row-wrap.selected) { outline: 2.5px solid var(--ink); outline-offset: 1px; }
+:root[data-theme="pastel-light"] .row-wrap.unread :is(.subject, .line2) { color: var(--ink) !important; font-weight: 700 !important; }
+:root[data-theme="pastel-light"] .acct { background: #fff !important; color: var(--ink) !important; border: 1px solid var(--ink) !important; }
+:root[data-theme="pastel-light"] .day-head, :root[data-theme="pastel-light"] .group-head { background: transparent !important; }
+
+/* Reading pane and panels: white cards on paper, ink edges. */
+:root[data-theme="pastel-light"] .reading,
+:root[data-theme="pastel-light"] .reading-pane { background: var(--bg) !important; }
+:root[data-theme="pastel-light"] .message,
+:root[data-theme="pastel-light"] .msg {
+  background: #fff !important;
+  border: 1px solid var(--ink) !important;
+  border-radius: 10px !important;
+}
+:root[data-theme="pastel-light"] dialog,
+:root[data-theme="pastel-light"] .palette,
+:root[data-theme="pastel-light"] .panel { border: 1px solid var(--ink) !important; }
+
+/* Fixes after the first look (3 Nov). */
+:root[data-theme="pastel-light"] ::-webkit-scrollbar-thumb { background: #c9c4b9 !important; background-clip: content-box !important; }
+:root[data-theme="pastel-light"] ::-webkit-scrollbar-thumb:hover { background: #a29d92 !important; background-clip: content-box !important; }
+:root[data-theme="pastel-light"] kbd { color: rgba(22, 24, 29, 0.55) !important; background: transparent !important; border-color: rgba(22, 24, 29, 0.25) !important; }
+:root[data-theme="pastel-light"] .court-badge { background: #fff !important; box-shadow: 0 0 0 1px var(--ink) !important; color: var(--ink) !important; }
+:root[data-theme="pastel-light"] .court-badge :is(.age, .sep, .reason, span) { color: var(--ink) !important; }
+:root[data-theme="pastel-light"] .court-badge.amber { background: var(--p-amber) !important; }
+:root[data-theme="pastel-light"] .court-badge.red { background: var(--p-rose) !important; }
+:root[data-theme="pastel-light"] .avatar { background: var(--p-peri) !important; color: var(--ink) !important; box-shadow: inset 0 0 0 1px var(--ink); }
+:root[data-theme="pastel-light"] .court-wrap:has(.row-wrap:hover) { filter: none; box-shadow: 0 0 0 1px var(--ink); }
+:root[data-theme="pastel-light"] .court-wrap :is(.row-wrap:hover .row, .row-wrap.checked .row) { background: transparent !important; }
+/* The message card needs its own room inside the outline. */
+:root[data-theme="pastel-light"] .message { padding: 16px 20px 18px !important; margin-bottom: 12px !important; }
+:root[data-theme="pastel-light"] .message > .chips { margin: 10px 0 4px !important; }

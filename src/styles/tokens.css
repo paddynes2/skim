@@ -299,3 +299,65 @@
 
   color-scheme: dark;
 }
+
+/* Fork (v1.1.45, D91): pastel · light. Warm paper, ink text, pastel fills with
+   ink outlines. Light only: there is no pastel-dark. The card and outline rules
+   that go with it are in src/fork/theme/pastel.css. */
+:root[data-theme="pastel-light"] {
+  --ink: #16181d;
+  --p-mint: #bbf7d0;
+  --p-mint-2: #86efac;
+  --p-peri: #c7d2fe;
+  --p-amber: #fde68a;
+  --p-rose: #fecdd3;
+  --p-lilac: #ddd6fe;
+  --p-sky: #bae6fd;
+
+  --meeting-ink: #176b4b;
+  --deal-ink: #6b4708;
+  --draft-ink: #9f1239;
+  --font-ui: "Inter Variable", "Inter", "Segoe UI", sans-serif;
+  --tracking-ui: -0.005em;
+  --weight-ui: 450;
+  --radius-s: 7px;
+  --radius-m: 9px;
+  --radius-l: 12px;
+
+  --bg: #f4f1ea;
+  --surface: #f9f7f2;
+  --surface-raised: #ffffff;
+  --mail-surface: #ffffff;
+  --text: #16181d;
+  --text-dim: #3f4148;
+  --text-faint: #635f58;
+  --unread: #16181d;
+  --star: #b07d00;
+  --focus: #16181d;
+  --row-unread-tint: transparent;
+  --hairline: #ddd8cd;
+  --hairline-strong: #16181d;
+  --hover: #efebe2;
+  --active: rgba(22, 24, 29, 0.06);
+  --selected: #ffffff;
+
+  --accent: #5b3fd1;
+  --accent-soft: #ddd6fe;
+  --accent-dim: rgba(91, 63, 209, 0.6);
+  --on-accent: #16181d;
+
+  --primary: #bbf7d0;
+  --on-primary: #16181d;
+
+  --danger: #be123c;
+  --success: #15803d;
+
+  --acct-1: #c7d2fe;
+  --acct-2: #fde68a;
+  --acct-3: #bae6fd;
+  --acct-4: #fecdd3;
+  --acct-5: #bbf7d0;
+
+  --shadow-pop: 0 0 0 1px #16181d, 4px 4px 0 0 rgba(22, 24, 29, 0.12);
+
+  color-scheme: light;
+}

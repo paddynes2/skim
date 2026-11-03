@@ -46,3 +46,13 @@ export function heatBackground(heat: number | undefined, light = false): string 
   const [r, g, b, a] = rampColour(rampPosition(heat), light);
   return `linear-gradient(90deg, ${rgba([r, g, b, a])} 0%, ${rgba([r, g, b, a * 0.55])} 55%, ${rgba([r, g, b, a * 0.15])} 100%)`;
 }
+
+/** Pastel theme (D91): the row's fill is a category, not a ramp. A deal, then
+ *  mail that needs the owner (0.5 and up), then a person Jev was asked about
+ *  (above 0), else automated or not yet scored. */
+export type HeatCategory = "deal" | "hot" | "people" | "auto";
+export function heatCategory(heat: number | undefined, deal: boolean): HeatCategory {
+  if (deal || heat === 1) return "deal";
+  if (heat === undefined || heat <= 0) return "auto";
+  return heat >= 0.5 ? "hot" : "people";
+}

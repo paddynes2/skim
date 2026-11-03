@@ -74,6 +74,16 @@
       line: "#d6dce5",
       line2: "#e6e9ee",
     },
+    "pastel-light": {
+      bg: "#f4f1ea",
+      surface: "#ffffff",
+      text: "#16181d",
+      accent: "#16181d",
+      accentSoft: "#bbf7d0",
+      accentBorder: "#16181d",
+      line: "#16181d",
+      line2: "#c7d2fe",
+    },
     "base-dark": {
       bg: "#15181e",
       surface: "#1a1d24",
@@ -693,11 +703,13 @@
           <div class="axis">{t("theme.cold")}</div>
           <div class="axis">{t("theme.warm")}</div>
           <div class="axis">{t("theme.base")}</div>
+          <div class="axis">{t("fork.theme.pastel")}</div>
 
           {#each [{ light: "light" as Lightness }, { light: "dark" as Lightness }] as row (row.light)}
             <div class="axis right">{t(`theme.${row.light}`)}</div>
-            {#each ["cold" as Temperature, "warm" as Temperature, "base" as Temperature] as temp (temp)}
+            {#each ["cold" as Temperature, "warm" as Temperature, "base" as Temperature, "pastel" as Temperature] as temp (temp)}
               {@const p = THEME_PREVIEWS[`${temp}-${row.light}`]}
+              {#if !p}<div class="cell-none" aria-hidden="true"></div>{:else}
               <button
                 class="cell"
                 class:selected={ui.temperature === temp && ui.lightness === row.light}
@@ -732,6 +744,7 @@
                   </span>
                 {/if}
               </button>
+              {/if}
             {/each}
           {/each}
         </div>
@@ -1267,7 +1280,7 @@
   /* Theme matrix: temperature (columns) × lightness (rows), live mini-previews. */
   .theme-matrix {
     display: grid;
-    grid-template-columns: 64px 1fr 1fr 1fr;
+    grid-template-columns: 64px 1fr 1fr 1fr 1fr;
     gap: 10px 12px;
     align-items: center;
   }
