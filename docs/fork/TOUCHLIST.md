@@ -305,3 +305,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.42 | signed local release |
 
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.43 | recovered draft-save failures leave the footer (D87) |
+| `src/components/ComposeForm.svelte` | staged-attachment chip | filename is a button and a View button, both call `viewAttachment` (`forkComposeApi.openDraftAttachment`); `.chip .name` button reset, `.chip .view` style | D90 |
+| `src-tauri/src/lib.rs` | `generate_handler!` | `fork::attachments::fork_open_draft_attachment` | D90 |
+| `src/lib/i18n/locales/en.json` | `fork.compose.view_file` | new string | D90 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.44 | View button on staged draft files (D90) |

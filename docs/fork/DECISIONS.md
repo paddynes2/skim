@@ -278,3 +278,9 @@ Add an Older drafts filter beside the existing list controls. Show drafts untouc
 ### D89: Render PDF pages locally (2026-10-30)
 
 Use Windows.Data.Pdf through the existing windows crate. Render one page to a PNG in a blocking worker, bounded to 1600 by 2200 pixels. Keep the existing 25 MB file limit. Add page navigation, fit-width and larger zoom options inside the existing dialog. Preserve Open original and Save file. Unreadable or protected files show a retryable error. Stale render results cannot reopen a closed dialog. This adds crate features, with no new package or browser PDF runtime. The native API reference is https://learn.microsoft.com/en-us/uwp/api/windows.data.pdf.pdfdocument.loadfromstreamasync. Installation and validation evidence are in STATUS.md.
+
+### D90: View a file attached to a draft (2026-11-03)
+
+The owner asked for a button to view an attachment while composing. Each staged-file chip in the composer now has a View button, and its filename is clickable too. Both open the file in its usual app, the same as a click on a received attachment (D66).
+
+A staged file exists only as bytes in `draft_attachments`. `fork_open_draft_attachment` writes it to `%TEMP%/skim-draft-files/<first 16 hex of its SHA-256>/<safe filename>` and opens that path. The hash folder means a second View of the same file reuses the copy and does not fail when an app such as Word holds it open; changed bytes get a new folder. The copy is a view only: edits made in the other app do not change the draft. Windows clears the temp folder on its own schedule.

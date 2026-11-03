@@ -29,6 +29,9 @@ export interface SendHeld {
 }
 
 export const forkComposeApi = {
+  /** Opens a file staged on a draft in its usual app. */
+  openDraftAttachment: (attachmentId: number) =>
+    invoke<void>("fork_open_draft_attachment", { attachmentId }),
   /** The user's own words as HTML, when the rich editor wrote them. */
   draftHtmlGet: (draftId: number) =>
     invoke<string | null>("fork_draft_html_get", { draftId }),

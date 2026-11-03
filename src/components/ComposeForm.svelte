@@ -263,6 +263,14 @@
     input.value = ""; // allow re-picking the same file
   }
 
+  async function viewAttachment(id: number) {
+    try {
+      await forkComposeApi.openDraftAttachment(id);
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
   async function removeAttachment(id: number) {
     try {
       await api.removeDraftAttachment(id);
@@ -1034,8 +1042,9 @@
         {#each attachments as a (a.id)}
           <div class="chip">
             <svg class="clip" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12.5 7.5l-5 5a3 3 0 0 1-4.243-4.243l5.657-5.657a2 2 0 0 1 2.829 2.829l-5.657 5.657a1 1 0 0 1-1.415-1.415l4.95-4.95" /></svg>
-            <span class="name">{a.filename}</span>
+            <button class="name" onclick={() => viewAttachment(a.id)} title={t("fork.files.open_usual")}>{a.filename}</button>
             <span class="size">{formatSize(a.size)}</span>
+            <button class="view" onclick={() => viewAttachment(a.id)} title={t("fork.files.open_usual")}>{t("fork.compose.view_file")}</button>
             <button class="remove" onclick={() => removeAttachment(a.id)} title={t("compose.attach_remove")} aria-label={t("compose.attach_remove")}>
               <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1 1l8 8M9 1L1 9" /></svg>
             </button>
@@ -1533,9 +1542,25 @@
     flex-shrink: 0;
   }
   .chip .name {
+    min-width: 0;
+    text-align: left;
+    color: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .chip .name:hover {
+    text-decoration: underline;
+  }
+  .chip .view {
+    padding: 2px 6px;
+    border-radius: var(--radius-s);
+    color: var(--primary);
+    font-size: 11.5px;
+    flex-shrink: 0;
+  }
+  .chip .view:hover {
+    background: var(--hover);
   }
   .chip .size {
     color: var(--text-faint);

@@ -309,6 +309,48 @@ pub async fn fork_save_attachments(
     .map_err(Into::into)
 }
 
+/// Opens a file staged on a draft in its usual app. A staged file exists only as
+/// bytes in the database, so it is written to a temp folder named by its content
+/// hash first: a reopen of the same file reuses the copy, even while an app holds it.
+#[tauri::command]
+pub async fn fork_open_draft_attachment(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    attachment_id: i64,
+) -> Result<()> {
+    use rusqlite::OptionalExtension;
+    use tauri_plugin_opener::OpenerExt;
+    let (filename, data) = state
+        .db
+        .read("fork_open_draft_attachment", move |conn| {
+            conn.query_row(
+                "SELECT filename, data FROM draft_attachments WHERE id = ?1",
+                [attachment_id],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?)),
+            )
+            .optional()
+        })
+        .await?
+        .ok_or_else(|| SkimError::other("attachment", "This file is no longer on the draft."))?;
+    let path = tokio::task::spawn_blocking(move || -> Result<std::path::PathBuf> {
+        let hash: String = Sha256::digest(&data)[..8]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        let dir = std::env::temp_dir().join("skim-draft-files").join(&hash);
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join(safe_filename(&filename));
+        if std::fs::metadata(&path).map(|m| m.len()).ok() != Some(data.len() as u64) {
+            std::fs::write(&path, &data)?;
+        }
+        Ok(path)
+    })
+    .await??;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| SkimError::other("io", e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

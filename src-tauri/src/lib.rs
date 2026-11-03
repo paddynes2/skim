@@ -487,6 +487,7 @@ pub fn run() {
             fork::deals::fork_deals_exclude,
             fork::deals::fork_deals_save_context,
             fork::attachments::fork_attachment_preview,
+            fork::attachments::fork_open_draft_attachment,
             fork::attachments::fork_attachment_fingerprints,
             fork::attachments::fork_save_attachments,
             fork::attachments::fork_thread_files,

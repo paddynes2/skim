@@ -1136,6 +1136,7 @@
   "fork.compose.retry_save": "Retry save",
   "fork.compose.missing_file": "You mentioned an attachment, but no file is attached.",
   "fork.compose.attach_file": "Attach a file",
+  "fork.compose.view_file": "View",
   "fork.compose.send_without_file": "Send without attachment",
   "fork.compose.keep_editing": "Keep editing",
   "fork.compose.add_recipient": "Add a recipient",
