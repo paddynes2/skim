@@ -8,7 +8,7 @@ this file, and its date, whenever the state moves.
 
 ## Version 1.1.48 (November 7)
 
-D95 review round 2: Ctrl+S saves nothing during a held send, Send waits for the AI writer, and Undo on a hold cancelled elsewhere hands the draft back. Verification recorded below once installed.
+D95 review round 2: Ctrl+S saves nothing during a held send, Send waits for the AI writer, and Undo on a hold cancelled elsewhere hands the draft back. Built from 05f157c through build-install.ps1 (ALL GATES GREEN: 645 Rust tests, 24 node test files, clippy, fmt, svelte-check, contrast) and installed 7 Nov 09:31, ProductVersion 1.1.48, SHA-256 `bf5a5c637392a42a772816548a86918418c25f08d80f41bab7e4e1ea6c2a2371`, backup `~/.skim-fork/backups/20261107-093112`. Checked live on the installed app over CDP with the real backend and fictional data: Ctrl+Enter queued nothing; Send queued a 10 s hold and the window read "Sending to nobody@example.invalid in 10 s" with Undo and the form inert; the main window showed no toast; Ctrl+S during the hold left the draft row unchanged; Undo emptied the queue; closing the window during a second hold moved Undo to the main window, whose Undo cancelled it and reopened the draft. No mail left: each hold was undone and the row's recipients were blanked after each Send. Restarted without the debug port. Not pushed, not published.
 
 ## Version 1.1.47 (November 7)
 
