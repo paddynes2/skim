@@ -17,6 +17,9 @@
   import { untrack } from "svelte";
   import RichEditor from "../fork/RichEditor.svelte";
   import SendLater from "../fork/compose/SendLater.svelte";
+  import SendingHold from "../fork/compose/SendingHold.svelte";
+  import { canUndo, recipients } from "../fork/compose/send-hold";
+  import { emit, listen } from "@tauri-apps/api/event";
   import { forkComposeApi } from "../fork/compose/api";
   import { htmlToText, openingHtml, quoteAt as quoteStart, textToHtml } from "../fork/compose/html";
   import type { WhenPick } from "../fork/compose/when";
@@ -69,6 +72,10 @@
   let attachmentBusy=$state(0);
   const attachmentTasks=new Set<Promise<void>>();
   let attachmentPrompt=$state(false);
+  // Fork (D95): a send held in this compose window (the send bar shows it).
+  let hold=$state<{opId:number;notBefore:number|null;recipients:string[]}|null>(null);
+  let sentConfirmed=$state(false);
+  let handedOff=false;
   let attachmentApprovedText="";
   let attachmentPendingWhen:WhenPick|null=null;
   let attachmentPendingSmell=false;
@@ -230,7 +237,10 @@
   /** Read each file's bytes and stage it on the draft. Shared by the paperclip
    *  button and drag & drop. */
   function attachFiles(files:FileList|File[]|null):Promise<void>{
-    if(!files?.length)return Promise.resolve();
+    // Fork (D95): a sent or held draft takes no files. The send reads the
+    // draft's attachments when the hold ends, so a drop or paste now would
+    // change what goes out.
+    if(!files?.length||settled)return Promise.resolve();
     attachmentsChanged=true;markDirty();attachmentBusy++;
     const task=stageFiles(files).finally(()=>{attachmentBusy--;attachmentTasks.delete(task);});attachmentTasks.add(task);return task;
   }
@@ -272,6 +282,7 @@
   }
 
   async function removeAttachment(id: number) {
+    if (settled) return; // Fork (D95): see attachFiles.
     try {
       await api.removeDraftAttachment(id);
       attachments = attachments.filter((a) => a.id !== id);
@@ -684,15 +695,31 @@
       // is held for the undo window (0 = straight out, as upstream).
       const undoSecs = prefs.undoSendSecs;
       const notBefore = when ? when.at : undoSecs > 0 ? Math.floor(Date.now() / 1000) + undoSecs : null;
-      await api.sendDraft(draft.id, notBefore, when?.label ?? null);
+      // Fork (D95): a plain send from the compose window keeps the window open
+      // through the hold, so the main window's undo toast is not needed.
+      const heldHere = chrome && !when;
+      const opId = await api.sendDraft(draft.id, notBefore, when?.label ?? null, heldHere);
       settled = true;
       // Remember the mailbox for the next fresh compose in the unified view.
       void api.setSetting("last_from_account", draft.accountId).catch(() => {});
+      if (heldHere) {
+        hold = { opId, notBefore, recipients: recipients(draft.to, draft.cc, draft.bcc) };
+        return;
+      }
       onSent?.();
     } catch (e) {
       error = errorMessage(e);
       sending = false;
     }
+  }
+
+  /** Fork (D95): Undo on the compose window's send bar. Cancels the queued
+   *  send (throws inside the backend's 1 s margin) and hands the same draft
+   *  back for editing; nothing was saved while the bar showed. */
+  async function undoHold(){
+    if(!hold)return;
+    await forkComposeApi.cancelScheduled(hold.opId);
+    hold=null;settled=false;sending=false;
   }
 
   async function discard(){
@@ -733,16 +760,9 @@
     }
   }
 
-  /** Fork (6.1): Ctrl/Cmd+Enter in the subject or the body sends. */
-  function sendKey(e: KeyboardEvent): boolean {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      e.stopPropagation();
-      void send();
-      return true;
-    }
-    return false;
-  }
+  // Fork (D95): no key sends. Ctrl/Cmd+Enter used to send from the subject and
+  // the body (6.1); on 2026-11-06 a mail went out that the owner did not mean
+  // to send, so only the Send button (and Send later) sends now.
 
   /** Fork (6.2): Esc on the inline reply. Untouched, the empty draft goes;
    *  edited, it stays as a draft. Stops here so the pane's own Esc (deselect)
@@ -761,9 +781,19 @@
     try{await transferDraft(saveLocal,()=>api.openComposeWindow(draft!.id),()=>{settled=true;committed=true;onPopOut?.();});}
     catch(e){error=errorMessage(e);}finally{transferring=false;}
   }
+  /** Fork (D95): the window is closing while its send is still undoable. The
+   *  main window takes over the rest of the hold: emit the same event the
+   *  backend sends for an inline hold, so its "Sending… Undo" toast shows.
+   *  Once only: the close button and the close request both land here. */
+  async function handOffHold(){
+    if(!hold||handedOff||!draft)return;
+    handedOff=true;
+    if(!canUndo(hold.notBefore,Date.now()))return;
+    await emit("fork:send-held",{opId:hold.opId,draftId:draft.id,notBefore:hold.notBefore,label:null}).catch(()=>{});
+  }
   async function close(){
     if(transferring)return;
-    if(settled){onClose?.();return;}
+    if(settled){await handOffHold();onClose?.();return;}
     try{
       if(edited() || attachmentBusy){await saveLocal();await flushServer();}
       else if(!committed && draft)await api.deleteDraft(draft.id);
@@ -773,8 +803,12 @@
   onMount(()=>{
     if(!chrome)return;let unlisten:(()=>void)|undefined;let disposed=false;
     void import("@tauri-apps/api/window").then(async({getCurrentWindow})=>{
-      const stop=await getCurrentWindow().onCloseRequested(async event=>{if(!settled){event.preventDefault();await close();}});
-      if(disposed)stop();else unlisten=stop;
+      const stop=await getCurrentWindow().onCloseRequested(async event=>{if(!settled){event.preventDefault();await close();}else await handOffHold();});
+      // Fork (D95): listen for the send confirmation from the start, so a
+      // send with no hold that finishes fast is not missed.
+      const offSent=await listen<{draftId:number}>("mail:sent",e=>{if(e.payload?.draftId===draftId)sentConfirmed=true;});
+      if(disposed){stop();offSent();return;}
+      unlisten=()=>{stop();offSent();};
     }).catch(()=>{});
     return()=>{disposed=true;unlisten?.();};
   });
@@ -831,6 +865,9 @@
   {/if}
 
   {#if draft}
+    <!-- Fork (D95): locked while a send is held here; the send bar below is
+         the only thing that answers. `display: contents` keeps the layout. -->
+    <div class="compose-body" class:held={!!hold} inert={!!hold}>
     <div class="fields">
       {#if canPickFrom}
         <label class="field">
@@ -948,7 +985,6 @@
             subjectAuto = false;
             scheduleSave();
           }}
-          onkeydown={sendKey}
           class="subject"
         />
       </label>
@@ -961,13 +997,12 @@
         bind:this={editorRef}
         html={wordsHtml}
         onchange={onWordsChange}
-        onkeydown={sendKey}
         placeholder={t("compose.body_placeholder")}
       />
       {#if tail}
         <div class="tail">
           {#if tailEditing}
-            <textarea class="tail-edit" bind:value={tail} oninput={onTailInput} spellcheck="true" onkeydown={sendKey}></textarea>
+            <textarea class="tail-edit" bind:value={tail} oninput={onTailInput} spellcheck="true"></textarea>
           {:else}
             {#if tailParts.sig}
               <pre class="sig">-- {"\n"}{tailParts.sig}</pre>
@@ -1004,7 +1039,6 @@
           onBodyInputSlots();
           scheduleSave();
         }}
-        onkeydown={sendKey}
         placeholder={t("compose.body_placeholder")}
         spellcheck="true"
       ></textarea>
@@ -1062,7 +1096,7 @@
     <footer class="bar">
       <!-- Fork (6.4): a split button — Send, and a caret for later. -->
       <div class="send-split">
-        <button class="send" onclick={() => send()} disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()} title="Ctrl ↵">
+        <button class="send" onclick={() => send()} disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()}>
           {sending ? t("compose.sending") : t("compose.send")}
         </button>
         <SendLater disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()} onpick={(pick) => send(pick)} />
@@ -1108,6 +1142,16 @@
         {#if discardArmed}<span class="confirm">{t("fork.compose.discard_confirm")}</span>{/if}
       </button>
     </footer>
+    </div>
+    {#if hold}
+      <SendingHold
+        recipients={hold.recipients}
+        notBefore={hold.notBefore}
+        confirmed={sentConfirmed}
+        onundo={undoHold}
+        ondone={() => onSent?.()}
+      />
+    {/if}
   {/if}
 
   {#if dragActive}
@@ -1118,6 +1162,7 @@
 </div>
 
 <style>
+  .compose-body{display:contents}.compose-body.held .bar,.compose-body.held .compose-state{display:none}.compose-body.held>:global(*){opacity:.55}
   .compose-state{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:9px 16px;border-top:1px solid var(--hairline);color:var(--text-dim);font-size:11px;line-height:1.5}.recipient-summary{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attachment-check{margin:12px 16px;padding:12px;border:1px solid var(--hairline-strong);border-radius:var(--radius-s);font-size:13px}.attachment-check div{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px}.attachment-check button{color:var(--primary);font-size:12px}
 
   .compose-form {

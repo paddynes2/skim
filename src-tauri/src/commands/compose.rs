@@ -706,7 +706,8 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 /// Fork (6.4): `not_before` (unix seconds) holds the send until then (undo
 /// send, send later) and `label` names the choice for the Scheduled list;
 /// both absent = send now, as before. Returns the queued op id so the caller
-/// can cancel the hold.
+/// can cancel the hold. Fork (D95): `held_by_window` = the compose window
+/// shows the hold itself, so the main window gets no undo toast for it.
 #[tauri::command]
 pub async fn send_draft(
     app: AppHandle,
@@ -714,6 +715,7 @@ pub async fn send_draft(
     draft_id: i64,
     not_before: Option<i64>,
     label: Option<String>,
+    held_by_window: Option<bool>,
 ) -> Result<i64> {
     let draft = state
         .db
@@ -742,7 +744,14 @@ pub async fn send_draft(
         .await?;
 
     match not_before {
-        Some(t) => crate::fork::scheduler::announce(&app, op_id, draft_id, t, label.as_deref()),
+        Some(t) => crate::fork::scheduler::announce(
+            &app,
+            op_id,
+            draft_id,
+            t,
+            label.as_deref(),
+            crate::fork::scheduler::toast_for_hold(held_by_window),
+        ),
         None => {
             let engines = state.engines.lock().await;
             if let Some(handle) = engines.get(&account_id) {

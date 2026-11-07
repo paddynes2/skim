@@ -223,13 +223,30 @@ fn snippet(body: &str) -> String {
     out
 }
 
-/// Tell every window a send is held (the main window shows "Sending… Undo")
-/// and wake the scheduler.
-pub fn announce(app: &AppHandle, op_id: i64, draft_id: i64, not_before: i64, label: Option<&str>) {
-    let _ = app.emit(
-        "fork:send-held",
-        json!({ "opId": op_id, "draftId": draft_id, "notBefore": not_before, "label": label }),
-    );
+/// Fork (D95): whether the main window should show its "Sending… Undo" toast
+/// for a hold. Not when the compose window that sent it shows the hold itself
+/// (it stays open with the recipient, a countdown and Undo); two Undo buttons
+/// for one send could disagree about whether it was cancelled.
+pub fn toast_for_hold(held_by_window: Option<bool>) -> bool {
+    !held_by_window.unwrap_or(false)
+}
+
+/// Tell every window a send is held (the main window shows "Sending… Undo"
+/// unless `toast` is off) and wake the scheduler.
+pub fn announce(
+    app: &AppHandle,
+    op_id: i64,
+    draft_id: i64,
+    not_before: i64,
+    label: Option<&str>,
+    toast: bool,
+) {
+    if toast {
+        let _ = app.emit(
+            "fork:send-held",
+            json!({ "opId": op_id, "draftId": draft_id, "notBefore": not_before, "label": label }),
+        );
+    }
     let _ = app.emit("fork:scheduled", json!({}));
     rearm();
 }
@@ -337,6 +354,16 @@ mod tests {
         crate::db::bodies::enqueue_op(conn, account, "send", &json!({ "draftId": draft_id }))
             .unwrap();
         conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn a_hold_the_compose_window_shows_gets_no_main_window_toast() {
+        // D95: the compose window holds a plain send itself; the main window
+        // toast stays for inline replies, Send later and older callers that
+        // do not pass the flag.
+        assert!(!toast_for_hold(Some(true)));
+        assert!(toast_for_hold(Some(false)));
+        assert!(toast_for_hold(None));
     }
 
     /// The exact query `drain_ops` runs, with the fork's predicate.

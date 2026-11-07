@@ -149,9 +149,15 @@ export const api = {
   getReplyTemplate: (messageId: number, mode: "reply" | "reply_all" | "forward") =>
     invoke<Draft>("get_reply_template", { messageId, mode }),
   /** Fork (6.4): `notBefore` (unix seconds) holds the send (undo send, send
-   *  later) under `label`; both absent = send now. Resolves to the op id. */
-  sendDraft: (draftId: number, notBefore: number | null = null, label: string | null = null) =>
-    invoke<number>("send_draft", { draftId, notBefore, label }),
+   *  later) under `label`; both absent = send now. Resolves to the op id.
+   *  Fork (D95): `heldByWindow` = the compose window shows this hold itself,
+   *  so the main window shows no undo toast for it. */
+  sendDraft: (
+    draftId: number,
+    notBefore: number | null = null,
+    label: string | null = null,
+    heldByWindow = false,
+  ) => invoke<number>("send_draft", { draftId, notBefore, label, heldByWindow }),
   addDraftAttachment: (
     draftId: number,
     filename: string,
