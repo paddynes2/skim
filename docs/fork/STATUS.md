@@ -6,9 +6,13 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-11-07.**
 
+## Version 1.1.48 (November 7)
+
+D95 review round 2: Ctrl+S saves nothing during a held send, Send waits for the AI writer, and Undo on a hold cancelled elsewhere hands the draft back. Verification recorded below once installed.
+
 ## Version 1.1.47 (November 7)
 
-D95: no silent send from the compose window. Ctrl+Enter no longer sends; a send from the compose window keeps the window open through the undo hold with the recipient, a countdown and Undo, locks the draft, shows Sent only on Skim's confirmation, and hands Undo to the main window if the window is closed during the hold. Installed 1.1.46 before this (D90-D94, 3 November). Verification for 1.1.47 is recorded below once installed.
+D95: no silent send from the compose window. Ctrl+Enter no longer sends; a send from the compose window keeps the window open through the undo hold with the recipient, a countdown and Undo, locks the draft, shows Sent only on Skim's confirmation, and hands Undo to the main window if the window is closed during the hold. Installed 1.1.46 before this (D90-D94, 3 November). Installed 7 Nov 09:03 (ProductVersion 1.1.47) and checked live on the installed app with the real backend: Ctrl+Enter queued nothing, Send queued a 10 s hold and the window named the recipient, Undo emptied the queue, the main window showed no toast of its own, and closing the window during the hold moved Undo to the main window. No mail left: every hold was undone and the recipients were blanked after each Send.
 
 ## Version 1.1.43 (October 30)
 

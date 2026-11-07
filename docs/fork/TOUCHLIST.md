@@ -337,3 +337,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/commands/compose.rs` | `send_draft` | `held_by_window` argument passed to `announce` | D95 |
 | `src/lib/i18n/locales/en.json` | `fork.compose.hold_*` | new strings | D95 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.47 | D95 |
+| `src/components/ComposeForm.svelte` | `save`, `send`, Send/Send later `disabled`, `undoHold` | settled guard on save; `aiBusy` blocks send; not-scheduled hand-back | D95 round 2 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.48 | D95 round 2 |
