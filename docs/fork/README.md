@@ -124,7 +124,7 @@ One line per phase. The phase numbers match `PLAN.md` section 2 and the
 | 3.4 | Sent and Drafts refresh at once after a send or a draft save, and on opening or focusing either folder (20 s debounce per folder), instead of waiting for the 5-minute poll. |
 | 4 | Search operators in the palette: `from:`, `to:`, `cc:`, `subject:`, `is:`, `has:`, `in:`, `before:`, `after:`, `older_than:`, `newer_than:`, quoted values, `-word` negation; results grouped by thread with removable chips. |
 | 5 | Reading: quoted text and signatures fold under a pill in HTML and plain-text bodies, with the client markers (Gmail, Outlook, Yahoo, Proton, Thunderbird) surviving the sanitiser. |
-| 6 | Compose: Ctrl+Enter sends, the window close button keeps an edited draft, two-click Discard, inline reply under the message, rich text (Squire) with `body_text` kept as the full text body, send later with an undo-send hold, a Scheduled list. |
+| 6 | Compose: only the Send button sends (Ctrl+Enter no longer does, D95), the window stays open through the undo hold with the recipient and Undo, the window close button keeps an edited draft, two-click Discard, inline reply under the message, rich text (Squire) with `body_text` kept as the full text body, send later with an undo-send hold, a Scheduled list. |
 | 6.5 | AI-smell underlines in the composer: the OS `slop_scrub` rules exported to `rules.json`, a TypeScript scanner with a 30-sample parity check, underlines and a health bar, a popover with Ignore / Ignore rule / Rewrite, and a send-check prompt. |
 | 7 | Google connection, Calendar and Meet: OAuth Desktop flow with the client ID and secret held in Credential Manager, calendar tables under `fork_*`, a windowed pull (-60 d / +180 d) every 5 minutes, an offline op queue for create / patch / delete / RSVP, a Meet space from the toolbar. |
 | 8 | Share availability: `fork_free_slots` walks working hours in a chosen zone over the selected calendars and returns slots on a 30-minute grid, for pasting into a reply. |
@@ -302,7 +302,7 @@ Use fictional data for mutation checks such as archive/undo and draft transition
 - E then Z restores the thread in the fictional demo
 - a palette `from:` search works
 - a thread with quotes folds
-- the inline reply opens, shows Ctrl+Enter, and Esc discards it when untouched
+- the inline reply opens, and Esc discards it when untouched
 - the zoom keys work
 - the Calendar screen shows its events or its connect state
 - (1.1.1) a thread with a reply in Sent opens on that reply, with no

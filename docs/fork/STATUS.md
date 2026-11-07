@@ -4,7 +4,11 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-10-30.**
+**As of 2026-11-07.**
+
+## Version 1.1.47 (November 7)
+
+D95: no silent send from the compose window. Ctrl+Enter no longer sends; a send from the compose window keeps the window open through the undo hold with the recipient, a countdown and Undo, locks the draft, shows Sent only on Skim's confirmation, and hands Undo to the main window if the window is closed during the hold. Installed 1.1.46 before this (D90-D94, 3 November). Verification for 1.1.47 is recorded below once installed.
 
 ## Version 1.1.43 (October 30)
 

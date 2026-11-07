@@ -332,3 +332,8 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/fork/priority/SettingsPriority.svelte`, `src/fork/filing/SettingsFiling.svelte` | `.stack .label` | `flex: none` | D94 |
 | `src/lib/i18n/locales/en.json` | strings | restored ellipses; new D93/D94 strings; `theme.pastel` replaces `fork.theme.pastel` | D93, D94 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.46 | D92-D94 |
+| `src/components/ComposeForm.svelte` | send keys, `send`, `close`, teardown, attachments | `sendKey` and every `onkeydown={sendKey}` removed, Send button title dropped; plain window send holds in place (`hold`, `undoHold`, `handOffHold`, `sentConfirmed`); `.compose-body` wrapper (`display: contents`, `inert`); `attachFiles`/`removeAttachment` refuse when settled | D95 |
+| `src/lib/api.ts` | `sendDraft` | `heldByWindow` argument | D95 |
+| `src-tauri/src/commands/compose.rs` | `send_draft` | `held_by_window` argument passed to `announce` | D95 |
+| `src/lib/i18n/locales/en.json` | `fork.compose.hold_*` | new strings | D95 |
+| `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.47 | D95 |
