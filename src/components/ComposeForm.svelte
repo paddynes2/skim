@@ -673,7 +673,9 @@
 
   /** Send now (held for the undo window, 6.4) or at `when` (send later). */
   async function send(when: WhenPick | null = null, smellOverride = false) {
-    if (!draft || sending || transferring || attachmentBusy || !draft.to.trim()) return;
+    // Fork (D95): not while the AI is still writing; text arriving after the
+    // click would go out unseen.
+    if (!draft || sending || transferring || attachmentBusy || aiBusy || !draft.to.trim()) return;
     if(draft.body!==attachmentApprovedText && mentionsMissingAttachment(ownWords(draft.body).text,attachments.length)){
       attachmentPendingWhen=when;attachmentPendingSmell=smellOverride;attachmentPrompt=true;return;
     }
@@ -718,7 +720,15 @@
    *  back for editing; nothing was saved while the bar showed. */
   async function undoHold(){
     if(!hold)return;
-    await forkComposeApi.cancelScheduled(hold.opId);
+    try{await forkComposeApi.cancelScheduled(hold.opId);}
+    catch(e){
+      // "not scheduled": the hold went before this Undo, cancelled elsewhere
+      // (the Scheduled list) or already sent. A sent draft's row is deleted;
+      // one still here was cancelled, so it is the user's to edit again.
+      if(!/not scheduled/i.test(errorMessage(e)))throw e;
+      const still=await api.getDraft(draftId).then(()=>true,()=>false);
+      if(!still)throw e;
+    }
     hold=null;settled=false;sending=false;
   }
 
@@ -732,7 +742,9 @@
    *  folder so it becomes a real, reopenable message. Optimistic — if offline
    *  the queued op drains later. */
   async function save() {
-    if (!draft || serverSaving) return;
+    // Fork (D95): Ctrl+S is a window key, so it still fires during a held
+    // send; a save then would rewrite the row the send reads.
+    if (!draft || serverSaving || settled) return;
     serverSaving = true;
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -1096,10 +1108,10 @@
     <footer class="bar">
       <!-- Fork (6.4): a split button — Send, and a caret for later. -->
       <div class="send-split">
-        <button class="send" onclick={() => send()} disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()}>
+        <button class="send" onclick={() => send()} disabled={sending || transferring || attachmentBusy>0 || aiBusy || !draft.to.trim()}>
           {sending ? t("compose.sending") : t("compose.send")}
         </button>
-        <SendLater disabled={sending || transferring || attachmentBusy>0 || !draft.to.trim()} onpick={(pick) => send(pick)} />
+        <SendLater disabled={sending || transferring || attachmentBusy>0 || aiBusy || !draft.to.trim()} onpick={(pick) => send(pick)} />
       </div>
       <button class="attach" onclick={() => fileInput?.click()} title={t("compose.attach")} aria-label={t("compose.attach")}>
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12.5 7.5l-5 5a3 3 0 0 1-4.243-4.243l5.657-5.657a2 2 0 0 1 2.829 2.829l-5.657 5.657a1 1 0 0 1-1.415-1.415l4.95-4.95" /></svg>
