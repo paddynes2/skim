@@ -376,10 +376,12 @@
       </div>
     {/if}
     <h3>{t("fork.cal.date_time")}</h3>
-    <label class="row check" hidden={kind === "outOfOffice" || kind === "focusTime"}>
-      <input type="checkbox" bind:checked={allDay} disabled={!editable} />
-      <span>{t("fork.cal.all_day")}</span>
-    </label>
+    {#if kind !== "outOfOffice" && kind !== "focusTime"}
+      <label class="row check">
+        <input type="checkbox" bind:checked={allDay} disabled={!editable} />
+        <span>{t("fork.cal.all_day")}</span>
+      </label>
+    {/if}
 
     <div class="row times" class:invalid={timeInvalid}>
       <span class="label">{t("fork.cal.starts")}</span>
