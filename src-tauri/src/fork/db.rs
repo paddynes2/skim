@@ -34,6 +34,7 @@ pub const FORK_MIGRATIONS: &[&str] = &[
     include_str!("migrations/f0015_replies.sql"),
     include_str!("migrations/f0016_filing.sql"),
     include_str!("migrations/f0017_draft_html_rev.sql"),
+    include_str!("migrations/f0018_calendar_alerts.sql"),
 ];
 
 pub fn current_version(conn: &Connection) -> rusqlite::Result<i64> {
@@ -230,10 +231,13 @@ mod repair_tests {
     fn f0001_and_f0002_repair_live_rows() {
         let db = crate::db::Db::open_in_memory().unwrap();
         db.with(|conn| {
-            // Reconstruct the schema before f0010 and f0017 before replaying all migrations.
+            // Reconstruct the schema before f0010, f0017 and f0018 before replaying all migrations.
             conn.execute_batch(
                 "ALTER TABLE fork_cal_events DROP COLUMN options_json;
-                 ALTER TABLE fork_draft_html DROP COLUMN rev;",
+                 ALTER TABLE fork_draft_html DROP COLUMN rev;
+                 ALTER TABLE fork_cal_events DROP COLUMN ical_uid;
+                 ALTER TABLE fork_cal_events DROP COLUMN event_type;
+                 ALTER TABLE fork_cal_events DROP COLUMN end_time_zone;",
             )?;
             conn.execute_batch(
                 "INSERT INTO accounts (id, email, provider, imap_host, smtp_host, created_at)

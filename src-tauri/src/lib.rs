@@ -435,6 +435,7 @@ pub fn run() {
             fork::calendar::commands::fork_cal_delete,
             fork::calendar::commands::fork_cal_rsvp,
             fork::calendar::commands::fork_cal_sync_now,
+            fork::calendar::search::fork_cal_search,
             fork::availability::fork_free_slots,
             fork::crm::fork_crm_status,
             fork::crm::fork_crm_connect,

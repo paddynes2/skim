@@ -54,6 +54,16 @@ pub struct EventRow {
     pub local_only: bool,
     #[serde(default)]
     pub options: super::options::EventOptions,
+    /// Google's `iCalUID`: the same meeting seen by two accounts shares it.
+    #[serde(default)]
+    pub ical_uid: Option<String>,
+    /// Google's `eventType`: `default`, `outOfOffice`, `focusTime`,
+    /// `workingLocation`, `birthday` or `fromGmail`.
+    #[serde(default)]
+    pub event_type: Option<String>,
+    /// `end.timeZone`, when Google sends one (it can differ from the start's).
+    #[serde(default)]
+    pub end_time_zone: Option<String>,
 }
 
 /// Prefix of the placeholder `google_id` a local create carries until its op
@@ -185,6 +195,9 @@ pub fn event_from_json(calendar_id: i64, v: &Value) -> Option<EventRow> {
         updated: str_field(v, "updated"),
         local_only: false,
         options: serde_json::from_value(v.clone()).unwrap_or_default(),
+        ical_uid: str_field(v, "iCalUID"),
+        event_type: str_field(v, "eventType"),
+        end_time_zone: end.and_then(|e| str_field(e, "timeZone")),
     })
 }
 
@@ -306,6 +319,32 @@ mod tests {
         assert_eq!(row.summary, "My team");
         assert!(!row.is_primary && !row.selected);
         assert_eq!(row.access_role, "reader");
+    }
+
+    #[test]
+    fn ical_uid_and_event_type_are_kept() {
+        let v = json!({
+            "id": "ev2", "iCalUID": "abc123@google.com", "eventType": "outOfOffice",
+            "start": {"dateTime": "2026-09-24T08:00:00Z", "timeZone": "Africa/Johannesburg"},
+            "end": {"dateTime": "2026-09-24T09:00:00Z", "timeZone": "Europe/London"}
+        });
+        let row = event_from_json(1, &v).unwrap();
+        assert_eq!(row.ical_uid.as_deref(), Some("abc123@google.com"));
+        assert_eq!(row.event_type.as_deref(), Some("outOfOffice"));
+        assert_eq!(row.time_zone.as_deref(), Some("Africa/Johannesburg"));
+        assert_eq!(row.end_time_zone.as_deref(), Some("Europe/London"));
+        assert_eq!(
+            serde_json::to_value(&row).unwrap()["end_time_zone"],
+            "Europe/London"
+        );
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["ical_uid"], "abc123@google.com");
+        let bare = json!({"id": "ev3", "start": {"date": "2026-09-24"}});
+        let row = event_from_json(1, &bare).unwrap();
+        assert_eq!(
+            (row.ical_uid, row.event_type, row.end_time_zone),
+            (None, None, None)
+        );
     }
 
     #[test]

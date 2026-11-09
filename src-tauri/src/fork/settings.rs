@@ -68,6 +68,9 @@ pub const ALLOWED: &[&str] = &[
     "fork_filing_never", // one domain or address per line, never filed
     "fork_filing_threshold", // Jev yes-probability to file, default 0.7, never below 0.5
     "fork_filing_paused", // why Filing went back to preview; Settings clears it on save
+    // Calendar round 1
+    "fork_cal_alerts", // "1" (default) | "0": native meeting alerts (calendar::alerts)
+    "fork_cal_alert_lead", // minutes before start, default "1"; used when an event keeps Google's default reminders
 ];
 
 #[cfg(test)]

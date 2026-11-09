@@ -7,6 +7,7 @@
 //! Engines register themselves in a process-wide map so the commands can find
 //! them without depending on `ForkState`'s shape.
 
+pub mod alerts;
 pub mod availability;
 pub mod commands;
 pub mod gapi;
@@ -16,6 +17,7 @@ pub mod options;
 mod options_tests;
 #[cfg(test)]
 mod scheduling_tests;
+pub mod search;
 mod split;
 pub mod store;
 
@@ -121,9 +123,11 @@ pub fn stop(account_id: &str) {
     }
 }
 
-/// Start engines for every account with a stored calendar grant. Called from
-/// `fork::start` (main session) once at setup; safe to call again.
+/// Start engines for every account with a stored calendar grant, and the one
+/// meeting-alert loop. Called from `fork::start` (main session) once at setup;
+/// safe to call again.
 pub fn start_all(app: AppHandle) {
+    alerts::start(app.clone());
     let db = app.state::<crate::state::AppState>().db.clone();
     tauri::async_runtime::spawn(async move {
         let accounts = match db
@@ -470,9 +474,23 @@ impl Engine {
                 if is_local_id(&row.google_id) {
                     return Err(SkimError::other("gcal_op", "cannot RSVP to a local event"));
                 }
-                let body =
-                    gapi::rsvp_body(row.attendees_json.as_deref(), &self.account_email, response);
-                self.patch_once(token, &cal.google_id, &row.google_id, send, &body)
+                // A series answer names the master; its own guest list is the
+                // one to patch, not the occurrence's cached copy.
+                let target = p["google_id"].as_str().unwrap_or(&row.google_id);
+                let attendees = if target == row.google_id {
+                    row.attendees_json.clone()
+                } else {
+                    let master =
+                        gapi::fetch_event(&self.account_id, &cal.google_id, target).await?;
+                    master.get("attendees").map(Value::to_string)
+                };
+                let body = gapi::rsvp_body(
+                    attendees.as_deref(),
+                    &self.account_email,
+                    response,
+                    p["comment"].as_str(),
+                );
+                self.patch_once(token, &cal.google_id, target, send, &body)
                     .await
             }
             "split" => {

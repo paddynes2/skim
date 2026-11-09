@@ -97,6 +97,15 @@ pub fn calendar_list_url(page_token: Option<&str>) -> url::Url {
     u
 }
 
+/// The event types the windowed pull asks for, explicitly.
+pub const EVENT_TYPES: &[&str] = &[
+    "default",
+    "focusTime",
+    "outOfOffice",
+    "workingLocation",
+    "fromGmail",
+];
+
 /// `events.list` for one calendar over `[time_min, time_max]` (unix seconds),
 /// instances expanded and ordered by start.
 pub fn events_list_url(
@@ -112,9 +121,33 @@ pub fn events_list_url(
         .append_pair("timeMin", &super::model::to_rfc3339(time_min))
         .append_pair("timeMax", &super::model::to_rfc3339(time_max))
         .append_pair("maxResults", "2500");
+    // Every type, named: alerts need to see (and skip) out-of-office,
+    // focus-time and working-location entries rather than rely on a default.
+    for t in EVENT_TYPES {
+        u.query_pairs_mut().append_pair("eventTypes", t);
+    }
     if let Some(t) = page_token {
         u.query_pairs_mut().append_pair("pageToken", t);
     }
+    u
+}
+
+/// How far either side of "now" a remote event search looks.
+pub const SEARCH_SPAN: i64 = 730 * 86_400;
+/// Remote hits per calendar: one page, no paging.
+pub const SEARCH_PAGE: u32 = 50;
+
+/// `events.list` with Google's free-text `q`, instances expanded, over
+/// `[now - SEARCH_SPAN, now + SEARCH_SPAN]`, one page of [`SEARCH_PAGE`].
+pub fn events_search_url(calendar_google_id: &str, query: &str, now: i64) -> url::Url {
+    let mut u = events_url(calendar_google_id);
+    u.query_pairs_mut()
+        .append_pair("q", query)
+        .append_pair("singleEvents", "true")
+        .append_pair("orderBy", "startTime")
+        .append_pair("timeMin", &super::model::to_rfc3339(now - SEARCH_SPAN))
+        .append_pair("timeMax", &super::model::to_rfc3339(now + SEARCH_SPAN))
+        .append_pair("maxResults", &SEARCH_PAGE.to_string());
     u
 }
 
@@ -265,7 +298,14 @@ pub fn event_body(input: &EventInput, existing_attendees: Option<&Value>) -> Val
 /// The `events.patch` body for an RSVP: the stored attendee list with the
 /// `self` entry's `responseStatus` replaced (Google needs the whole array).
 /// When no entry is marked `self`, one is added for `self_email`.
-pub fn rsvp_body(attendees_json: Option<&str>, self_email: &str, response: &str) -> Value {
+/// `comment` is the note to the organiser on the self entry: `None` keeps the
+/// stored one, `Some("")` clears it, any other text replaces it.
+pub fn rsvp_body(
+    attendees_json: Option<&str>,
+    self_email: &str,
+    response: &str,
+    comment: Option<&str>,
+) -> Value {
     let mut list: Vec<Value> = attendees_json
         .and_then(|s| serde_json::from_str::<Value>(s).ok())
         .and_then(|v| v.as_array().cloned())
@@ -278,11 +318,18 @@ pub fn rsvp_body(attendees_json: Option<&str>, self_email: &str, response: &str)
                 .is_some_and(|e| e.eq_ignore_ascii_case(self_email));
         if is_self {
             a["responseStatus"] = json!(response);
+            if let Some(c) = comment {
+                a["comment"] = json!(c);
+            }
             found = true;
         }
     }
     if !found {
-        list.push(json!({ "email": self_email, "self": true, "responseStatus": response }));
+        let mut me = json!({ "email": self_email, "self": true, "responseStatus": response });
+        if let Some(c) = comment {
+            me["comment"] = json!(c);
+        }
+        list.push(me);
     }
     json!({ "attendees": list })
 }
@@ -388,6 +435,25 @@ pub async fn fetch_instances(
 
 pub async fn fetch_calendar_list(account_id: &str) -> Result<Vec<Value>> {
     paged(account_id, calendar_list_url).await
+}
+
+/// One page of remote search hits for a calendar (see [`events_search_url`]).
+pub async fn search_events(
+    account_id: &str,
+    calendar_google_id: &str,
+    query: &str,
+    now: i64,
+) -> Result<Vec<Value>> {
+    let page = get_json(
+        account_id,
+        events_search_url(calendar_google_id, query, now),
+    )
+    .await?;
+    Ok(page
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default())
 }
 
 pub async fn fetch_events(
@@ -525,6 +591,25 @@ mod tests {
         assert_eq!(qs["maxResults"], "2500");
         assert_eq!(qs["pageToken"], "tok");
         assert!(!q(&events_list_url("c", 0, 1, None)).contains_key("pageToken"));
+        let types: Vec<String> = u
+            .query_pairs()
+            .filter(|(k, _)| k == "eventTypes")
+            .map(|(_, v)| v.into_owned())
+            .collect();
+        assert_eq!(
+            types,
+            [
+                "default",
+                "focusTime",
+                "outOfOffice",
+                "workingLocation",
+                "fromGmail"
+            ]
+        );
+        assert!(u.as_str().contains(
+            "eventTypes=default&eventTypes=focusTime&eventTypes=outOfOffice\
+             &eventTypes=workingLocation&eventTypes=fromGmail"
+        ));
     }
 
     #[test]
@@ -620,18 +705,75 @@ mod tests {
     fn rsvp_body_patches_the_self_attendee() {
         let stored = r#"[{"email":"org@x.com","organizer":true,"responseStatus":"accepted"},
                          {"email":"me@x.com","self":true,"responseStatus":"needsAction"}]"#;
-        let b = rsvp_body(Some(stored), "me@x.com", "accepted");
+        let b = rsvp_body(Some(stored), "me@x.com", "accepted", None);
         let list = b["attendees"].as_array().unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0]["responseStatus"], "accepted");
         assert_eq!(list[1]["responseStatus"], "accepted");
         assert_eq!(list[1]["self"], true);
         // No self entry: one is added rather than the answer being lost.
-        let b = rsvp_body(Some(r#"[{"email":"org@x.com"}]"#), "me@x.com", "declined");
+        let b = rsvp_body(
+            Some(r#"[{"email":"org@x.com"}]"#),
+            "me@x.com",
+            "declined",
+            None,
+        );
         let list = b["attendees"].as_array().unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[1]["email"], "me@x.com");
         assert_eq!(list[1]["responseStatus"], "declined");
         assert!(valid_response("tentative") && !valid_response("maybe"));
+    }
+
+    #[test]
+    fn rsvp_body_sets_keeps_and_clears_the_comment() {
+        let stored = r#"[{"email":"org@example.test","organizer":true,"comment":"theirs"},
+                         {"email":"me@example.test","self":true,"comment":"old note"}]"#;
+        let b = rsvp_body(
+            Some(stored),
+            "me@example.test",
+            "declined",
+            Some("Travelling"),
+        );
+        assert_eq!(b["attendees"][1]["comment"], "Travelling");
+        assert_eq!(b["attendees"][1]["responseStatus"], "declined");
+        assert_eq!(
+            b["attendees"][0]["comment"], "theirs",
+            "only the self entry"
+        );
+        let kept = rsvp_body(Some(stored), "me@example.test", "accepted", None);
+        assert_eq!(kept["attendees"][1]["comment"], "old note");
+        let cleared = rsvp_body(Some(stored), "me@example.test", "accepted", Some(""));
+        assert_eq!(cleared["attendees"][1]["comment"], "");
+        let added = rsvp_body(None, "me@example.test", "tentative", Some("Maybe late"));
+        assert_eq!(
+            added["attendees"],
+            json!([{ "email": "me@example.test", "self": true,
+                     "responseStatus": "tentative", "comment": "Maybe late" }])
+        );
+        let plain = rsvp_body(None, "me@example.test", "accepted", None);
+        assert!(plain["attendees"][0].get("comment").is_none());
+    }
+
+    #[test]
+    fn search_url_asks_google_for_two_years_either_side() {
+        let now = 800 * 86_400;
+        let u = events_search_url("team@group.calendar.google.com", "board pack", now);
+        assert_eq!(
+            u.path(),
+            "/calendar/v3/calendars/team@group.calendar.google.com/events"
+        );
+        let qs = q(&u);
+        assert_eq!(qs["q"], "board pack");
+        assert_eq!(qs["singleEvents"], "true");
+        assert_eq!(qs["orderBy"], "startTime");
+        assert_eq!(qs["timeMin"], super::super::model::to_rfc3339(70 * 86_400));
+        assert_eq!(
+            qs["timeMax"],
+            super::super::model::to_rfc3339(1530 * 86_400)
+        );
+        assert_eq!(qs["maxResults"], "50");
+        assert!(!qs.contains_key("pageToken"));
+        assert!(u.as_str().contains("q=board+pack"));
     }
 }

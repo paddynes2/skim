@@ -115,7 +115,7 @@ pub fn delete_account_data(conn: &Connection, account_id: &str) -> rusqlite::Res
 const EV_COLS: &str = "id, calendar_id, google_id, etag, status, summary, description, location, \
      start_ts, end_ts, all_day, start_date, end_date, time_zone, recurring_event_id, \
      organizer_email, attendees_json, self_response, transparency, hangout_link, html_link, \
-     updated, local_only, options_json";
+     updated, local_only, options_json, ical_uid, event_type, end_time_zone";
 
 fn event_row(r: &Row) -> rusqlite::Result<EventRow> {
     Ok(EventRow {
@@ -143,6 +143,9 @@ fn event_row(r: &Row) -> rusqlite::Result<EventRow> {
         updated: r.get(21)?,
         local_only: r.get::<_, Option<i64>>(22)?.unwrap_or(0) != 0,
         options: serde_json::from_str(&r.get::<_, String>(23)?).unwrap_or_default(),
+        ical_uid: r.get(24)?,
+        event_type: r.get(25)?,
+        end_time_zone: r.get(26)?,
     })
 }
 
@@ -152,9 +155,10 @@ fn upsert_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<i64> {
             (calendar_id, google_id, etag, status, summary, description, location,
              start_ts, end_ts, all_day, start_date, end_date, time_zone, recurring_event_id,
              organizer_email, attendees_json, self_response, transparency, hangout_link,
-             html_link, updated, local_only, options_json)
+             html_link, updated, local_only, options_json, ical_uid, event_type,
+             end_time_zone)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                 ?18, ?19, ?20, ?21, ?22, ?23)
+                 ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
          ON CONFLICT(calendar_id, google_id) DO UPDATE SET
             etag = excluded.etag, status = excluded.status, summary = excluded.summary,
             description = excluded.description, location = excluded.location,
@@ -165,7 +169,8 @@ fn upsert_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<i64> {
             self_response = excluded.self_response, transparency = excluded.transparency,
             hangout_link = excluded.hangout_link, html_link = excluded.html_link,
             updated = excluded.updated, local_only = excluded.local_only,
-            options_json = excluded.options_json",
+            options_json = excluded.options_json, ical_uid = excluded.ical_uid,
+            event_type = excluded.event_type, end_time_zone = excluded.end_time_zone",
         params![
             e.calendar_id,
             e.google_id,
@@ -190,6 +195,9 @@ fn upsert_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<i64> {
             e.updated,
             e.local_only as i64,
             serde_json::to_string(&e.options).unwrap_or_else(|_| "{}".into()),
+            e.ical_uid,
+            e.event_type,
+            e.end_time_zone,
         ],
     )?;
     conn.query_row(
@@ -323,7 +331,8 @@ pub fn mark_synced(conn: &Connection, row_id: i64, server: &EventRow) -> rusqlit
         "UPDATE fork_cal_events SET
             google_id = ?2, etag = ?3, status = ?4, hangout_link = ?5, html_link = ?6,
             updated = ?7, organizer_email = ?8, attendees_json = ?9, self_response = ?10,
-            local_only = 0, options_json = ?11, transparency = ?12
+            local_only = 0, options_json = ?11, transparency = ?12, ical_uid = ?13,
+            event_type = ?14, end_time_zone = ?15
          WHERE id = ?1",
         params![
             row_id,
@@ -338,6 +347,9 @@ pub fn mark_synced(conn: &Connection, row_id: i64, server: &EventRow) -> rusqlit
             server.self_response,
             serde_json::to_string(&server.options).unwrap_or_else(|_| "{}".into()),
             server.transparency,
+            server.ical_uid,
+            server.event_type,
+            server.end_time_zone,
         ],
     )
     .map(|_| ())
@@ -346,6 +358,122 @@ pub fn mark_synced(conn: &Connection, row_id: i64, server: &EventRow) -> rusqlit
 pub fn delete_event_row(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM fork_cal_events WHERE id = ?1", [id])
         .map(|_| ())
+}
+
+/// Every cached row of one series in one calendar: its instances and, if it
+/// is cached, the master itself.
+pub fn series_rows(
+    conn: &Connection,
+    calendar_id: i64,
+    series_google_id: &str,
+) -> rusqlite::Result<Vec<EventRow>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {EV_COLS} FROM fork_cal_events
+          WHERE calendar_id = ?1 AND (recurring_event_id = ?2 OR google_id = ?2)
+          ORDER BY start_ts, id"
+    ))?;
+    let rows = stmt.query_map(params![calendar_id, series_google_id], event_row)?;
+    rows.collect()
+}
+
+/// Search candidates: every non-cancelled row on selected calendars, with
+/// the account filter when one is named. The term match runs in Rust so it is
+/// case-insensitive beyond ASCII (SQLite `lower` is ASCII-only).
+pub fn searchable_events(
+    conn: &Connection,
+    account_id: Option<&str>,
+) -> rusqlite::Result<Vec<EventRow>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {} FROM fork_cal_events e
+           JOIN fork_cal_calendars c ON c.id = e.calendar_id
+          WHERE c.selected = 1 AND (?1 IS NULL OR c.account_id = ?1)
+            AND e.status != 'cancelled'
+          ORDER BY e.start_ts, e.id",
+        prefixed_cols()
+    ))?;
+    let rows = stmt.query_map(params![account_id], event_row)?;
+    rows.collect()
+}
+
+/// The row cached for `(calendar_id, google_id)`, if any.
+pub fn event_by_google_id(
+    conn: &Connection,
+    calendar_id: i64,
+    google_id: &str,
+) -> rusqlite::Result<Option<EventRow>> {
+    conn.query_row(
+        &format!("SELECT {EV_COLS} FROM fork_cal_events WHERE calendar_id = ?1 AND google_id = ?2"),
+        params![calendar_id, google_id],
+        event_row,
+    )
+    .optional()
+}
+
+fn prefixed_cols() -> String {
+    EV_COLS
+        .split(", ")
+        .map(|c| format!("e.{}", c.trim()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Alert candidates: `(account_id, row)` for timed, non-cancelled events on
+/// selected calendars starting inside `[from, to]`. The finer rules live in
+/// `alerts::due_alerts`.
+pub fn alert_candidates(
+    conn: &Connection,
+    from: i64,
+    to: i64,
+) -> rusqlite::Result<Vec<(String, EventRow)>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {}, c.account_id FROM fork_cal_events e
+           JOIN fork_cal_calendars c ON c.id = e.calendar_id
+          WHERE c.selected = 1 AND e.all_day = 0 AND e.status != 'cancelled'
+            AND e.start_ts >= ?1 AND e.start_ts <= ?2
+          ORDER BY e.start_ts, e.id",
+        prefixed_cols()
+    ))?;
+    let rows = stmt.query_map(params![from, to], |r| Ok((r.get(27)?, event_row(r)?)))?;
+    rows.collect()
+}
+
+/// One fired alert: `(account_id, google_id, start_ts, lead_min)`.
+pub type FiredKey = (String, String, i64, i64);
+
+/// Every stored fired alert key.
+pub fn fired_alerts(conn: &Connection) -> rusqlite::Result<Vec<FiredKey>> {
+    let mut stmt = conn
+        .prepare("SELECT account_id, google_id, start_ts, lead_min FROM fork_cal_alerts_fired")?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+    rows.collect()
+}
+
+pub fn record_fired_alerts(
+    conn: &mut Connection,
+    keys: &[FiredKey],
+    fired_at: i64,
+) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    for (account_id, google_id, start_ts, lead) in keys {
+        tx.execute(
+            "INSERT OR IGNORE INTO fork_cal_alerts_fired
+                (account_id, google_id, start_ts, lead_min, fired_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![account_id, google_id, start_ts, lead, fired_at],
+        )?;
+    }
+    tx.commit()
+}
+
+/// Drop fired keys of events that started before `before` (unix seconds).
+/// A key only matters while its event can still alert, and an event that
+/// started more than two minutes ago never does, so a key is kept as long as
+/// its event is recent, not as long as its alert is.
+pub fn prune_fired_alerts(conn: &Connection, before: i64) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM fork_cal_alerts_fired WHERE start_ts < ?1",
+        [before],
+    )
 }
 
 // ---- ops --------------------------------------------------------------------

@@ -240,6 +240,9 @@ pub fn local_row_from_input(calendar_id: i64, input: &EventInput) -> Result<Even
         updated: None,
         local_only: true,
         options: input.options.clone(),
+        ical_uid: None,
+        event_type: None,
+        end_time_zone: None,
     })
 }
 
@@ -762,7 +765,31 @@ pub async fn fork_cal_delete(
     Ok(())
 }
 
+/// The queued `rsvp` op for `row`. With `series` on an instance, the op
+/// names the series master (`google_id`), so the engine patches the master
+/// and the answer covers every occurrence. `comment` rides along when given.
+pub fn rsvp_op_payload(
+    row: &EventRow,
+    response: &str,
+    send: SendUpdates,
+    comment: Option<&str>,
+    series: bool,
+) -> Value {
+    let mut payload =
+        json!({ "event_id": row.id, "response": response, "send_updates": send.as_str() });
+    if let Some(c) = comment {
+        payload["comment"] = json!(c);
+    }
+    if let Some(master) = row.recurring_event_id.as_deref().filter(|_| series) {
+        payload["google_id"] = json!(master);
+        payload["series"] = json!(true);
+    }
+    payload
+}
+
 /// Answer an invitation: `accepted` / `declined` / `tentative`.
+/// `comment` is the note to the organiser (`""` clears it, omitted keeps it).
+/// `series: true` on an occurrence answers for the whole series.
 #[tauri::command]
 pub async fn fork_cal_rsvp(
     app: AppHandle,
@@ -770,6 +797,8 @@ pub async fn fork_cal_rsvp(
     event_id: i64,
     response: String,
     send_updates: String,
+    comment: Option<String>,
+    series: Option<bool>,
 ) -> Result<EventRow> {
     if !gapi::valid_response(&response) {
         return Err(SkimError::other(
@@ -778,6 +807,7 @@ pub async fn fork_cal_rsvp(
         ));
     }
     let send = SendUpdates::parse(&send_updates)?;
+    let series = series.unwrap_or(false);
     let (account_id, account_email) = state
         .db
         .call(move |conn| {
@@ -800,16 +830,26 @@ pub async fn fork_cal_rsvp(
             let Some(mut row) = store::get_event(conn, event_id)? else {
                 return Ok(None);
             };
-            let body = gapi::rsvp_body(row.attendees_json.as_deref(), &account_email, &resp);
-            row.attendees_json = Some(body["attendees"].to_string());
-            row.self_response = Some(resp.clone());
+            let note = comment.as_deref();
+            let master = row.recurring_event_id.clone().filter(|_| series);
+            let payload = rsvp_op_payload(&row, &resp, send, note, series);
+            let answer = |r: &mut EventRow| {
+                let body =
+                    gapi::rsvp_body(r.attendees_json.as_deref(), &account_email, &resp, note);
+                r.attendees_json = Some(body["attendees"].to_string());
+                r.self_response = Some(resp.clone());
+            };
+            answer(&mut row);
             store::update_local_event(conn, &row)?;
-            store::queue_op(
-                conn,
-                &aid,
-                "rsvp",
-                &json!({ "event_id": event_id, "response": resp, "send_updates": send.as_str() }),
-            )?;
+            if let Some(master) = master {
+                for mut other in store::series_rows(conn, row.calendar_id, &master)? {
+                    if other.id != row.id {
+                        answer(&mut other);
+                        store::update_local_event(conn, &other)?;
+                    }
+                }
+            }
+            store::queue_op(conn, &aid, "rsvp", &payload)?;
             Ok(Some(row))
         })
         .await?
@@ -869,6 +909,101 @@ mod tests {
             }
         )
         .is_err());
+    }
+
+    #[test]
+    fn rsvp_payload_targets_the_master_only_for_a_series_answer() {
+        let instance = EventRow {
+            id: 42,
+            google_id: "series1_20261001T080000Z".into(),
+            recurring_event_id: Some("series1".into()),
+            ..Default::default()
+        };
+        let p = rsvp_op_payload(&instance, "declined", SendUpdates::All, Some("Away"), true);
+        assert_eq!(
+            p,
+            json!({ "event_id": 42, "response": "declined", "send_updates": "all",
+                    "comment": "Away", "google_id": "series1", "series": true })
+        );
+        // Just this occurrence: no master id, so the engine patches the instance.
+        let p = rsvp_op_payload(&instance, "accepted", SendUpdates::None, None, false);
+        assert_eq!(
+            p,
+            json!({ "event_id": 42, "response": "accepted", "send_updates": "none" })
+        );
+        // A single event has no master: `series` changes nothing.
+        let single = EventRow {
+            id: 7,
+            google_id: "single".into(),
+            ..Default::default()
+        };
+        let p = rsvp_op_payload(&single, "tentative", SendUpdates::None, Some(""), true);
+        assert_eq!(
+            p,
+            json!({ "event_id": 7, "response": "tentative", "send_updates": "none", "comment": "" })
+        );
+    }
+
+    #[test]
+    fn series_rows_find_the_instances_and_the_queued_op_keeps_the_master() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            store::upsert_calendars(
+                conn,
+                "a1",
+                &[CalendarRow {
+                    id: 0,
+                    account_id: "a1".into(),
+                    google_id: "primary".into(),
+                    summary: "primary".into(),
+                    color: None,
+                    is_primary: true,
+                    selected: true,
+                    access_role: "owner".into(),
+                }],
+            )?;
+            let cid = store::list_calendars(conn, "a1")?[0].id;
+            let inst = |gid: &str, start: i64| EventRow {
+                calendar_id: cid,
+                google_id: gid.into(),
+                status: "confirmed".into(),
+                start_ts: start,
+                end_ts: start + 900,
+                recurring_event_id: Some("s1".into()),
+                attendees_json: Some(
+                    r#"[{"email":"me@example.test","self":true,"responseStatus":"needsAction"}]"#
+                        .into(),
+                ),
+                ..Default::default()
+            };
+            let other = EventRow {
+                recurring_event_id: Some("s2".into()),
+                ..inst("s2_1", 50)
+            };
+            store::replace_window(
+                conn,
+                cid,
+                0,
+                10_000,
+                &[inst("s1_1", 100), inst("s1_2", 200), other],
+            )?;
+            let rows = store::series_rows(conn, cid, "s1")?;
+            assert_eq!(rows.len(), 2, "only the s1 instances");
+            let first = &rows[0];
+            let payload = rsvp_op_payload(first, "accepted", SendUpdates::None, None, true);
+            assert_eq!(payload["google_id"], "s1");
+            let op = store::queue_op(conn, "a1", "rsvp", &payload)?;
+            let stored: String = conn.query_row(
+                "SELECT payload FROM fork_cal_ops WHERE id = ?1",
+                [op],
+                |r| r.get(0),
+            )?;
+            let stored: Value = serde_json::from_str(&stored).unwrap();
+            assert_eq!(stored["_series_id"], "s1");
+            assert_eq!(stored["google_id"], "s1");
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
