@@ -104,6 +104,7 @@ pub const EVENT_TYPES: &[&str] = &[
     "outOfOffice",
     "workingLocation",
     "fromGmail",
+    "birthday",
 ];
 
 /// `events.list` for one calendar over `[time_min, time_max]` (unix seconds),
@@ -603,12 +604,13 @@ mod tests {
                 "focusTime",
                 "outOfOffice",
                 "workingLocation",
-                "fromGmail"
+                "fromGmail",
+                "birthday"
             ]
         );
         assert!(u.as_str().contains(
             "eventTypes=default&eventTypes=focusTime&eventTypes=outOfOffice\
-             &eventTypes=workingLocation&eventTypes=fromGmail"
+             &eventTypes=workingLocation&eventTypes=fromGmail&eventTypes=birthday"
         ));
     }
 

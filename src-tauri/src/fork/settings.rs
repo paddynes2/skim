@@ -71,6 +71,17 @@ pub const ALLOWED: &[&str] = &[
     // Calendar round 1
     "fork_cal_alerts", // "1" (default) | "0": native meeting alerts (calendar::alerts)
     "fork_cal_alert_lead", // minutes before start, default "1"; used when an event keeps Google's default reminders
+    // Calendar Look A view settings (D97)
+    "fork_cal_week_start",    // 0 Sun | 1 Mon | 6 Sat
+    "fork_cal_show_weekends", // "1" | "0"
+    "fork_cal_show_declined", // "1" | "0"
+    "fork_cal_dim_past",      // "1" | "0"
+    "fork_cal_week_numbers",  // "1" | "0" (month view)
+    "fork_cal_default_view",  // day | week | custom | month | year | agenda
+    "fork_cal_custom_days",   // 2..7
+    "fork_cal_rail",          // "1" | "0": the calendar list column
+    "fork_cal_add_meet",      // "1" | "0": new events get Google Meet
+    "fork_cal_hidden_cals",   // JSON list of calendar ids hidden from the grid only
 ];
 
 #[cfg(test)]
