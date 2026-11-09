@@ -59,6 +59,14 @@ export const calendarApi = {
   /** `comment` is the note to the organiser ("" clears it); `series` answers for every occurrence (D97). */
   rsvp: (eventId: number, response: RsvpResponse, sendUpdates: SendUpdates, comment: string | null = null, series = false) =>
     invoke<EventRow>("fork_cal_rsvp", { eventId, response, sendUpdates, comment, series }),
+  /** Move to another calendar of the same account; a queued op (D97). */
+  move: (eventId: number, toCalendarId: number, sendUpdates: SendUpdates) =>
+    invoke<EventRow>("fork_cal_move", { eventId, toCalendarId, sendUpdates }),
+  /** Calendar list writes (D97), direct calls that need the wider permission. */
+  setColor: (calendarId: number, color: string) => invoke<CalendarRow>("fork_cal_set_color", { calendarId, color }),
+  addCalendar: (accountId: string, calendar: string) => invoke<CalendarRow>("fork_cal_add_calendar", { accountId, calendar }),
+  createCalendar: (accountId: string, summary: string, timeZone: string) =>
+    invoke<CalendarRow>("fork_cal_create_calendar", { accountId, summary, timeZone }),
   /** Cached events plus Google's own search beyond the synced window (D97). */
   search: (query: string, accountId: string | null = null, limit = 100) =>
     invoke<SearchResult>("fork_cal_search", { query, accountId, limit }),

@@ -159,7 +159,11 @@ export function calendarErrorText(e: unknown): string {
     "gcal_op",
     "oauth_cancelled",
     "network",
+    "gcal_not_shared",
   ];
+  // A refused input that names its rule (D97) gets that rule's sentence.
+  const detail = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
+  if (code === "gcal_input" && ["event_type_primary_only", "move_instance"].includes(detail)) return t(`fork.cal.err.${detail}`);
   if (code && known.includes(code)) {
     const text = t(`fork.cal.err.${code}`);
     // The mismatch error names the two addresses; keep them.

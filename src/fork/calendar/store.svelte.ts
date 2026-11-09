@@ -455,6 +455,36 @@ export const calendar = {
     return true;
   },
 
+  /** Move an event to another calendar; asks about guests like any update. */
+  async move(id: number, toCalendarId: number): Promise<boolean> {
+    const row = state.events.find((e) => e.id === id);
+    const n = row ? otherGuests(row, ownEmails()).length : 0;
+    const su = await askGuests("update", n);
+    if (su === null) return false;
+    const updated = await calendarApi.move(id, toCalendarId, su);
+    upsert(updated);
+    void this.refreshSync();
+    return true;
+  },
+  async setColor(calendarId: number, color: string): Promise<void> {
+    const row = await calendarApi.setColor(calendarId, color);
+    state.calendars = state.calendars.map((c) => (c.id === row.id ? row : c));
+  },
+  async addCalendar(accountId: string, who: string): Promise<CalendarRow> {
+    const row = await calendarApi.addCalendar(accountId, who);
+    await refreshStatus();
+    if (range) void loadRange(range.from, range.to);
+    return row;
+  },
+  async createCalendar(accountId: string, summary: string): Promise<CalendarRow> {
+    const row = await calendarApi.createCalendar(accountId, summary, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    await refreshStatus();
+    return row;
+  },
+  /** Connected accounts that lack a permission the calendar asks for now. */
+  get needsReconnect(): string[] {
+    return Object.entries(state.statuses).filter(([, s]) => s.connected && (s.missing_scopes?.length ?? 0) > 0).map(([id]) => id);
+  },
   /** The guest answer for a delete, asked now; null when cancelled. */
   async askDelete(id: number, series = false): Promise<SendUpdates | null> {
     const row = series ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
