@@ -31,6 +31,9 @@ const state = $state({
   addMeetDefault: false,
   /** Calendar ids hidden from the grid only; syncing and busy time are unaffected (D97). */
   hiddenCals: [] as number[],
+  /** Meeting pop-ups (fork/calendar/alerts.rs reads both keys). */
+  alerts: true,
+  alertLead: 1,
   loaded: false,
 });
 
@@ -72,6 +75,9 @@ export const calPrefs = {
     } catch {
       state.hiddenCals = [];
     }
+    state.alerts = on(s.fork_cal_alerts, true);
+    const lead = Number(s.fork_cal_alert_lead);
+    if ([0, 1, 2, 5, 10, 15].includes(lead)) state.alertLead = lead;
     const cd = Number(s.fork_cal_custom_days);
     if (cd >= 2 && cd <= 7) state.customDays = cd;
     state.loaded = true;
@@ -176,4 +182,8 @@ export const calPrefs = {
   setAddMeetDefault(v: boolean) { state.addMeetDefault = v; persist("fork_cal_add_meet", v ? "1" : "0"); },
   get hiddenCals() { return state.hiddenCals; },
   setHiddenCals(ids: number[]) { state.hiddenCals = [...new Set(ids)]; persist("fork_cal_hidden_cals", JSON.stringify(state.hiddenCals)); },
+  get alerts() { return state.alerts; },
+  setAlerts(v: boolean) { state.alerts = v; persist("fork_cal_alerts", v ? "1" : "0"); },
+  get alertLead() { return state.alertLead; },
+  setAlertLead(n: number) { state.alertLead = n; persist("fork_cal_alert_lead", String(n)); },
 };

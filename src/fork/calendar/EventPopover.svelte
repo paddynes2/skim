@@ -12,6 +12,7 @@
   import AttachmentLinks from "./AttachmentLinks.svelte";
   import { EVENT_COLORS } from "./editor";
   import { calendarErrorText, parseAttendees, selfIsGuest } from "./guests";
+  import { safeDescription } from "./description";
   import { eventState, initials, joinLink, needsReply } from "./presentation";
   import { calendar } from "./store.svelte";
   import { calUndo, deleteWithUndo } from "./undo.svelte";
@@ -128,7 +129,13 @@
     }
   }
   const mark = (s?: string) => (s === "accepted" ? "yes" : s === "declined" ? "no" : s === "tentative" ? "maybe" : "wait");
-  const linkify = (text: string) => text.split(/(https?:\/\/[^\s<>"')\]]+)/g);
+  function openLink(e: MouseEvent) {
+    const a = (e.target as HTMLElement)?.closest?.("a");
+    if (!a) return;
+    e.preventDefault();
+    const href = a.getAttribute("href") ?? "";
+    if (/^(https:\/\/|mailto:)/i.test(href)) void openUrl(href);
+  }
 </script>
 
 <div
@@ -202,7 +209,9 @@
 
   {#if row.description}
     <div class="row top"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 7h10M3 10h7" /></svg>
-      <p class="text desc">{#each linkify(row.description) as part, i}{#if i % 2}<button class="link" onclick={() => openUrl(part)}>{part}</button>{:else}{part}{/if}{/each}</p>
+      <!-- Sanitised by description.ts: no images, links only to https or mailto, opened outside Skim. -->
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="text desc" onclick={openLink}>{@html safeDescription(row.description)}</div>
     </div>
   {/if}
   {#if row.options?.attachments?.length}<div class="row"><AttachmentLinks value={row.options.attachments} /></div>{/if}
@@ -258,7 +267,10 @@
   .row.top { align-items: start; }
   .row.top svg { margin-top: 2px; }
   .text { margin: 0; color: var(--text); overflow-wrap: anywhere; line-height: 1.5; }
-  .desc { white-space: pre-wrap; max-height: 160px; overflow-y: auto; }
+  .desc { max-height: 180px; overflow-y: auto; }
+  .desc :global(p) { margin: 0 0 6px; }
+  .desc :global(ul), .desc :global(ol) { margin: 0 0 6px; padding-left: 18px; }
+  .desc :global(a) { color: var(--link, var(--primary)); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer; }
   .guests p { margin: 0 0 8px; }
   .guests ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
   .guests li { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text); }

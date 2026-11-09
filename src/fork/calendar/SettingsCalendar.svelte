@@ -268,6 +268,67 @@
       />
     </div>
   </div>
+  <!-- D97: how the calendar shows, Google Calendar's view settings -->
+  <div class="group">
+    <div class="field">
+      <span class="label">{t("fork.cal.week_starts")}</span>
+      <div class="chips" role="radiogroup" aria-label={t("fork.cal.week_starts")}>
+        {#each [[1, "fork.cal.day_mon"], [0, "fork.cal.day_sun"], [6, "fork.cal.day_sat"]] as const as [n, label] (n)}
+          <button class="chip" class:active={calPrefs.weekStart === n} role="radio" aria-checked={calPrefs.weekStart === n} onclick={() => calPrefs.setWeekStart(n)}>{t(label)}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">{t("fork.cal.default_view")}</span>
+      <div class="chips" role="radiogroup" aria-label={t("fork.cal.default_view")}>
+        {#each [["day", "fork.cal.view_day"], ["week", "fork.cal.view_week"], ["custom", "fork.cal.view_custom"], ["month", "fork.cal.view_month"], ["year", "fork.cal.view_year"], ["agenda", "fork.cal.view_schedule"]] as const as [v, label] (v)}
+          <button class="chip" class:active={calPrefs.defaultView === v} role="radio" aria-checked={calPrefs.defaultView === v} onclick={() => calPrefs.setDefaultView(v)}>{t(label)}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">{t("fork.cal.custom_days")}</span>
+      <div class="chips" role="radiogroup" aria-label={t("fork.cal.custom_days")}>
+        {#each [2, 3, 4, 5, 6, 7] as n (n)}
+          <button class="chip" class:active={calPrefs.customDays === n} role="radio" aria-checked={calPrefs.customDays === n} onclick={() => calPrefs.setCustomDays(n)}>{n}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="field">
+      <label class="label" for="gcal-vis-start">{t("fork.cal.visible_hours")}</label>
+      <select id="gcal-vis-start" class="text mono short" value={calPrefs.visibleStart} onchange={(e) => calPrefs.setVisibleHours((e.currentTarget as HTMLSelectElement).value, calPrefs.visibleEnd)}>
+        {#each Array.from({ length: 24 }, (_, n) => `${String(n).padStart(2, "0")}:00`) as hour}<option value={hour} disabled={hour >= calPrefs.visibleEnd}>{hour}</option>{/each}
+      </select>
+      <span class="dash">{t("fork.cal.to")}</span>
+      <select class="text mono short" aria-label={t("fork.cal.visible_to")} value={calPrefs.visibleEnd} onchange={(e) => calPrefs.setVisibleHours(calPrefs.visibleStart, (e.currentTarget as HTMLSelectElement).value)}>
+        {#each Array.from({ length: 24 }, (_, n) => `${String(n + 1).padStart(2, "0")}:00`) as hour}<option value={hour} disabled={hour <= calPrefs.visibleStart}>{hour}</option>{/each}
+      </select>
+    </div>
+    <div class="field">
+      <span class="label">{t("fork.cal.show")}</span>
+      <div class="chips">
+        <button class="chip" class:active={calPrefs.showWeekends} aria-pressed={calPrefs.showWeekends} onclick={() => calPrefs.setShowWeekends(!calPrefs.showWeekends)}>{t("fork.cal.show_weekends")}</button>
+        <button class="chip" class:active={calPrefs.showDeclined} aria-pressed={calPrefs.showDeclined} onclick={() => calPrefs.setShowDeclined(!calPrefs.showDeclined)}>{t("fork.cal.show_declined")}</button>
+        <button class="chip" class:active={calPrefs.dimPast} aria-pressed={calPrefs.dimPast} onclick={() => calPrefs.setDimPast(!calPrefs.dimPast)}>{t("fork.cal.dim_past")}</button>
+        <button class="chip" class:active={calPrefs.weekNumbers} aria-pressed={calPrefs.weekNumbers} onclick={() => calPrefs.setWeekNumbers(!calPrefs.weekNumbers)}>{t("fork.cal.week_numbers")}</button>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">{t("fork.cal.new_events")}</span>
+      <div class="chips">
+        <button class="chip" class:active={calPrefs.addMeetDefault} aria-pressed={calPrefs.addMeetDefault} onclick={() => calPrefs.setAddMeetDefault(!calPrefs.addMeetDefault)}>{t("fork.cal.add_meet_default")}</button>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">{t("fork.cal.meeting_popups")}</span>
+      <div class="chips" role="radiogroup" aria-label={t("fork.cal.meeting_popups")}>
+        <button class="chip" class:active={!calPrefs.alerts} role="radio" aria-checked={!calPrefs.alerts} onclick={() => calPrefs.setAlerts(false)}>{t("fork.cal.off")}</button>
+        {#each [0, 1, 2, 5, 10] as n (n)}
+          <button class="chip" class:active={calPrefs.alerts && calPrefs.alertLead === n} role="radio" aria-checked={calPrefs.alerts && calPrefs.alertLead === n} onclick={() => { calPrefs.setAlerts(true); calPrefs.setAlertLead(n); }}>{n === 0 ? t("fork.cal.at_start") : t("fork.cal.minutes_before_n", { n })}</button>
+        {/each}
+      </div>
+    </div>
+  </div>
 </section>
 
 <style>

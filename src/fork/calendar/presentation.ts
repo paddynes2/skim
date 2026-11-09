@@ -42,12 +42,12 @@ export function hueOf(hex: string | null | undefined): { hue: number; sat: numbe
 export function pastelFor(hex: string | null | undefined): string {
   const h = hueOf(hex);
   if (!h || h.sat < 0.15) return "--p-peri";
+  // Greens: deep ones (Basil) take the stronger mint, light ones the soft mint.
+  if (h.hue >= 90 && h.hue <= 170) return h.light < 0.35 ? "--p-mint-2" : "--p-mint";
   let best = PASTELS[0], dist = 999;
   for (const p of PASTELS) {
     const d = Math.min(Math.abs(p.hue - h.hue), 360 - Math.abs(p.hue - h.hue));
-    // Deep greens (Basil, Google's dark green) read as the stronger mint.
-    const bias = p.token === "--p-mint-2" && h.light < 0.35 ? -12 : 0;
-    if (d + bias < dist) { dist = d + bias; best = p; }
+    if (d < dist) { dist = d; best = p; }
   }
   return best.token;
 }

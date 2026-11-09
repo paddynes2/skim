@@ -1263,5 +1263,20 @@
   "fork.cal.toggle_rail": "Show or hide the calendar list",
   "fork.cal.alert_in": "{title} in {n} min",
   "fork.cal.alert_now": "{title} is starting",
-  "fork.cal.open_event": "Open"
+  "fork.cal.open_event": "Open",
+  "fork.cal.week_starts": "Week starts",
+  "fork.cal.default_view": "Opens on",
+  "fork.cal.custom_days": "Days view",
+  "fork.cal.to": "to",
+  "fork.cal.show": "Show",
+  "fork.cal.show_weekends": "Weekends",
+  "fork.cal.show_declined": "Declined events",
+  "fork.cal.dim_past": "Dim past events",
+  "fork.cal.week_numbers": "Week numbers",
+  "fork.cal.new_events": "New events",
+  "fork.cal.add_meet_default": "Add Google Meet",
+  "fork.cal.meeting_popups": "Meeting pop-ups",
+  "fork.cal.off": "Off",
+  "fork.cal.at_start": "At the start",
+  "fork.cal.minutes_before_n": "{n} min before"
 }
