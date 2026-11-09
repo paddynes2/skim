@@ -563,7 +563,8 @@
   :global(:root[data-theme="pastel-light"]) .fork-cal .outline, :global(:root[data-theme="pastel-light"]) .fork-cal .views, :global(:root[data-theme="pastel-light"]) .fork-cal .search { border-color: var(--ink); background: #fff; }
   /* The bar follows the width it has, which shrinks when the editor is open. */
   @container calmain (max-width: 1060px) { .search { width: 150px; } .week-tag { display: none; } }
-  @container calmain (max-width: 940px) { .search { width: 34px; min-width: 34px; padding: 5px 9px; } .search input, .search kbd { display: none; } .search:focus-within { width: 160px; } .search:focus-within input { display: block; } }
+  /* Narrow: the box folds to its icon but the input stays focusable, so / still opens it. */
+  @container calmain (max-width: 940px) { .search { width: 34px; min-width: 34px; padding: 5px 9px; } .search input { width: 0; flex: 0 0 0; padding: 0; } .search kbd { display: none; } .search:focus-within, .search.active { width: 170px; } .search:focus-within input, .search.active input { width: auto; flex: 1; } }
   @container calmain (max-width: 820px) { .views button { padding: 4px 8px; } .new .label { display: none; } .bar > .icon:first-child { display: none; } }
   @container calmain (max-width: 700px) { .views { display: none; } }
   @media (max-width: 1100px) {

@@ -1230,7 +1230,6 @@
   "fork.cal.tally_maybe": "{n} maybe",
   "fork.cal.tally_no": "{n} no",
   "fork.cal.tally_waiting": "{n} awaiting",
-  "fork.cal.answered": "Answered {answer}",
   "fork.cal.email_guests": "Email guests",
   "fork.cal.this_event": "This event",
   "fork.cal.all_events": "All events",
@@ -1323,5 +1322,8 @@
   "fork.cal.fmt_underline": "Underline",
   "fork.cal.fmt_bullets": "Bulleted list",
   "fork.cal.fmt_numbers": "Numbered list",
-  "fork.cal.fmt_link": "Link"
+  "fork.cal.fmt_link": "Link",
+  "fork.cal.said_accepted": "You said yes",
+  "fork.cal.said_tentative": "You said maybe",
+  "fork.cal.said_declined": "You said no"
 }

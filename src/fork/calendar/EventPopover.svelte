@@ -103,7 +103,7 @@
       const ok = await calendar.rsvp(row.id, r, { comment: noteOpen ? note.trim() : null, series: recurring && scope === "all" });
       if (ok) {
         noteOpen = false;
-        if (before && before !== r) calUndo.offer(t("fork.cal.answered", { answer: t(`fork.cal.rsvp_${r}`) }), async () => { await calendar.rsvp(row.id, before as RsvpResponse, { series: recurring && scope === "all" }); });
+        if (before && before !== r) calUndo.offer(t(`fork.cal.said_${r}`), async () => { await calendar.rsvp(row.id, before as RsvpResponse, { series: recurring && scope === "all" }); });
       }
     } catch (e) { error = calendarErrorText(e); } finally { busy = false; }
   }
