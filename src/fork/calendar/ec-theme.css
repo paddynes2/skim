@@ -196,3 +196,33 @@
 .fork-cal .cal-clock-second { display:inline-block; min-width:48px; padding-right:12px; margin-right:10px; border-right:1px solid var(--hairline); color:var(--text-dim); }
 .fork-cal .cal-clock-local { display:inline-block; min-width:42px; }
 .fork-cal .ec-event:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+
+/* Hour lines are solid and darker; half-hour lines stay faint, so the hours
+   can be read at a glance. Replaces EC's own stripes, which drew both in one
+   colour and dotted both through a 2px mask (the mask also striped the today
+   tint in dark themes). Layers, top first: hide the column's last line, the
+   hour line, the half-hour line. */
+.fork-cal .ec {
+  --cal-hour-line: color-mix(in oklab, var(--text) 24%, var(--surface));
+  --cal-half-line: color-mix(in oklab, var(--hairline) 55%, transparent);
+}
+.fork-cal .ec-time-grid .ec-body .ec-day {
+  background-image:
+    linear-gradient(to top, var(--ec-day-bg-color) 1px, transparent 1px),
+    linear-gradient(to top, var(--cal-hour-line) 1px, transparent 1px),
+    linear-gradient(to top, var(--cal-half-line) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% calc(var(--ec-slot-height) * var(--ec-slot-label-periodicity)),
+    100% var(--ec-slot-height);
+}
+.fork-cal .ec-time-grid .ec-body .ec-sidebar {
+  background-image:
+    linear-gradient(to left, transparent .375rem, var(--ec-bg-color) .375rem),
+    linear-gradient(to top, var(--ec-bg-color) 1px, transparent 1px),
+    linear-gradient(to top, var(--cal-hour-line) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% calc(var(--ec-slot-height) * var(--ec-slot-label-periodicity));
+}

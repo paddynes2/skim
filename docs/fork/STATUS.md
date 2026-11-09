@@ -4,7 +4,11 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-11-07.**
+**As of 2026-11-09.**
+
+## Version 1.1.49 (November 9)
+
+D96: the calendar's hour lines are solid and darker; half-hour lines stay faint. Checked in the browser demo in Pastel and Base dark at 1600x1000 before the build.
 
 ## Version 1.1.48 (November 7)
 
