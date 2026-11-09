@@ -145,6 +145,9 @@ export function errorCode(e: unknown): string | null {
   return null;
 }
 
+/** Rule refusals (gcal_input) that have their own sentence (D98). */
+const CAL_RULES = ["event_type_primary_only", "event_type_no_guests", "event_type_timed_only", "event_type_fixed", "move_instance", "move_event_type", "move_other_account", "move_read_only", "move_not_synced", "move_pending", "color_invalid", "calendar_invalid"];
+
 /** A calendar error as one sentence for the UI. Known codes map to their
  *  `fork.cal.err.*` string; anything else shows the backend message. */
 export function calendarErrorText(e: unknown): string {
@@ -163,7 +166,7 @@ export function calendarErrorText(e: unknown): string {
   ];
   // A refused input that names its rule (D97) gets that rule's sentence.
   const detail = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
-  if (code === "gcal_input" && ["event_type_primary_only", "move_instance"].includes(detail)) return t(`fork.cal.err.${detail}`);
+  if (code === "gcal_input" && CAL_RULES.includes(detail)) return t(`fork.cal.err.${detail}`);
   if (code && known.includes(code)) {
     const text = t(`fork.cal.err.${code}`);
     // The mismatch error names the two addresses; keep them.

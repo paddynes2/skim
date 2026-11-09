@@ -670,7 +670,7 @@
   "fork.cal.err.gcal_not_configured": "Google client ID is not set. Paste it under Settings → Calendar.",
   "fork.cal.err.gcal_not_connected": "Google Calendar is not connected for this account.",
   "fork.cal.err.gcal_account_mismatch": "That browser is signed in to a different Google account.",
-  "fork.cal.err.gcal_scope": "Google did not grant the calendar permissions. Disconnect and connect again.",
+  "fork.cal.err.gcal_scope": "Google has not allowed this yet. Reconnect Google from the calendar list.",
   "fork.cal.err.gcal_api": "Google Calendar answered with an error.",
   "fork.cal.err.gcal_input": "That event is not valid.",
   "fork.cal.ops_failed": "A calendar change could not be saved to Google.",
@@ -1325,5 +1325,15 @@
   "fork.cal.fmt_link": "Link",
   "fork.cal.said_accepted": "You said yes",
   "fork.cal.said_tentative": "You said maybe",
-  "fork.cal.said_declined": "You said no"
+  "fork.cal.said_declined": "You said no",
+  "fork.cal.err.event_type_no_guests": "Out of office and focus time cannot have guests.",
+  "fork.cal.err.event_type_timed_only": "Out of office and focus time need a start and end time, not all day.",
+  "fork.cal.err.event_type_fixed": "Google does not let an event change its type. Make a new one instead.",
+  "fork.cal.err.move_event_type": "Only a normal event can move to another calendar.",
+  "fork.cal.err.move_other_account": "An event can only move between calendars of the same account.",
+  "fork.cal.err.move_read_only": "You cannot change one of those calendars.",
+  "fork.cal.err.move_not_synced": "Wait until the event has reached Google, then move it.",
+  "fork.cal.err.move_pending": "An earlier change to this event is still on its way to Google. Try again in a moment.",
+  "fork.cal.err.color_invalid": "That colour is not valid.",
+  "fork.cal.err.calendar_invalid": "Enter an email address or a calendar ID."
 }
