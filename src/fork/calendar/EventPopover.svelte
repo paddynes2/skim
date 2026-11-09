@@ -270,7 +270,7 @@
   .desc { max-height: 180px; overflow-y: auto; }
   .desc :global(p) { margin: 0 0 6px; }
   .desc :global(ul), .desc :global(ol) { margin: 0 0 6px; padding-left: 18px; }
-  .desc :global(a) { color: var(--link, var(--primary)); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer; }
+  .desc :global(a) { color: var(--text); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer; }
   .guests p { margin: 0 0 8px; }
   .guests ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
   .guests li { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text); }
@@ -282,7 +282,7 @@
   .mark.wait { display: none; }
   .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who em { font-style: normal; color: var(--text-faint); font-size: 11.5px; margin-left: 4px; }
-  .link { color: var(--link, var(--primary)); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; text-align: left; overflow-wrap: anywhere; }
+  .link { color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; text-align: left; overflow-wrap: anywhere; }
   .error { color: var(--danger); font-size: 12px; }
   footer { margin: 12px -16px -14px; padding: 10px 16px 12px; border-top: 1px solid var(--hairline); display: grid; gap: 8px; }
   .going { display: flex; align-items: center; gap: 6px; }
