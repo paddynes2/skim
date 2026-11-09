@@ -46,6 +46,10 @@ export interface EventRow {
   options?: EventOptions;
   /** Google's iCalUID; the same meeting seen through two accounts shares it (D97). */
   ical_uid?: string | null;
+  /** Google's eventType: default, outOfOffice, focusTime, workingLocation, birthday, fromGmail. */
+  event_type?: string | null;
+  /** Google's end.timeZone when it differs from the start's. */
+  end_time_zone?: string | null;
 }
 
 /** What create / patch take. Every field optional; a patch names only what changed. */
@@ -61,6 +65,8 @@ export interface EventInput {
   end_date?: string;
   /** IANA zone sent with dateTime. */
   time_zone?: string;
+  /** The end's zone when it differs from the start's (D97). */
+  end_time_zone?: string;
   /** Guest addresses; [] clears the list. */
   attendees?: string[];
   add_meet?: boolean;
@@ -82,6 +88,11 @@ export interface EventOptions {
   guestsCanModify?: boolean;
   guestsCanInviteOthers?: boolean;
   guestsCanSeeOtherGuests?: boolean;
+  /** Google event type (D97): set on create only; Google refuses a change. */
+  eventType?: "default" | "outOfOffice" | "focusTime" | "workingLocation" | string;
+  outOfOfficeProperties?: { autoDeclineMode?: string; declineMessage?: string };
+  focusTimeProperties?: { autoDeclineMode?: string; declineMessage?: string; chatStatus?: string };
+  workingLocationProperties?: Record<string, unknown>;
 }
 
 /** Never implicit: the editor asks when the event has guests. */
@@ -96,6 +107,8 @@ export interface CalStatus {
   connected: boolean;
   engine_running: boolean;
   pending_ops: number;
+  /** Google permissions Skim asks for that this connection lacks; reconnect to grant them (D97). */
+  missing_scopes?: string[];
 }
 
 export interface ClientStatus {

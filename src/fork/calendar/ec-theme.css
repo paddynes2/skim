@@ -320,3 +320,15 @@
 :root[data-theme="pastel-light"] .fork-cal.look-a .cal-event-time { color: #3f4148; }
 :root[data-theme="pastel-light"] .fork-cal.look-a .ec-header,
 :root[data-theme="pastel-light"] .fork-cal.look-a .ec { --ec-bg-color: var(--surface); }
+
+/* Print (D97): only the grid, every visible hour, no app chrome. */
+@media print {
+  body * { visibility: hidden !important; }
+  .fork-cal .print-area, .fork-cal .print-area * { visibility: visible !important; }
+  .fork-cal .print-area { position: absolute !important; left: 0; top: 0; width: 100% !important; height: auto !important; overflow: visible !important; padding: 0 !important; background: #fff !important; }
+  .fork-cal .print-area .ec, .fork-cal .print-area .ec-main { height: auto !important; overflow: visible !important; }
+  .fork-cal .print-area .ec-header { position: static !important; }
+  .fork-cal .ec-event { break-inside: avoid; }
+  .print-title { display: block !important; font: 600 16px var(--font-ui); margin: 0 0 8px; }
+}
+.print-title { display: none; }

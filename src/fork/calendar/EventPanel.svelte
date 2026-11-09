@@ -36,6 +36,9 @@
   import { calendarApi } from "./api";
   import OptionsEditor from "./OptionsEditor.svelte";
   import { calPrefs } from "./settings.svelte";
+  import RichDescription from "./RichDescription.svelte";
+  import { safeDescription } from "./description";
+  import { deleteWithUndo } from "./undo.svelte";
   import RepeatEditor from "./RepeatEditor.svelte";
   import { changedOptions, eventOptions, zonedParts, eventTimestamp, zonedTimestamp } from "./editor";
 
@@ -77,10 +80,27 @@
   let calendarId = $state<number>(seed?.calendar_id ?? calendar.writableCalendars.find((c) => c.is_primary)?.id ?? calendar.writableCalendars[0]?.id ?? 0);
   let guests = $state(seed ? guestsValue(seed, own) : "");
   let location = $state(seed?.location ?? "");
-  let description = $state(seed?.description ?? "");
+  // The editor holds HTML; a plain-text description opens as safe HTML and is
+  // only sent back when the words change (D97).
+  const descriptionStart = safeDescription(seed?.description ?? "");
+  let description = $state(descriptionStart);
   // New events follow Settings, "New events: Add Google Meet" (D97).
   let addMeet = $state(!seed && calPrefs.addMeetDefault);
   let zone = $state(seed?.time_zone ?? localZone());
+  // Separate end time zone (D97): off unless the event already has one.
+  let endZone = $state(seed?.end_time_zone && seed.end_time_zone !== (seed?.time_zone ?? localZone()) ? seed.end_time_zone : (seed?.time_zone ?? localZone()));
+  let separateEnd = $state(!!seed?.end_time_zone && seed.end_time_zone !== (seed?.time_zone ?? localZone()));
+  const endZoneOf = () => (separateEnd ? endZone : zone);
+  // Google event types (D97): only new events on the primary calendar of a
+  // Workspace account; an existing one keeps its type.
+  type Kind = "default" | "outOfOffice" | "focusTime" | "workingLocation";
+  let kind = $state<Kind>((seed?.event_type as Kind) || (seed?.options?.eventType as Kind) || "default");
+  let declineMode = $state<string>("declineOnlyNewConflictingInvitations");
+  let declineMessage = $state("");
+  let placeKind = $state<"homeOffice" | "officeLocation" | "customLocation">("homeOffice");
+  let placeLabel = $state("");
+  // Move (D97): an existing event can go to another calendar of the same account.
+  let moveTo = $state<number>(seed?.calendar_id ?? 0);
   let options = $state(eventOptions(seed?.options, seed?.transparency));
   let optionalGuests = $state<string[]>(seed ? parseAttendees(seed).filter((a) => a.optional).map((a) => a.email.toLowerCase()) : []);
   let repeatInvalid = $state(false);
@@ -88,7 +108,7 @@
   let previousZone = untrack(() => zone);
   if (!allDay0) {
     const start = zonedParts(start0.getTime() / 1000, previousZone);
-    const end = zonedParts(end0.getTime() / 1000, previousZone);
+    const end = zonedParts(end0.getTime() / 1000, untrack(() => (separateEnd ? endZone : previousZone)));
     startDate = start.date; startTime = start.time; endDate = end.date; endTime = end.time;
   }
   const guestAddresses = $derived(splitAddresses(guests));
@@ -147,14 +167,21 @@
   }
 
   const calRow = $derived(row ? calendar.calendarOf(row) : calendar.calendars.find((c) => c.id === calendarId));
+  /** Event types exist only on a Workspace account's primary calendar. */
+  const kindsAllowed = $derived(isNew && !!calRow?.is_primary && !/@(gmail|googlemail)\.com$/i.test(calRow?.google_id ?? ""));
+  const special = $derived(kind !== "default");
+  const moveTargets = $derived(row ? calendar.writableCalendars.filter((c) => c.account_id === calendar.calendarOf(row!)?.account_id) : []);
+  const canMove = $derived(!!row && editable && !row.recurring_event_id && !seriesMode && !followingMode && (row.event_type ?? "default") === "default" && moveTargets.length > 1);
+  $effect(() => { if (!kindsAllowed && isNew) kind = "default"; });
+  $effect(() => { if (kind === "outOfOffice" || kind === "focusTime") allDay = false; if (kind === "workingLocation" && isNew) allDay = true; });
   const timeInvalid = $derived.by(() => {
     if (allDay) return endDate < startDate;
-    const s = eventTimestamp(startDate, startTime, zone, row?.start_ts), e = eventTimestamp(endDate, endTime, zone, row?.end_ts);
+    const s = eventTimestamp(startDate, startTime, zone, row?.start_ts), e = eventTimestamp(endDate, endTime, endZoneOf(), row?.end_ts);
     return s === null || e === null || e <= s;
   });
 
   const proposedStart = $derived(allDay ? zonedTimestamp(startDate, "00:00", zone) : eventTimestamp(startDate, startTime, zone, row?.start_ts));
-  const proposedEnd = $derived(allDay ? zonedTimestamp(shiftDate(endDate, 1), "00:00", zone) : eventTimestamp(endDate, endTime, zone, row?.end_ts));
+  const proposedEnd = $derived(allDay ? zonedTimestamp(shiftDate(endDate, 1), "00:00", zone) : eventTimestamp(endDate, endTime, separateEnd ? endZone : zone, row?.end_ts));
   let conflictRows = $state<EventRow[]>([]);
   const conflicts = $derived(overlappingEvents(conflictRows, proposedStart ?? NaN, proposedEnd ?? NaN, originalRow?.id, (date) => zonedTimestamp(date, "00:00", zone)));
   $effect(() => {
@@ -174,7 +201,7 @@
     };
     set("summary", title.trim(), row?.summary);
     set("location", location.trim(), row?.location ?? "");
-    set("description", description, row?.description ?? "");
+    if (isNew ? description.replace(/<[^>]*>/g, "").trim() !== "" : description !== descriptionStart) input.description = description;
     const wantGuests = splitAddresses(guests);
     const hadGuests = row ? others.map((a) => a.email.toLowerCase()) : [];
     if (isNew ? wantGuests.length > 0 : wantGuests.join(",") !== hadGuests.join(",")) input.attendees = wantGuests;
@@ -188,12 +215,14 @@
       }
     } else {
       const s = eventTimestamp(startDate, startTime, zone, row?.start_ts)!;
-      const e = eventTimestamp(endDate, endTime, zone, row?.end_ts)!;
-      if (isNew || row?.all_day || s !== row?.start_ts || e !== row?.end_ts || zone !== (row?.time_zone ?? localZone())) {
+      const e = eventTimestamp(endDate, endTime, endZoneOf(), row?.end_ts)!;
+      const hadEndZone = row?.end_time_zone ?? row?.time_zone ?? localZone();
+      if (isNew || row?.all_day || s !== row?.start_ts || e !== row?.end_ts || zone !== (row?.time_zone ?? localZone()) || endZoneOf() !== hadEndZone) {
         input.all_day = false;
         input.start_ts = s;
         input.end_ts = e;
         input.time_zone = zone;
+        if (separateEnd || (row?.end_time_zone && row.end_time_zone !== zone)) input.end_time_zone = endZoneOf();
       }
     }
     if (!allDay && zone !== (row?.time_zone ?? localZone())) input.time_zone = zone;
@@ -202,7 +231,18 @@
     const hadOptional = row ? parseAttendees(row).filter((a) => a.optional).map((a) => a.email.toLowerCase()).sort() : [];
     const wantOptional = optionalGuests.filter((e) => guestAddresses.includes(e)).sort();
     if (JSON.stringify(wantOptional) !== JSON.stringify(hadOptional)) input.optional_attendees = wantOptional;
-    if (addMeet && !row?.hangout_link) input.add_meet = true;
+    if (addMeet && !row?.hangout_link && kind === "default") input.add_meet = true;
+    if (isNew && kind !== "default") {
+      const o = { ...(input.options ?? {}) } as NonNullable<EventInput["options"]>;
+      o.eventType = kind;
+      if (kind === "outOfOffice") o.outOfOfficeProperties = { autoDeclineMode: declineMode, declineMessage: declineMessage.trim() || undefined };
+      if (kind === "focusTime") o.focusTimeProperties = { autoDeclineMode: declineMode, declineMessage: declineMessage.trim() || undefined, chatStatus: "doNotDisturb" };
+      if (kind === "workingLocation") o.workingLocationProperties = placeKind === "homeOffice" ? { type: "homeOffice", homeOffice: {} } : { type: placeKind, [placeKind]: { label: placeLabel.trim() } };
+      input.options = o;
+      delete input.attendees;
+      delete input.optional_attendees;
+      if (!input.summary) input.summary = t(`fork.cal.kind_${kind}`);
+    }
     return input;
   }
 
@@ -213,13 +253,16 @@
     try {
       const input = buildInput();
       if (row) {
-        if (Object.keys(input).length === 0) {
+        if (Object.keys(input).length === 0 && !(canMove && moveTo !== row.calendar_id)) {
           onclose();
           return;
         }
         if (seriesMode) input.series = true;
         if (followingMode) input.following = true;
-        if (await calendar.patch(row.id, input)) onclose();
+        const moving = canMove && moveTo !== row.calendar_id;
+        if (Object.keys(input).length && !(await calendar.patch(row.id, input))) return;
+        if (moving && !(await calendar.move(row.id, moveTo))) return;
+        onclose();
       } else {
         if (!calendarId) throw { code: "gcal_input", message: t("fork.cal.err.no_calendar") };
         const created = await calendar.create(calendarId, input);
@@ -241,7 +284,7 @@
     error = null;
     saving = true;
     try {
-      if (await calendar.remove(row.id, seriesMode)) onclose();
+      if (await deleteWithUndo(row, seriesMode)) onclose();
       else deleteStep = 0;
     } catch (e: unknown) {
       error = calendarErrorText(e);
@@ -283,6 +326,15 @@
     <!-- svelte-ignore a11y_autofocus -->
     <textarea class="title" rows="2" aria-label={t("fork.cal.title_placeholder")} placeholder={t("fork.cal.title_placeholder")} bind:value={title} readonly={!editable} autofocus={isNew}></textarea>
 
+    {#if kindsAllowed}
+      <div class="kinds" role="radiogroup" aria-label={t("fork.cal.event_type")}>
+        {#each ["default", "outOfOffice", "focusTime", "workingLocation"] as const as k (k)}
+          <button type="button" role="radio" aria-checked={kind === k} class:active={kind === k} onclick={() => (kind = k)}>{t(`fork.cal.kind_${k}`)}</button>
+        {/each}
+      </div>
+    {:else if !isNew && kind !== "default"}
+      <div class="kind-tag">{t(`fork.cal.kind_${kind}`)}</div>
+    {/if}
     {#if row}
       <div class="when-line">{fmtWhen(row)}</div>
     {/if}
@@ -324,10 +376,12 @@
       </div>
     {/if}
     <h3>{t("fork.cal.date_time")}</h3>
-    <label class="row check">
-      <input type="checkbox" bind:checked={allDay} disabled={!editable} />
-      <span>{t("fork.cal.all_day")}</span>
-    </label>
+    {#if kind !== "outOfOffice" && kind !== "focusTime"}
+      <label class="row check">
+        <input type="checkbox" bind:checked={allDay} disabled={!editable} />
+        <span>{t("fork.cal.all_day")}</span>
+      </label>
+    {/if}
 
     <div class="row times" class:invalid={timeInvalid}>
       <span class="label">{t("fork.cal.starts")}</span>
@@ -343,6 +397,10 @@
     {#if !allDay}
       <label class="row"><span class="label">{t("fork.cal.time_zone")}</span><input list="event-time-zones" aria-label={t("fork.cal.time_zone")} bind:value={zone} onchange={zoneChanged} readonly={!editable} /></label>
       <datalist id="event-time-zones">{#each zones as z}<option value={z}></option>{/each}</datalist>
+      {#if separateEnd}
+        <label class="row"><span class="label">{t("fork.cal.end_time_zone")}</span><input list="event-time-zones" aria-label={t("fork.cal.end_time_zone")} bind:value={endZone} readonly={!editable} /></label>
+      {/if}
+      {#if editable}<label class="row check"><input type="checkbox" bind:checked={separateEnd} onchange={() => { if (separateEnd) endZone = zone; }} /><span>{t("fork.cal.separate_end_zone")}</span></label>{/if}
     {/if}
     {#key `${seriesMode}-${followingMode}`}
       {#if !originalRow?.recurring_event_id || seriesMode || followingMode}
@@ -350,6 +408,32 @@
       {/if}
     {/key}
     {#if conflicts.length}<div class="conflicts" role="status"><strong>{t("fork.cal.conflicts", { count: conflicts.length })}</strong>{#each conflicts as conflict}<span>{conflict.summary || t("fork.cal.untitled")} &middot; {fmtWhen(conflict)}</span>{/each}<small>{t("fork.cal.conflicts_scope")}</small></div>{/if}
+    {#if special && isNew}
+      {#if kind === "outOfOffice" || kind === "focusTime"}
+        <div class="row">
+          <span class="label">{t("fork.cal.auto_decline")}</span>
+          <select bind:value={declineMode}>
+            <option value="declineOnlyNewConflictingInvitations">{t("fork.cal.decline_new")}</option>
+            <option value="declineAllConflictingInvitations">{t("fork.cal.decline_all")}</option>
+            <option value="declineNone">{t("fork.cal.decline_none")}</option>
+          </select>
+        </div>
+        {#if declineMode !== "declineNone"}
+          <div class="row"><span class="label">{t("fork.cal.decline_message")}</span><input bind:value={declineMessage} placeholder={t("fork.cal.decline_message_placeholder")} /></div>
+        {/if}
+      {:else if kind === "workingLocation"}
+        <div class="row">
+          <span class="label">{t("fork.cal.working_from")}</span>
+          <select bind:value={placeKind}>
+            <option value="homeOffice">{t("fork.cal.place_home")}</option>
+            <option value="officeLocation">{t("fork.cal.place_office")}</option>
+            <option value="customLocation">{t("fork.cal.place_other")}</option>
+          </select>
+        </div>
+        {#if placeKind !== "homeOffice"}<div class="row"><span class="label">{t("fork.cal.place_label")}</span><input bind:value={placeLabel} /></div>{/if}
+      {/if}
+    {/if}
+    {#if !special}
     <h3 class="section-heading">{t("fork.cal.people_place")}</h3>
 
     {#if isNew}
@@ -357,6 +441,15 @@
         <span class="label">{t("fork.cal.calendar")}</span>
         <select bind:value={calendarId} disabled={!editable}>
           {#each calendar.writableCalendars as c (c.id)}
+            <option value={c.id}>{c.summary}</option>
+          {/each}
+        </select>
+      </div>
+    {:else if canMove}
+      <div class="row">
+        <span class="label">{t("fork.cal.calendar")}</span>
+        <select bind:value={moveTo} aria-label={t("fork.cal.move_to")}>
+          {#each moveTargets as c (c.id)}
             <option value={c.id}>{c.summary}</option>
           {/each}
         </select>
@@ -419,9 +512,10 @@
         <span class="sw-label">{t("fork.cal.add_meet")}</span>
       {/if}
     </div>
+    {/if}
 
     <h3 class="section-heading">{t("fork.cal.description")}</h3>
-    <textarea aria-label={t("fork.cal.description")} class="desc" bind:value={description} readonly={!editable} placeholder={editable ? t("fork.cal.description_placeholder") : ""} rows="4"></textarea>
+    <RichDescription bind:value={description} readonly={!editable} placeholder={editable ? t("fork.cal.description_placeholder") : ""} />
 
     <AttachmentLinks bind:value={options.attachments} editable={editable && !seriesMode && !followingMode} />
     <OptionsEditor bind:value={options} disabled={!editable || loadingSeries} />
@@ -554,8 +648,7 @@
   .times.invalid input {
     border-color: var(--danger);
   }
-  .row input[readonly],
-  .desc[readonly] {
+  .row input[readonly] {
     border-color: transparent;
     background: transparent;
     padding-left: 0;
@@ -766,4 +859,8 @@
       transition: none;
     }
   }
+  .kinds { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 10px; }
+  .kinds button { padding: 4px 11px; border: 1px solid var(--hairline-strong); border-radius: 99px; font-size: 12px; color: var(--text-dim); }
+  .kinds button.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .kind-tag { display: inline-block; margin: 2px 0 8px; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; background: var(--hover); color: var(--text-dim); }
 </style>

@@ -358,6 +358,12 @@
 
   function onKeydown(e: KeyboardEvent) {
     if (ui.view !== "calendar" || palette.open || ui.settingsOpen || ui.shortcutsOpen) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.code === "KeyP") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.print();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.code === "KeyZ" && !isTyping()) {
       if (calUndo.run()) { e.preventDefault(); e.stopImmediatePropagation(); }
       return;
@@ -459,6 +465,9 @@
         <input bind:this={searchInput} type="search" placeholder={t("fork.cal.search_events")} value={searchText} oninput={(e) => onSearchInput(e.currentTarget.value)} aria-label={t("fork.cal.search_events")} />
         <kbd>/</kbd>
       </label>
+      <button class="icon" onclick={() => window.print()} aria-label={t("fork.cal.print")} title={`${t("fork.cal.print")} (Ctrl+P)`}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2M4.5 9.5h7v4h-7z" /></svg>
+      </button>
       <button class="new" onclick={() => calendar.newEvent()} disabled={!calendar.connected} title="C">
         <span class="plus">+</span><span class="label">{t("fork.cal.new_event")}</span>
       </button>
@@ -476,7 +485,8 @@
     {/if}
     {#if calPrefs.secondTz && timed(calendar.view) && !calendar.search.open}<div class="zone-legend" title={t("fork.cal.zone_anchor", { date: calendar.date.toLocaleDateString(getLocale()) })}><span>{calPrefs.secondTz.split("/").at(-1)?.replaceAll("_", " ")}</span><span>{localZone().split("/").at(-1)?.replaceAll("_", " ")}</span></div>{/if}
 
-    <div class="grid" class:second-clock={!!calPrefs.secondTz} class:hidden-grid={calendar.view === "year" || calendar.search.open} bind:this={gridEl}>
+    <div class="grid print-area" class:second-clock={!!calPrefs.secondTz} class:hidden-grid={calendar.view === "year" || calendar.search.open} bind:this={gridEl}>
+      <h1 class="print-title">{title}</h1>
       <Calendar plugins={PLUGINS} {options}>
         {#snippet eventContent({ event, timeText })}
           <span class="cal-event-content">
@@ -553,7 +563,8 @@
   :global(:root[data-theme="pastel-light"]) .fork-cal .outline, :global(:root[data-theme="pastel-light"]) .fork-cal .views, :global(:root[data-theme="pastel-light"]) .fork-cal .search { border-color: var(--ink); background: #fff; }
   /* The bar follows the width it has, which shrinks when the editor is open. */
   @container calmain (max-width: 1060px) { .search { width: 150px; } .week-tag { display: none; } }
-  @container calmain (max-width: 940px) { .search { width: 34px; min-width: 34px; padding: 5px 9px; } .search input, .search kbd { display: none; } .search:focus-within { width: 160px; } .search:focus-within input { display: block; } }
+  /* Narrow: the box folds to its icon but the input stays focusable, so / still opens it. */
+  @container calmain (max-width: 940px) { .search { width: 34px; min-width: 34px; padding: 5px 9px; } .search input { width: 0; flex: 0 0 0; padding: 0; } .search kbd { display: none; } .search:focus-within, .search.active { width: 170px; } .search:focus-within input, .search.active input { width: auto; flex: 1; } }
   @container calmain (max-width: 820px) { .views button { padding: 4px 8px; } .new .label { display: none; } .bar > .icon:first-child { display: none; } }
   @container calmain (max-width: 700px) { .views { display: none; } }
   @media (max-width: 1100px) {
