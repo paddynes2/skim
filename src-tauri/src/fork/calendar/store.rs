@@ -98,6 +98,50 @@ pub fn set_selected(conn: &Connection, calendar_id: i64, selected: bool) -> rusq
     .map(|_| ())
 }
 
+/// Insert or refresh one calendar the user just added or created, selected,
+/// without pruning the others (unlike [`upsert_calendars`]). Returns the row.
+pub fn upsert_selected_calendar(
+    conn: &Connection,
+    c: &CalendarRow,
+) -> rusqlite::Result<CalendarRow> {
+    conn.execute(
+        "INSERT INTO fork_cal_calendars
+            (account_id, google_id, summary, color, is_primary, selected, access_role)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)
+         ON CONFLICT(account_id, google_id) DO UPDATE SET
+            summary = excluded.summary, color = coalesce(excluded.color, color),
+            is_primary = excluded.is_primary, access_role = excluded.access_role,
+            selected = 1",
+        params![
+            c.account_id,
+            c.google_id,
+            c.summary,
+            c.color,
+            c.is_primary as i64,
+            c.access_role
+        ],
+    )?;
+    conn.query_row(
+        &format!(
+            "SELECT {CAL_COLS} FROM fork_cal_calendars WHERE account_id = ?1 AND google_id = ?2"
+        ),
+        params![c.account_id, c.google_id],
+        calendar_row,
+    )
+}
+
+pub fn set_calendar_color(
+    conn: &Connection,
+    calendar_id: i64,
+    color: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE fork_cal_calendars SET color = ?2 WHERE id = ?1",
+        params![calendar_id, color],
+    )
+    .map(|_| ())
+}
+
 pub fn delete_account_data(conn: &Connection, account_id: &str) -> rusqlite::Result<()> {
     conn.execute(
         "DELETE FROM fork_cal_calendars WHERE account_id = ?1",
@@ -303,7 +347,8 @@ pub fn update_local_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<(
         "UPDATE fork_cal_events SET
             summary = ?2, description = ?3, location = ?4, start_ts = ?5, end_ts = ?6,
             all_day = ?7, start_date = ?8, end_date = ?9, time_zone = ?10,
-            attendees_json = ?11, self_response = ?12, transparency = ?13, options_json = ?14
+            attendees_json = ?11, self_response = ?12, transparency = ?13, options_json = ?14,
+            end_time_zone = ?15
          WHERE id = ?1",
         params![
             e.id,
@@ -320,7 +365,21 @@ pub fn update_local_event(conn: &Connection, e: &EventRow) -> rusqlite::Result<(
             e.self_response,
             e.transparency,
             serde_json::to_string(&e.options).unwrap_or_else(|_| "{}".into()),
+            e.end_time_zone,
         ],
+    )
+    .map(|_| ())
+}
+
+/// A move: the row shows in the destination calendar at once.
+pub fn set_event_calendar(
+    conn: &Connection,
+    event_id: i64,
+    calendar_id: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE fork_cal_events SET calendar_id = ?2 WHERE id = ?1",
+        params![event_id, calendar_id],
     )
     .map(|_| ())
 }
@@ -548,10 +607,12 @@ pub fn bump_attempts(conn: &Connection, op_id: i64) -> rusqlite::Result<()> {
 }
 
 /// Drop every pending op that names this local event row (a delete of a row
-/// whose create never left the machine).
+/// whose create never left the machine). A queued `move` is kept: the delete
+/// queued after it names the destination calendar, so the move must land
+/// first or the delete would miss the event.
 pub fn drop_ops_for_event(conn: &Connection, event_id: i64) -> rusqlite::Result<usize> {
     conn.execute(
-        "DELETE FROM fork_cal_ops WHERE state IN ('pending', 'failed')
+        "DELETE FROM fork_cal_ops WHERE state IN ('pending', 'failed') AND kind != 'move'
            AND json_extract(payload, '$.event_id') = ?1",
         [event_id],
     )
@@ -860,6 +921,67 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    #[test]
+    fn an_added_calendar_is_selected_and_the_others_stay() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            upsert_calendars(conn, "a1", &[cal("a1", "primary", true)])?;
+            let shared = upsert_selected_calendar(conn, &cal("a1", "kim@example.test", false))?;
+            assert!(shared.selected && shared.id > 0);
+            assert_eq!(list_calendars(conn, "a1")?.len(), 2);
+            // Adding it again (already in the list) keeps one row, selected.
+            set_selected(conn, shared.id, false)?;
+            let again = upsert_selected_calendar(conn, &cal("a1", "kim@example.test", false))?;
+            assert_eq!(again.id, shared.id);
+            assert!(again.selected);
+            set_calendar_color(conn, shared.id, "#336699")?;
+            let mut no_color = cal("a1", "kim@example.test", false);
+            no_color.color = None;
+            let kept = upsert_selected_calendar(conn, &no_color)?;
+            assert_eq!(kept.color.as_deref(), Some("#336699"));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_delete_keeps_the_queued_move_and_the_end_zone_is_saved() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            upsert_calendars(
+                conn,
+                "a1",
+                &[cal("a1", "primary", true), cal("a1", "team", true)],
+            )?;
+            let cals = list_calendars(conn, "a1")?;
+            let (p, t) = (cals[0].id, cals[1].id);
+            replace_window(conn, p, 0, 1000, &[ev(p, "g1", 100, 200)])?;
+            let id = get_cal_event(conn, p, "g1");
+            queue_op(conn, "a1", "patch", &serde_json::json!({"event_id": id}))?;
+            let mv = queue_op(conn, "a1", "move", &serde_json::json!({"event_id": id}))?;
+            set_event_calendar(conn, id, t)?;
+            assert_eq!(get_event(conn, id)?.unwrap().calendar_id, t);
+            assert_eq!(drop_ops_for_event(conn, id)?, 1, "only the patch");
+            assert_eq!(next_op(conn, "a1")?.map(|o| o.0), Some(mv));
+            let mut row = get_event(conn, id)?.unwrap();
+            row.end_time_zone = Some("Europe/London".into());
+            update_local_event(conn, &row)?;
+            assert_eq!(
+                get_event(conn, id)?.unwrap().end_time_zone.as_deref(),
+                Some("Europe/London")
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    fn get_cal_event(conn: &Connection, calendar_id: i64, gid: &str) -> i64 {
+        event_by_google_id(conn, calendar_id, gid)
+            .unwrap()
+            .unwrap()
+            .id
     }
 
     #[test]

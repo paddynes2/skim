@@ -23,6 +23,11 @@ pub struct CalStatus {
     /// The sync engine for it is running.
     pub engine_running: bool,
     pub pending_ops: i64,
+    /// Wanted scopes the stored grant lacks (empty when not connected). A
+    /// grant from before D98 lists `calendar.calendarlist` and
+    /// `calendar.calendars`: events still work, calendar list writes need a
+    /// reconnect.
+    pub missing_scopes: Vec<String>,
 }
 
 async fn status(db: &crate::db::Db, account_id: &str) -> Result<CalStatus> {
@@ -33,11 +38,18 @@ async fn status(db: &crate::db::Db, account_id: &str) -> Result<CalStatus> {
         })
         .await
         .unwrap_or(0);
+    let connected = google::is_connected(account_id)?;
+    let missing_scopes = if connected {
+        google::missing_scopes(google::granted_scopes(account_id)?.as_deref())
+    } else {
+        vec![]
+    };
     Ok(CalStatus {
         configured: google::client_config()?.is_some(),
-        connected: google::is_connected(account_id)?,
+        connected,
         engine_running: super::handle(account_id).is_some(),
         pending_ops: pending,
+        missing_scopes,
     })
 }
 
@@ -241,9 +253,122 @@ pub fn local_row_from_input(calendar_id: i64, input: &EventInput) -> Result<Even
         local_only: true,
         options: input.options.clone(),
         ical_uid: None,
-        event_type: None,
-        end_time_zone: None,
+        event_type: input.options.event_type.clone(),
+        end_time_zone: input
+            .end_time_zone
+            .clone()
+            .filter(|z| !z.is_empty() && !all_day),
     })
+}
+
+fn input_error(message: &'static str) -> SkimError {
+    SkimError::other("gcal_input", message)
+}
+
+/// Whether the input describes an all-day event (the rule `event_body` uses).
+fn input_all_day(input: &EventInput) -> bool {
+    input
+        .all_day
+        .unwrap_or(input.start_date.is_some() && input.start_ts.is_none())
+}
+
+fn input_has_guests(input: &EventInput) -> bool {
+    [&input.attendees, &input.optional_attendees]
+        .iter()
+        .any(|list| {
+            list.as_ref()
+                .is_some_and(|l| l.iter().any(|e| !e.trim().is_empty()))
+        })
+}
+
+/// A properties object may only ride on its own event type.
+fn check_type_properties(input: &EventInput, event_type: &str) -> Result<()> {
+    let o = &input.options;
+    let stray = (o.out_of_office_properties.is_some() && event_type != "outOfOffice")
+        || (o.focus_time_properties.is_some() && event_type != "focusTime")
+        || (o.working_location_properties.is_some() && event_type != "workingLocation");
+    if stray {
+        return Err(input_error("event_type_properties"));
+    }
+    Ok(())
+}
+
+/// What each event type demands of its fields, shared by create and patch.
+/// `all_day` is the event's state after the change.
+fn check_type_shape(input: &mut EventInput, event_type: &str, all_day: bool) -> Result<()> {
+    match event_type {
+        "outOfOffice" | "focusTime" => {
+            if input_has_guests(input) {
+                return Err(input_error("event_type_no_guests"));
+            }
+            if all_day {
+                return Err(input_error("event_type_timed_only"));
+            }
+        }
+        "workingLocation" => {
+            input.options.transparency = Some("transparent".into());
+            input.options.visibility = Some("public".into());
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// The event type rules for a create on `calendar` (D98): one of the four
+/// writable types; anything but `default` only on the account's primary
+/// calendar; out of office and focus time take no guests and are timed;
+/// working location is always free and public and names its place.
+pub fn apply_event_type_create(input: &mut EventInput, calendar: &CalendarRow) -> Result<()> {
+    let event_type =
+        super::options::event_type_or_default(input.options.event_type.as_deref()).to_string();
+    if !super::options::WRITABLE_EVENT_TYPES.contains(&event_type.as_str()) {
+        return Err(input_error("event_type_invalid"));
+    }
+    check_type_properties(input, &event_type)?;
+    if event_type == "default" {
+        return Ok(());
+    }
+    if !calendar.is_primary {
+        return Err(input_error("event_type_primary_only"));
+    }
+    if event_type == "workingLocation" && input.options.working_location_properties.is_none() {
+        return Err(input_error("event_type_properties"));
+    }
+    let all_day = input_all_day(input);
+    check_type_shape(input, &event_type, all_day)
+}
+
+/// The event type rules for a patch of `row` (the occurrence, or the master
+/// for a series edit). Google refuses to change `eventType`, so naming a
+/// different one is refused here; naming the same one is dropped from the
+/// body. The shape rules of the stored type still hold.
+pub fn apply_event_type_patch(input: &mut EventInput, row: &EventRow) -> Result<()> {
+    let current = super::options::event_type_or_default(
+        row.event_type
+            .as_deref()
+            .or(row.options.event_type.as_deref()),
+    )
+    .to_string();
+    if let Some(asked) = input.options.event_type.take() {
+        if super::options::event_type_or_default(Some(&asked)) != current {
+            return Err(input_error("event_type_fixed"));
+        }
+    }
+    check_type_properties(input, &current)?;
+    let all_day = input.all_day.unwrap_or(row.all_day);
+    let touches_shape = input_has_guests(input) || input.all_day.is_some();
+    if current == "workingLocation" {
+        // Only force the pair when the patch names either, so a title edit
+        // stays a title edit.
+        if input.options.transparency.is_some() || input.options.visibility.is_some() {
+            check_type_shape(input, &current, all_day)?;
+        }
+        return Ok(());
+    }
+    if touches_shape {
+        check_type_shape(input, &current, all_day)?;
+    }
+    Ok(())
 }
 
 /// Apply an edit to a stored row (optimistic copy of what the patch will do).
@@ -264,6 +389,9 @@ pub fn apply_input(row: &mut EventRow, input: &EventInput) -> Result<()> {
     }
     if let Some(tz) = &input.time_zone {
         row.time_zone = Some(tz.clone());
+    }
+    if let Some(tz) = input.end_time_zone.as_deref().filter(|z| !z.is_empty()) {
+        row.end_time_zone = Some(tz.to_string());
     }
     let all_day = input.all_day.unwrap_or(row.all_day);
     if all_day {
@@ -344,6 +472,16 @@ pub async fn fork_cal_create(
 ) -> Result<EventRow> {
     require_connected(&account_id)?;
     let send = SendUpdates::parse(&send_updates)?;
+    let mut input = input;
+    let calendar = state
+        .db
+        .read("fork_cal_create", move |conn| {
+            store::get_calendar(conn, calendar_id)
+        })
+        .await?
+        .filter(|c| c.account_id == account_id)
+        .ok_or_else(|| SkimError::other("gcal_input", "unknown calendar for this account"))?;
+    apply_event_type_create(&mut input, &calendar)?;
     let row = local_row_from_input(calendar_id, &input)?;
     let body = gapi::event_body(&input, None);
     let aid = account_id.clone();
@@ -417,13 +555,15 @@ pub async fn fork_cal_patch(
     }
     if input.series {
         let master = fork_cal_series(state.clone(), event_id).await?;
+        let mut input = input;
+        apply_event_type_patch(&mut input, &master)?;
         let mut validated = master.clone();
         apply_input(&mut validated, &input)?;
         let existing = master
             .attendees_json
             .as_deref()
             .and_then(|s| serde_json::from_str::<Value>(s).ok());
-        let body = gapi::event_body(&input, existing.as_ref());
+        let body = gapi::event_body_for(&input, existing.as_ref(), master.end_time_zone.as_deref());
         let (account_id, row) = state
             .db
             .call(move |conn| {
@@ -467,11 +607,16 @@ pub async fn fork_cal_patch(
                     "Edit the series to change recurrence",
                 ))));
             }
+            let mut input = input;
+            if let Err(e) = apply_event_type_patch(&mut input, &row) {
+                return Ok(Some(Err(e)));
+            }
             let existing: Option<Value> = row
                 .attendees_json
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok());
-            let body = gapi::event_body(&input, existing.as_ref());
+            let body =
+                gapi::event_body_for(&input, existing.as_ref(), row.end_time_zone.as_deref());
             if let Err(e) = require_connected(&cal.account_id) {
                 return Ok(Some(Err(e)));
             }
@@ -532,9 +677,15 @@ async fn patch_following(
             "Only the organizer can split this recurring event.",
         ));
     }
+    let mut input = input;
+    apply_event_type_patch(&mut input, &row)?;
     let mut validation = row.clone();
     apply_input(&mut validation, &input)?;
-    let body = gapi::event_body(&input, master.get("attendees"));
+    let body = gapi::event_body_for(
+        &input,
+        master.get("attendees"),
+        master["end"]["timeZone"].as_str(),
+    );
     let instances = if super::split::occurrence_count(&master)?.is_some() {
         gapi::fetch_instances(&cal.account_id, &cal.google_id, series_id).await?
     } else {
@@ -861,6 +1012,252 @@ pub async fn fork_cal_rsvp(
     Ok(row)
 }
 
+fn writable(cal: &CalendarRow) -> bool {
+    matches!(cal.access_role.as_str(), "owner" | "writer")
+}
+
+/// The rules for moving `row` from `from` to `to` (D98). Google moves only
+/// the organiser's copy of a single event or a whole series, of the default
+/// type, between calendars of one account that the user can write.
+pub fn check_move(row: &EventRow, from: &CalendarRow, to: &CalendarRow) -> Result<()> {
+    if row.recurring_event_id.is_some() {
+        return Err(input_error("move_instance"));
+    }
+    let event_type = row
+        .event_type
+        .as_deref()
+        .or(row.options.event_type.as_deref());
+    if super::options::event_type_or_default(event_type) != "default" {
+        return Err(input_error("move_event_type"));
+    }
+    if from.account_id != to.account_id {
+        return Err(input_error("move_other_account"));
+    }
+    if from.id == to.id {
+        return Err(input_error("move_same_calendar"));
+    }
+    if !writable(from) || !writable(to) {
+        return Err(input_error("move_read_only"));
+    }
+    if model::is_local_id(&row.google_id) || row.local_only {
+        return Err(input_error("move_not_synced"));
+    }
+    Ok(())
+}
+
+/// The queued `move` op's payload. `calendar_google_id` and `google_id` name
+/// the source copy, so a pull of the source calendar leaves it alone while
+/// the move waits (see `store::replace_window`).
+pub fn move_op_payload(
+    row: &EventRow,
+    from: &CalendarRow,
+    to: &CalendarRow,
+    send: SendUpdates,
+) -> Value {
+    json!({
+        "event_id": row.id,
+        "calendar_google_id": from.google_id,
+        "google_id": row.google_id,
+        "to_calendar_id": to.id,
+        "to_calendar_google_id": to.google_id,
+        "send_updates": send.as_str(),
+    })
+}
+
+/// Move an event to another calendar of the same account: the row moves at
+/// once and a `move` op is queued. `send_updates` is required, as for every
+/// write that can reach guests.
+#[tauri::command]
+pub async fn fork_cal_move(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    event_id: i64,
+    to_calendar_id: i64,
+    send_updates: String,
+) -> Result<EventRow> {
+    let send = SendUpdates::parse(&send_updates)?;
+    require_no_split(&state, event_id).await?;
+    let (account_id, row) = state
+        .db
+        .call(move |conn| {
+            let Some(row) = store::get_event(conn, event_id)? else {
+                return Ok(None);
+            };
+            let (Some(from), Some(to)) = (
+                store::get_calendar(conn, row.calendar_id)?,
+                store::get_calendar(conn, to_calendar_id)?,
+            ) else {
+                return Ok(None);
+            };
+            if let Err(e) =
+                check_move(&row, &from, &to).and_then(|()| require_connected(&from.account_id))
+            {
+                return Ok(Some(Err(e)));
+            }
+            if store::event_has_ops(conn, event_id)? {
+                return Ok(Some(Err(input_error("move_pending"))));
+            }
+            if store::event_by_google_id(conn, to.id, &row.google_id)?.is_some() {
+                return Ok(Some(Err(input_error("move_exists"))));
+            }
+            store::queue_op(
+                conn,
+                &from.account_id,
+                "move",
+                &move_op_payload(&row, &from, &to, send),
+            )?;
+            store::set_event_calendar(conn, event_id, to.id)?;
+            Ok(store::get_event(conn, event_id)?.map(|r| Ok((from.account_id, r))))
+        })
+        .await?
+        .ok_or_else(|| SkimError::other("gcal_input", "unknown event or calendar"))??;
+    emit_updated(&app, &account_id);
+    if let Some(h) = super::handle(&account_id) {
+        h.run_ops();
+    }
+    Ok(row)
+}
+
+/// Set a calendar's colour (`#rrggbb`) in the user's Google calendar list.
+/// A direct call: no guest hears of it. Errors go back to the caller.
+#[tauri::command]
+pub async fn fork_cal_set_color(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    calendar_id: i64,
+    color: String,
+) -> Result<CalendarRow> {
+    let body = gapi::calendar_color_body(&color).ok_or_else(|| input_error("color_invalid"))?;
+    let cal = state
+        .db
+        .read("fork_cal_set_color", move |conn| {
+            store::get_calendar(conn, calendar_id)
+        })
+        .await?
+        .ok_or_else(|| SkimError::other("gcal_input", "unknown calendar"))?;
+    require_connected(&cal.account_id)?;
+    let resp = gapi::patch_calendar_list(&cal.account_id, &cal.google_id, &body).await?;
+    let stored = resp["backgroundColor"]
+        .as_str()
+        .and_then(gapi::parse_hex_color)
+        .unwrap_or_else(|| {
+            body["backgroundColor"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        });
+    let row = state
+        .db
+        .call(move |conn| {
+            store::set_calendar_color(conn, calendar_id, &stored)?;
+            store::get_calendar(conn, calendar_id)
+        })
+        .await?
+        .ok_or_else(|| SkimError::other("gcal_input", "unknown calendar"))?;
+    emit_updated(&app, &row.account_id);
+    Ok(row)
+}
+
+/// The calendar id `fork_cal_add_calendar` sends: trimmed, one token.
+pub fn normalize_calendar_ref(calendar: &str) -> Result<String> {
+    let id = calendar.trim();
+    if id.is_empty() || id.len() > 1024 || id.chars().any(char::is_whitespace) {
+        return Err(input_error("calendar_invalid"));
+    }
+    Ok(id.to_string())
+}
+
+/// Validate a new calendar's name and zone.
+pub fn check_new_calendar(summary: &str, time_zone: &str) -> Result<(String, String)> {
+    let summary = summary.trim();
+    if summary.is_empty() || summary.chars().count() > 255 {
+        return Err(input_error("calendar_summary_invalid"));
+    }
+    let zone = time_zone.trim();
+    if zone.parse::<chrono_tz::Tz>().is_err() {
+        return Err(input_error("time_zone_invalid"));
+    }
+    Ok((summary.to_string(), zone.to_string()))
+}
+
+/// Store a calendar the user added or created, selected, and pull it the way
+/// a newly selected calendar is pulled (`fork_cal_set_selected`).
+async fn adopt_calendar(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    mut row: CalendarRow,
+) -> Result<CalendarRow> {
+    row.selected = true;
+    let stored = state
+        .db
+        .call(move |conn| store::upsert_selected_calendar(conn, &row))
+        .await?;
+    emit_updated(app, &stored.account_id);
+    if let Some(h) = super::handle(&stored.account_id) {
+        h.sync_now();
+    }
+    Ok(stored)
+}
+
+/// Add someone's shared calendar (their address or a calendar id) to the
+/// account's list, selected and syncing. `gcal_not_shared` when Google says
+/// it is not shared with this account.
+#[tauri::command]
+pub async fn fork_cal_add_calendar(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    account_id: String,
+    calendar: String,
+) -> Result<CalendarRow> {
+    let id = normalize_calendar_ref(&calendar)?;
+    require_connected(&account_id)?;
+    let entry = gapi::insert_calendar_list(&account_id, &id).await?;
+    let row = model::calendar_from_json(&account_id, &entry)
+        .ok_or_else(|| SkimError::other("gcal_api", "Google returned no calendar"))?;
+    adopt_calendar(&app, &state, row).await
+}
+
+/// The list row for a calendar `calendars.insert` just made, for when its
+/// `calendarList` entry cannot be read: the user owns it.
+pub fn created_calendar_row(account_id: &str, created: &Value) -> Option<CalendarRow> {
+    let mut row = model::calendar_from_json(account_id, created)?;
+    row.access_role = "owner".into();
+    row.is_primary = false;
+    Some(row)
+}
+
+/// Create a secondary calendar owned by the account, then store its list
+/// entry, selected and syncing.
+#[tauri::command]
+pub async fn fork_cal_create_calendar(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    account_id: String,
+    summary: String,
+    time_zone: String,
+) -> Result<CalendarRow> {
+    let (summary, zone) = check_new_calendar(&summary, &time_zone)?;
+    require_connected(&account_id)?;
+    let created =
+        gapi::insert_calendar(&account_id, &gapi::calendar_insert_body(&summary, &zone)).await?;
+    let id = created["id"]
+        .as_str()
+        .ok_or_else(|| SkimError::other("gcal_api", "Google returned no calendar id"))?;
+    // The calendar exists now: a failed read of its list entry must not
+    // report failure (a retry would make a second calendar). The next pull
+    // fills in the colour.
+    let row = match gapi::fetch_calendar_list_entry(&account_id, id).await {
+        Ok(entry) => model::calendar_from_json(&account_id, &entry),
+        Err(e) => {
+            tracing::warn!(error = %e, "new calendar: list entry unreadable");
+            None
+        }
+    }
+    .or_else(|| created_calendar_row(&account_id, &created))
+    .ok_or_else(|| SkimError::other("gcal_api", "Google returned no calendar"))?;
+    adopt_calendar(&app, &state, row).await
+}
+
 #[tauri::command]
 pub async fn fork_cal_sync_now(account_id: String) -> Result<()> {
     require_connected(&account_id)?;
@@ -1004,6 +1401,386 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    fn calendar(id: i64, account: &str, primary: bool, role: &str) -> CalendarRow {
+        CalendarRow {
+            id,
+            account_id: account.into(),
+            google_id: format!("cal{id}@example.test"),
+            summary: "Cal".into(),
+            color: None,
+            is_primary: primary,
+            selected: true,
+            access_role: role.into(),
+        }
+    }
+
+    fn typed(event_type: &str) -> EventInput {
+        let mut input = EventInput {
+            summary: Some("Away".into()),
+            start_ts: Some(3600),
+            end_ts: Some(7200),
+            ..Default::default()
+        };
+        input.options.event_type = Some(event_type.into());
+        input
+    }
+
+    fn code_and_message(e: SkimError) -> (String, String) {
+        (e.code().to_string(), e.to_string())
+    }
+
+    #[test]
+    fn event_types_only_on_the_primary_calendar() {
+        let primary = calendar(1, "a1", true, "owner");
+        let team = calendar(2, "a1", false, "owner");
+        for t in ["outOfOffice", "focusTime"] {
+            assert!(
+                apply_event_type_create(&mut typed(t), &primary).is_ok(),
+                "{t}"
+            );
+            let (code, message) =
+                code_and_message(apply_event_type_create(&mut typed(t), &team).unwrap_err());
+            assert_eq!(code, "gcal_input");
+            assert!(message.contains("event_type_primary_only"), "{message}");
+        }
+        // A plain event goes anywhere, named or not.
+        assert!(apply_event_type_create(&mut typed("default"), &team).is_ok());
+        assert!(apply_event_type_create(&mut EventInput::default(), &team).is_ok());
+        let bad = apply_event_type_create(&mut typed("birthday"), &primary).unwrap_err();
+        assert_eq!(bad.code(), "gcal_input");
+        assert!(bad.to_string().contains("event_type_invalid"));
+    }
+
+    #[test]
+    fn out_of_office_and_focus_time_are_timed_and_have_no_guests() {
+        let primary = calendar(1, "a1", true, "owner");
+        for t in ["outOfOffice", "focusTime"] {
+            let mut guests = typed(t);
+            guests.attendees = Some(vec!["guest@example.test".into()]);
+            let e = apply_event_type_create(&mut guests, &primary).unwrap_err();
+            assert!(e.to_string().contains("event_type_no_guests"));
+            assert_eq!(e.code(), "gcal_input");
+            let mut optional = typed(t);
+            optional.optional_attendees = Some(vec!["guest@example.test".into()]);
+            assert!(apply_event_type_create(&mut optional, &primary).is_err());
+            // An empty guest list is no guests.
+            let mut empty = typed(t);
+            empty.attendees = Some(vec![" ".into()]);
+            assert!(apply_event_type_create(&mut empty, &primary).is_ok());
+            let mut all_day = typed(t);
+            all_day.start_ts = None;
+            all_day.start_date = Some("2026-11-10".into());
+            let e = apply_event_type_create(&mut all_day, &primary).unwrap_err();
+            assert!(e.to_string().contains("event_type_timed_only"));
+            let mut flagged = typed(t);
+            flagged.all_day = Some(true);
+            assert!(apply_event_type_create(&mut flagged, &primary).is_err());
+        }
+    }
+
+    #[test]
+    fn working_location_is_free_public_and_names_its_place() {
+        let primary = calendar(1, "a1", true, "owner");
+        let mut input = typed("workingLocation");
+        let e = apply_event_type_create(&mut input, &primary).unwrap_err();
+        assert!(e.to_string().contains("event_type_properties"));
+        input.options.working_location_properties =
+            Some(json!({"type": "homeOffice", "homeOffice": {}}));
+        input.options.transparency = Some("opaque".into());
+        input.options.visibility = Some("private".into());
+        input.start_ts = None;
+        input.start_date = Some("2026-11-10".into());
+        apply_event_type_create(&mut input, &primary).unwrap();
+        assert_eq!(input.options.transparency.as_deref(), Some("transparent"));
+        assert_eq!(input.options.visibility.as_deref(), Some("public"));
+        let body = gapi::event_body(&input, None);
+        assert_eq!(body["eventType"], "workingLocation");
+        assert_eq!(body["workingLocationProperties"]["type"], "homeOffice");
+        assert_eq!(body["transparency"], "transparent");
+        assert_eq!(body["visibility"], "public");
+        let row = local_row_from_input(1, &input).unwrap();
+        assert_eq!(row.event_type.as_deref(), Some("workingLocation"));
+        assert_eq!(row.options.event_type.as_deref(), Some("workingLocation"));
+        // Properties of another type are refused.
+        let mut stray = typed("focusTime");
+        stray.options.out_of_office_properties = Some(json!({"autoDeclineMode": "declineNone"}));
+        let e = apply_event_type_create(&mut stray, &primary).unwrap_err();
+        assert!(e.to_string().contains("event_type_properties"));
+        let mut plain = EventInput::default();
+        plain.options.focus_time_properties = Some(json!({}));
+        assert!(apply_event_type_create(&mut plain, &primary).is_err());
+    }
+
+    #[test]
+    fn a_patch_cannot_change_the_event_type() {
+        let ooo = EventRow {
+            event_type: Some("outOfOffice".into()),
+            start_ts: 3600,
+            end_ts: 7200,
+            ..Default::default()
+        };
+        let mut change = EventInput::default();
+        change.options.event_type = Some("default".into());
+        let e = apply_event_type_patch(&mut change, &ooo).unwrap_err();
+        assert_eq!(e.code(), "gcal_input");
+        assert!(e.to_string().contains("event_type_fixed"));
+        // The same type is dropped from the body, not sent.
+        let mut same = EventInput {
+            summary: Some("Leave".into()),
+            ..Default::default()
+        };
+        same.options.event_type = Some("outOfOffice".into());
+        same.options.out_of_office_properties = Some(json!({"declineMessage": "Away"}));
+        apply_event_type_patch(&mut same, &ooo).unwrap();
+        let body = gapi::event_body(&same, None);
+        assert!(body.get("eventType").is_none());
+        assert_eq!(body["outOfOfficeProperties"]["declineMessage"], "Away");
+        // The stored type's shape still holds.
+        let mut guests = EventInput {
+            attendees: Some(vec!["guest@example.test".into()]),
+            ..Default::default()
+        };
+        assert!(apply_event_type_patch(&mut guests, &ooo).is_err());
+        let mut all_day = EventInput {
+            all_day: Some(true),
+            ..Default::default()
+        };
+        assert!(apply_event_type_patch(&mut all_day, &ooo).is_err());
+        // A default event (no stored type) cannot become one either.
+        let mut become_focus = EventInput::default();
+        become_focus.options.event_type = Some("focusTime".into());
+        assert!(apply_event_type_patch(&mut become_focus, &EventRow::default()).is_err());
+        let mut plain = EventInput {
+            attendees: Some(vec!["guest@example.test".into()]),
+            ..Default::default()
+        };
+        assert!(apply_event_type_patch(&mut plain, &EventRow::default()).is_ok());
+        // A working location keeps free and public when a patch names either.
+        let wl = EventRow {
+            event_type: Some("workingLocation".into()),
+            ..Default::default()
+        };
+        let mut busy = EventInput::default();
+        busy.options.transparency = Some("opaque".into());
+        apply_event_type_patch(&mut busy, &wl).unwrap();
+        assert_eq!(busy.options.transparency.as_deref(), Some("transparent"));
+        let mut title = EventInput {
+            summary: Some("Office".into()),
+            ..Default::default()
+        };
+        apply_event_type_patch(&mut title, &wl).unwrap();
+        assert_eq!(gapi::event_body(&title, None), json!({"summary": "Office"}));
+    }
+
+    #[test]
+    fn an_out_of_office_event_reads_back_its_type_from_google_and_the_store() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            store::upsert_calendars(conn, "a1", &[calendar(0, "a1", true, "owner")])?;
+            let cid = store::list_calendars(conn, "a1")?[0].id;
+            let google = json!({
+                "id": "ooo1", "eventType": "outOfOffice", "summary": "Away",
+                "start": {"dateTime": "2026-11-10T08:00:00Z"},
+                "end": {"dateTime": "2026-11-10T17:00:00Z"},
+                "outOfOfficeProperties": {"autoDeclineMode": "declineAllConflictingInvitations",
+                                          "declineMessage": "Away"}
+            });
+            let row = model::event_from_json(cid, &google).unwrap();
+            assert_eq!(row.options.event_type.as_deref(), Some("outOfOffice"));
+            store::replace_window(conn, cid, 0, i64::MAX / 2, &[row])?;
+            let stored = store::event_by_google_id(conn, cid, "ooo1")?.unwrap();
+            let json = serde_json::to_value(&stored.options).unwrap();
+            assert_eq!(json["eventType"], "outOfOffice");
+            assert_eq!(json["outOfOfficeProperties"]["declineMessage"], "Away");
+            assert_eq!(stored.event_type.as_deref(), Some("outOfOffice"));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_patch_keeps_a_stored_end_zone_unless_it_names_one() {
+        let mut row = EventRow {
+            start_ts: 3600,
+            end_ts: 7200,
+            time_zone: Some("Africa/Johannesburg".into()),
+            end_time_zone: Some("Europe/London".into()),
+            ..Default::default()
+        };
+        // Only the start moves: no end in the body, so Google keeps its zone.
+        let start_only = EventInput {
+            start_ts: Some(1800),
+            time_zone: Some("Africa/Johannesburg".into()),
+            ..Default::default()
+        };
+        let body = gapi::event_body_for(&start_only, None, row.end_time_zone.as_deref());
+        assert_eq!(body["start"]["timeZone"], "Africa/Johannesburg");
+        assert!(body.get("end").is_none());
+        apply_input(&mut row, &start_only).unwrap();
+        assert_eq!(row.end_time_zone.as_deref(), Some("Europe/London"));
+        // A drag sends both ends: the end keeps the stored zone.
+        let drag = EventInput {
+            start_ts: Some(900),
+            end_ts: Some(4500),
+            time_zone: Some("Africa/Johannesburg".into()),
+            ..Default::default()
+        };
+        let body = gapi::event_body_for(&drag, None, row.end_time_zone.as_deref());
+        assert_eq!(body["end"]["timeZone"], "Europe/London");
+        assert_eq!(body["start"]["timeZone"], "Africa/Johannesburg");
+        // Naming an end zone wins and is stored.
+        let named = EventInput {
+            end_ts: Some(5400),
+            end_time_zone: Some("Asia/Tokyo".into()),
+            ..drag.clone()
+        };
+        let body = gapi::event_body_for(&named, None, row.end_time_zone.as_deref());
+        assert_eq!(body["end"]["timeZone"], "Asia/Tokyo");
+        apply_input(&mut row, &named).unwrap();
+        assert_eq!(row.end_time_zone.as_deref(), Some("Asia/Tokyo"));
+        // A new event keeps its own end zone on the local row.
+        let created = local_row_from_input(1, &named).unwrap();
+        assert_eq!(created.end_time_zone.as_deref(), Some("Asia/Tokyo"));
+        let same = local_row_from_input(1, &drag).unwrap();
+        assert_eq!(same.end_time_zone, None);
+    }
+
+    #[test]
+    fn move_rules() {
+        let row = EventRow {
+            id: 5,
+            google_id: "ev1".into(),
+            ..Default::default()
+        };
+        let from = calendar(1, "a1", true, "owner");
+        let to = calendar(2, "a1", false, "writer");
+        assert!(check_move(&row, &from, &to).is_ok());
+        let msg = |r: Result<()>| {
+            let e = r.unwrap_err();
+            assert_eq!(e.code(), "gcal_input");
+            e.to_string()
+        };
+        let instance = EventRow {
+            recurring_event_id: Some("series".into()),
+            ..row.clone()
+        };
+        assert!(msg(check_move(&instance, &from, &to)).contains("move_instance"));
+        for t in ["outOfOffice", "focusTime", "workingLocation", "birthday"] {
+            let typed = EventRow {
+                event_type: Some(t.into()),
+                ..row.clone()
+            };
+            assert!(
+                msg(check_move(&typed, &from, &to)).contains("move_event_type"),
+                "{t}"
+            );
+        }
+        let plain = EventRow {
+            event_type: Some("default".into()),
+            ..row.clone()
+        };
+        assert!(check_move(&plain, &from, &to).is_ok());
+        let other = calendar(3, "a2", false, "owner");
+        assert!(msg(check_move(&row, &from, &other)).contains("move_other_account"));
+        let reader = calendar(4, "a1", false, "reader");
+        assert!(msg(check_move(&row, &from, &reader)).contains("move_read_only"));
+        let free_busy = calendar(4, "a1", false, "freeBusyReader");
+        assert!(msg(check_move(&row, &from, &free_busy)).contains("move_read_only"));
+        assert!(msg(check_move(&row, &reader, &to)).contains("move_read_only"));
+        assert!(msg(check_move(&row, &from, &from)).contains("move_same_calendar"));
+        let local = EventRow {
+            google_id: "local-1".into(),
+            local_only: true,
+            ..row.clone()
+        };
+        assert!(msg(check_move(&local, &from, &to)).contains("move_not_synced"));
+        let p = move_op_payload(&row, &from, &to, SendUpdates::None);
+        assert_eq!(
+            p,
+            json!({ "event_id": 5, "calendar_google_id": "cal1@example.test", "google_id": "ev1",
+                    "to_calendar_id": 2, "to_calendar_google_id": "cal2@example.test",
+                    "send_updates": "none" })
+        );
+        assert_eq!(
+            super::super::MoveTarget::from_payload(&p)
+                .unwrap()
+                .to_calendar_id,
+            2
+        );
+    }
+
+    #[test]
+    fn a_pending_move_holds_the_source_copy_against_a_pull() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            store::upsert_calendars(
+                conn,
+                "a1",
+                &[calendar(0, "a1", true, "owner"), {
+                    let mut t = calendar(0, "a1", false, "owner");
+                    t.google_id = "team@example.test".into();
+                    t
+                }],
+            )?;
+            let cals = store::list_calendars(conn, "a1")?;
+            let (from, to) = (cals[0].clone(), cals[1].clone());
+            let ev = |cid: i64| EventRow {
+                calendar_id: cid,
+                google_id: "ev1".into(),
+                status: "confirmed".into(),
+                start_ts: 100,
+                end_ts: 200,
+                ..Default::default()
+            };
+            store::replace_window(conn, from.id, 0, 1000, &[ev(from.id)])?;
+            let row = store::event_by_google_id(conn, from.id, "ev1")?.unwrap();
+            check_move(&row, &from, &to).unwrap();
+            store::queue_op(
+                conn,
+                "a1",
+                "move",
+                &move_op_payload(&row, &from, &to, SendUpdates::None),
+            )?;
+            store::set_event_calendar(conn, row.id, to.id)?;
+            // Google still lists it in the source; the destination not yet.
+            store::replace_window(conn, from.id, 0, 1000, &[ev(from.id)])?;
+            store::replace_window(conn, to.id, 0, 1000, &[])?;
+            let all: Vec<_> = store::events_between(conn, Some("a1"), 0, 1000)?;
+            assert_eq!(all.len(), 1, "no copy comes back in the source");
+            assert_eq!(all[0].id, row.id);
+            assert_eq!(all[0].calendar_id, to.id);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn calendar_inputs_are_checked() {
+        assert_eq!(
+            normalize_calendar_ref("  kim@example.test ").unwrap(),
+            "kim@example.test"
+        );
+        for bad in ["", "   ", "two words@example.test"] {
+            let e = normalize_calendar_ref(bad).unwrap_err();
+            assert_eq!(e.code(), "gcal_input");
+        }
+        assert_eq!(
+            check_new_calendar(" Projects ", "Africa/Johannesburg").unwrap(),
+            ("Projects".into(), "Africa/Johannesburg".into())
+        );
+        assert!(check_new_calendar("", "Africa/Johannesburg").is_err());
+        assert!(check_new_calendar(&"x".repeat(256), "UTC").is_err());
+        let e = check_new_calendar("Projects", "Mars/Olympus").unwrap_err();
+        assert!(e.to_string().contains("time_zone_invalid"));
+        let made = json!({"id": "abc@group.calendar.google.com", "summary": "Projects",
+                          "timeZone": "UTC"});
+        let row = created_calendar_row("a1", &made).unwrap();
+        assert_eq!(row.google_id, "abc@group.calendar.google.com");
+        assert_eq!(row.access_role, "owner");
+        assert!(!row.is_primary);
+        assert!(created_calendar_row("a1", &json!({})).is_none());
     }
 
     #[test]

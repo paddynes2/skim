@@ -196,6 +196,41 @@ pub fn spawn(app: AppHandle, db: Db, account_id: String, account_email: String) 
     handle
 }
 
+/// Where a queued `move` goes, read from its payload.
+#[derive(Debug, PartialEq, Eq)]
+pub struct MoveTarget {
+    pub from_calendar_google_id: String,
+    pub to_calendar_google_id: String,
+    pub to_calendar_id: i64,
+    pub google_id: String,
+}
+
+impl MoveTarget {
+    pub fn from_payload(p: &Value) -> Result<Self> {
+        let s = |key: &str| {
+            p[key]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+                .ok_or_else(|| SkimError::other("gcal_op", "The move is incomplete."))
+        };
+        Ok(Self {
+            from_calendar_google_id: s("calendar_google_id")?,
+            to_calendar_google_id: s("to_calendar_google_id")?,
+            google_id: s("google_id")?,
+            to_calendar_id: p["to_calendar_id"]
+                .as_i64()
+                .ok_or_else(|| SkimError::other("gcal_op", "The move is incomplete."))?,
+        })
+    }
+}
+
+/// Whether the event read from the destination shows the move already done:
+/// it is there and not cancelled (a cancelled copy is a tombstone).
+pub fn move_already_landed(destination_copy: &Value) -> bool {
+    destination_copy.get("id").is_some() && destination_copy["status"] != "cancelled"
+}
+
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -493,6 +528,43 @@ impl Engine {
                 self.patch_once(token, &cal.google_id, target, send, &body)
                     .await
             }
+            "move" => {
+                let event_id = p["event_id"]
+                    .as_i64()
+                    .ok_or_else(|| SkimError::other("gcal_op", "move op without event_id"))?;
+                let target = MoveTarget::from_payload(p)?;
+                // Idempotent replay: a move whose event already sits in the
+                // destination (the POST landed, finish_op did not) is done.
+                let landed = match gapi::fetch_event_optional(
+                    &self.account_id,
+                    &target.to_calendar_google_id,
+                    &target.google_id,
+                )
+                .await?
+                {
+                    Some(v) if move_already_landed(&v) => v,
+                    _ => {
+                        gapi::move_event(
+                            &self.account_id,
+                            &target.from_calendar_google_id,
+                            &target.google_id,
+                            &target.to_calendar_google_id,
+                            send,
+                        )
+                        .await?
+                    }
+                };
+                let to_calendar_id = target.to_calendar_id;
+                let Some(server) = event_from_json(to_calendar_id, &landed) else {
+                    return Err(SkimError::other("gcal_api", "move returned no event"));
+                };
+                self.db
+                    .call(move |conn| {
+                        store::set_event_calendar(conn, event_id, to_calendar_id)?;
+                        store::mark_synced(conn, event_id, &server)
+                    })
+                    .await
+            }
             "split" => {
                 let plan: split::SplitPlan = serde_json::from_value(p["plan"].clone())
                     .map_err(|_| SkimError::other("gcal_op", "The series split is invalid."))?;
@@ -561,6 +633,42 @@ mod tests {
         for c in ["gcal_api", "gcal_op", "db", "gcal_scope"] {
             assert!(!is_transient(c), "{c}");
         }
+    }
+
+    #[test]
+    fn a_move_payload_names_both_calendars() {
+        let p = json!({
+            "event_id": 4, "calendar_google_id": "me@example.test",
+            "to_calendar_google_id": "team@group.calendar.google.com",
+            "to_calendar_id": 9, "google_id": "ev1", "send_updates": "none"
+        });
+        assert_eq!(
+            MoveTarget::from_payload(&p).unwrap(),
+            MoveTarget {
+                from_calendar_google_id: "me@example.test".into(),
+                to_calendar_google_id: "team@group.calendar.google.com".into(),
+                to_calendar_id: 9,
+                google_id: "ev1".into(),
+            }
+        );
+        let mut partial = p.clone();
+        partial["to_calendar_google_id"] = json!("");
+        assert_eq!(
+            MoveTarget::from_payload(&partial).unwrap_err().code(),
+            "gcal_op"
+        );
+    }
+
+    #[test]
+    fn a_replayed_move_counts_as_done_only_for_a_live_copy() {
+        assert!(move_already_landed(
+            &json!({"id": "ev1", "status": "confirmed"})
+        ));
+        assert!(move_already_landed(&json!({"id": "ev1"})));
+        assert!(!move_already_landed(
+            &json!({"id": "ev1", "status": "cancelled"})
+        ));
+        assert!(!move_already_landed(&json!({})));
     }
 
     #[test]

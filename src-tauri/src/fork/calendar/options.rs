@@ -23,6 +23,29 @@ pub struct EventOptions {
     pub guests_can_invite_others: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guests_can_see_other_guests: Option<bool>,
+    /// Google's `eventType`. Only the four in [`WRITABLE_EVENT_TYPES`] can be
+    /// written; a stored or pulled event can also carry `birthday` or
+    /// `fromGmail`. Google refuses to change it after the create.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
+    /// Passed through to Google as is (`autoDeclineMode`, `declineMessage`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_of_office_properties: Option<serde_json::Value>,
+    /// Passed through to Google as is (`autoDeclineMode`, `chatStatus`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus_time_properties: Option<serde_json::Value>,
+    /// Passed through to Google as is (`type`, `homeOffice`, `officeLocation`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_location_properties: Option<serde_json::Value>,
+}
+
+/// The event types a create may name.
+pub const WRITABLE_EVENT_TYPES: &[&str] =
+    &["default", "outOfOffice", "focusTime", "workingLocation"];
+
+/// The `eventType` of `options`, `default` when it names none.
+pub fn event_type_or_default(event_type: Option<&str>) -> &str {
+    event_type.filter(|t| !t.is_empty()).unwrap_or("default")
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -103,6 +126,23 @@ impl EventOptions {
                 ));
             }
         }
+        if self
+            .event_type
+            .as_deref()
+            .is_some_and(|t| !WRITABLE_EVENT_TYPES.contains(&t))
+        {
+            return Err(bad("event_type_invalid"));
+        }
+        if [
+            &self.out_of_office_properties,
+            &self.focus_time_properties,
+            &self.working_location_properties,
+        ]
+        .iter()
+        .any(|p| p.as_ref().is_some_and(|v| !v.is_object()))
+        {
+            return Err(bad("event_type_properties"));
+        }
         if let Some(lines) = &self.recurrence {
             if lines.len() > 32
                 || lines.iter().any(|v| {
@@ -131,7 +171,11 @@ impl EventOptions {
             transparency,
             guests_can_modify,
             guests_can_invite_others,
-            guests_can_see_other_guests
+            guests_can_see_other_guests,
+            event_type,
+            out_of_office_properties,
+            focus_time_properties,
+            working_location_properties
         );
     }
 }

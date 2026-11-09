@@ -23,19 +23,60 @@ pub const CLIENT_SECRET_KEY: &str = "fork:google_client_secret";
 
 /// What the calendar grant asks for. `openid email` is what lets us check the
 /// grant landed on the same Google account as the mailbox.
+/// `calendar.calendarlist` (colour, add a shared calendar) and
+/// `calendar.calendars` (create a calendar) are round 2 (D98); a grant made
+/// before them keeps working for events, and `CalStatus.missing_scopes` names
+/// them so the UI can offer a reconnect.
 pub const CALENDAR_SCOPES: &str = "openid email \
     https://www.googleapis.com/auth/calendar.events \
-    https://www.googleapis.com/auth/calendar.calendarlist.readonly \
+    https://www.googleapis.com/auth/calendar.calendarlist \
+    https://www.googleapis.com/auth/calendar.calendars \
     https://www.googleapis.com/auth/meetings.space.created";
 
-/// The one scope the grant is useless without.
+/// The one scope the grant is useless without. Deliberately not widened: an
+/// old token still does everything it did before.
 pub const REQUIRED_SCOPE: &str = "https://www.googleapis.com/auth/calendar.events";
+
+/// The scopes a grant made before D98 never asked for.
+pub const SCOPES_ADDED_IN_D98: &[&str] = &[
+    "https://www.googleapis.com/auth/calendar.calendarlist",
+    "https://www.googleapis.com/auth/calendar.calendars",
+];
+
+/// The wanted API scopes (identity scopes `openid` and `email` left out:
+/// Google reports `email` back as `userinfo.email`) that `granted` lacks.
+/// `granted = None` is a token from before scopes were recorded: it holds
+/// what the old request asked for, so only [`SCOPES_ADDED_IN_D98`] are missing.
+pub fn missing_scopes(granted: Option<&str>) -> Vec<String> {
+    let Some(granted) = granted else {
+        return SCOPES_ADDED_IN_D98.iter().map(|s| s.to_string()).collect();
+    };
+    let have: Vec<&str> = granted.split_whitespace().collect();
+    CALENDAR_SCOPES
+        .split_whitespace()
+        .filter(|s| s.starts_with("https://"))
+        .filter(|s| !have.contains(s))
+        .map(str::to_string)
+        .collect()
+}
 
 const MEET_SPACES_ENDPOINT: &str = "https://meet.googleapis.com/v2/spaces";
 
 /// Where an account's calendar refresh token lives.
 pub fn token_key(account_id: &str) -> String {
     format!("fork:gcal:{account_id}")
+}
+
+/// Where the scopes Google granted with that token are recorded
+/// (space-separated, as the token response sent them). Kept beside the token
+/// rather than inside it, so a token stored before D98 reads unchanged.
+pub fn scopes_key(account_id: &str) -> String {
+    format!("fork:gcal_scopes:{account_id}")
+}
+
+/// The recorded granted scopes, `None` for a grant made before D98.
+pub fn granted_scopes(account_id: &str) -> Result<Option<String>> {
+    Ok(crate::secrets::get(&scopes_key(account_id))?.filter(|s| !s.trim().is_empty()))
 }
 
 /// One HTTP client for every Google API call the fork makes (calendar, Meet).
@@ -282,6 +323,12 @@ pub async fn connect(app: &AppHandle, account_id: &str, account_email: &str) -> 
         ));
     }
     crate::secrets::set(&token_key(account_id), &outcome.refresh_token)?;
+    // A reconnect replaces the record too: no scope list from an older grant
+    // may describe the new token.
+    match outcome.granted_scopes.as_deref() {
+        Some(scopes) => crate::secrets::set(&scopes_key(account_id), scopes)?,
+        None => crate::secrets::delete(&scopes_key(account_id))?,
+    }
     state().tokens.lock().await.insert(
         account_id.to_string(),
         (outcome.access_token, outcome.expires_at),
@@ -293,23 +340,47 @@ pub async fn connect(app: &AppHandle, account_id: &str, account_email: &str) -> 
 /// untouched and revoking one revokes the client's whole consent).
 pub async fn disconnect(account_id: &str) -> Result<()> {
     forget_token(account_id).await;
-    crate::secrets::delete(&token_key(account_id))
+    crate::secrets::delete(&token_key(account_id))?;
+    crate::secrets::delete(&scopes_key(account_id))
 }
 
 /// Turn a non-2xx Google response into a typed error. 401 drops the cached
 /// token and reports `oauth` so an op drain stops instead of burning attempts.
 pub async fn api_error(account_id: &str, resp: reqwest::Response) -> SkimError {
-    let status = resp.status();
+    let status = resp.status().as_u16();
     let body = resp.text().await.unwrap_or_default();
-    let detail: String = body.chars().take(400).collect();
-    if status.as_u16() == 401 {
+    error_from_parts(account_id, status, &body).await
+}
+
+/// Whether a Google error says the token lacks a scope: a 403 with reason
+/// `insufficientPermissions` or `ACCESS_TOKEN_SCOPE_INSUFFICIENT` (or the
+/// "insufficient authentication scopes" message both carry).
+pub fn is_scope_refusal(status: u16, body: &str) -> bool {
+    status == 403
+        && (body.contains("insufficient") || body.contains("ACCESS_TOKEN_SCOPE_INSUFFICIENT"))
+}
+
+/// [`api_error`] from a status and body already read.
+pub async fn error_from_parts(account_id: &str, status: u16, body: &str) -> SkimError {
+    if status == 401 {
         forget_token(account_id).await;
+    }
+    error_code_for(status, body)
+}
+
+/// The typed error for a non-2xx answer (pure; [`error_from_parts`] also
+/// drops the cached token on a 401).
+pub fn error_code_for(status: u16, body: &str) -> SkimError {
+    let detail: String = body.chars().take(400).collect();
+    if status == 401 {
         return SkimError::other("oauth", format!("Google rejected the token: {detail}"));
     }
-    if status.as_u16() == 403 && body.contains("insufficient") {
+    if is_scope_refusal(status, body) {
         return SkimError::other(
             "gcal_scope",
-            format!("Google refused: {detail}. Disconnect and connect again to grant the calendar scopes."),
+            format!(
+                "Google refused: {detail}. Reconnect Google Calendar to grant the calendar scopes."
+            ),
         );
     }
     tracing::warn!(status = %status, "google api error");
@@ -380,8 +451,67 @@ mod tests {
         assert!(scopes.contains(&"openid"));
         assert!(scopes.contains(&"email"));
         assert!(scopes.contains(&"https://www.googleapis.com/auth/meetings.space.created"));
-        assert!(scopes.contains(&"https://www.googleapis.com/auth/calendar.calendarlist.readonly"));
+        assert!(scopes.contains(&"https://www.googleapis.com/auth/calendar.calendarlist"));
+        assert!(scopes.contains(&"https://www.googleapis.com/auth/calendar.calendars"));
+        assert!(!scopes.iter().any(|s| s.contains("readonly")));
         assert!(!scopes.iter().any(|s| s.contains("mail.google.com")));
+        assert_eq!(
+            REQUIRED_SCOPE, "https://www.googleapis.com/auth/calendar.events",
+            "an old token must stay usable"
+        );
+        for added in SCOPES_ADDED_IN_D98 {
+            assert!(scopes.contains(added), "{added}");
+        }
+    }
+
+    #[test]
+    fn missing_scopes_compare_the_record_with_the_request() {
+        let calendarlist = "https://www.googleapis.com/auth/calendar.calendarlist";
+        let calendars = "https://www.googleapis.com/auth/calendar.calendars";
+        // A token from before the record: the two new scopes.
+        assert_eq!(missing_scopes(None), vec![calendarlist, calendars]);
+        // Everything granted (Google reports email as userinfo.email).
+        let all = "openid https://www.googleapis.com/auth/userinfo.email \
+            https://www.googleapis.com/auth/calendar.events \
+            https://www.googleapis.com/auth/calendar.calendarlist \
+            https://www.googleapis.com/auth/calendar.calendars \
+            https://www.googleapis.com/auth/meetings.space.created";
+        assert!(missing_scopes(Some(all)).is_empty());
+        // The old readonly scope does not stand in for the write scope; an
+        // unticked box on the consent screen shows up too.
+        let partial = "openid https://www.googleapis.com/auth/calendar.events \
+            https://www.googleapis.com/auth/calendar.calendarlist.readonly";
+        assert_eq!(
+            missing_scopes(Some(partial)),
+            vec![
+                calendarlist,
+                calendars,
+                "https://www.googleapis.com/auth/meetings.space.created"
+            ]
+        );
+    }
+
+    #[test]
+    fn scopes_are_recorded_beside_the_token_under_a_fork_key() {
+        assert_eq!(scopes_key("acc-1"), "fork:gcal_scopes:acc-1");
+        assert_ne!(scopes_key("acc-1"), token_key("acc-1"));
+        assert!(!scopes_key("acc-1").starts_with(&token_key("acc-1")));
+    }
+
+    #[test]
+    fn a_missing_scope_is_gcal_scope_and_other_refusals_are_not() {
+        let reason = r#"{"error":{"code":403,"errors":[{"reason":"insufficientPermissions"}]}}"#;
+        let status = r#"{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"reason":"ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}"#;
+        for body in [reason, status] {
+            assert!(is_scope_refusal(403, body));
+            assert_eq!(error_code_for(403, body).code(), "gcal_scope");
+        }
+        let forbidden = r#"{"error":{"code":403,"errors":[{"reason":"forbidden"}]}}"#;
+        assert!(!is_scope_refusal(403, forbidden));
+        assert_eq!(error_code_for(403, forbidden).code(), "gcal_api");
+        assert!(!is_scope_refusal(400, reason));
+        assert_eq!(error_code_for(401, "").code(), "oauth");
+        assert_eq!(error_code_for(500, "x").code(), "gcal_api");
     }
 
     #[test]

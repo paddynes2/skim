@@ -55,6 +55,10 @@ pub struct EventInput {
     pub end_date: Option<String>,
     /// IANA zone sent alongside `dateTime`, so Google shows the event in it.
     pub time_zone: Option<String>,
+    /// IANA zone of the end, when it differs from the start's (a flight).
+    /// `None` keeps the stored end zone on a patch, else uses `time_zone`.
+    #[serde(default)]
+    pub end_time_zone: Option<String>,
     /// Guest addresses. `Some(vec![])` clears the guest list.
     pub attendees: Option<Vec<String>>,
     /// Ask Google to attach a Meet link.
@@ -185,6 +189,118 @@ pub fn events_delete_url(
     u
 }
 
+/// `events.move`: `POST /calendars/{from}/events/{id}/move?destination={to}`.
+/// Google tells the guests about the new organiser calendar per `send`.
+pub fn events_move_url(
+    from_calendar_google_id: &str,
+    event_google_id: &str,
+    to_calendar_google_id: &str,
+    send: SendUpdates,
+) -> url::Url {
+    let mut u = event_url(from_calendar_google_id, event_google_id);
+    u.path_segments_mut().expect("base url").push("move");
+    u.query_pairs_mut()
+        .append_pair("destination", to_calendar_google_id)
+        .append_pair("sendUpdates", send.as_str());
+    u
+}
+
+fn calendar_list_root() -> url::Url {
+    url::Url::parse(&format!("{BASE}/users/me/calendarList")).expect("static url")
+}
+
+/// `calendarList.get` for one calendar of the signed-in user.
+pub fn calendar_list_entry_url(calendar_google_id: &str) -> url::Url {
+    let mut u = calendar_list_root();
+    u.path_segments_mut()
+        .expect("base url")
+        .push(calendar_google_id);
+    u
+}
+
+/// `calendarList.patch` with colours given as `#rrggbb` (`colorRgbFormat`).
+pub fn calendar_list_patch_url(calendar_google_id: &str) -> url::Url {
+    let mut u = calendar_list_entry_url(calendar_google_id);
+    u.query_pairs_mut().append_pair("colorRgbFormat", "true");
+    u
+}
+
+/// `calendarList.insert`: add a calendar someone shared to the user's list.
+pub fn calendar_list_insert_url() -> url::Url {
+    calendar_list_root()
+}
+
+/// `calendars.insert`: a new secondary calendar owned by the user.
+pub fn calendars_insert_url() -> url::Url {
+    url::Url::parse(&format!("{BASE}/calendars")).expect("static url")
+}
+
+/// `#rrggbb` in lower case, or `None` when `s` is not one.
+pub fn parse_hex_color(s: &str) -> Option<String> {
+    let hex = s.trim().strip_prefix('#')?;
+    (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+        .then(|| format!("#{}", hex.to_ascii_lowercase()))
+}
+
+/// WCAG relative luminance of a `#rrggbb` colour.
+fn luminance(hex: &str) -> f64 {
+    let channel = |i: usize| {
+        let v = f64::from(u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0)) / 255.0;
+        if v <= 0.040_45 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5)
+}
+
+/// The text colour on a calendar of `background` (`#rrggbb`): white or near
+/// black, whichever contrasts more.
+pub fn foreground_for(background: &str) -> &'static str {
+    const LIGHT: &str = "#ffffff";
+    const DARK: &str = "#1d1d1d";
+    let bg = luminance(background);
+    let ratio = |fg: f64| (bg.max(fg) + 0.05) / (bg.min(fg) + 0.05);
+    if ratio(luminance(LIGHT)) >= ratio(luminance(DARK)) {
+        LIGHT
+    } else {
+        DARK
+    }
+}
+
+/// The `calendarList.patch` body for a colour. `None` when `color` is not
+/// `#rrggbb`.
+pub fn calendar_color_body(color: &str) -> Option<Value> {
+    let bg = parse_hex_color(color)?;
+    let fg = foreground_for(&bg);
+    Some(json!({ "backgroundColor": bg, "foregroundColor": fg }))
+}
+
+/// The `calendarList.insert` body: the calendar id (an address for a
+/// person's main calendar), shown in the list at once.
+pub fn calendar_list_insert_body(calendar_google_id: &str) -> Value {
+    json!({ "id": calendar_google_id, "selected": true })
+}
+
+/// The `calendars.insert` body.
+pub fn calendar_insert_body(summary: &str, time_zone: &str) -> Value {
+    json!({ "summary": summary, "timeZone": time_zone })
+}
+
+/// The error code for a failed `calendarList.insert`: a missing grant first,
+/// then a calendar the person has not shared (Google answers 404 or 403).
+/// `None` leaves the generic mapping.
+pub fn calendar_list_insert_error(status: u16, body: &str) -> Option<&'static str> {
+    if google::is_scope_refusal(status, body) {
+        Some("gcal_scope")
+    } else if matches!(status, 403 | 404) {
+        Some("gcal_not_shared")
+    } else {
+        None
+    }
+}
+
 /// The `attendees` array for a create / patch: the requested addresses, each
 /// keeping the `responseStatus` (and other fields) it already had in
 /// `existing`, so re-saving an event never resets a guest's answer.
@@ -215,7 +331,29 @@ pub fn attendees_body(emails: &[String], existing: Option<&Value>) -> Value {
 
 /// The JSON body of an `events.insert` / `events.patch`: only the keys the
 /// input names. `existing_attendees` is the stored array, for [`attendees_body`].
+/// For a patch of a stored event, use [`event_body_for`] so a different end
+/// zone survives.
 pub fn event_body(input: &EventInput, existing_attendees: Option<&Value>) -> Value {
+    event_body_for(input, existing_attendees, None)
+}
+
+/// The zone written to `end.timeZone`: the input's own end zone, else the
+/// stored end zone of the event being patched, else the start's zone.
+pub fn end_zone<'a>(input: &'a EventInput, stored_end_zone: Option<&'a str>) -> Option<&'a str> {
+    let given = |z: Option<&'a str>| z.filter(|z| !z.is_empty());
+    given(input.end_time_zone.as_deref())
+        .or(given(stored_end_zone))
+        .or(input.time_zone.as_deref())
+}
+
+/// [`event_body`] for a patch: `stored_end_zone` is the row's `end_time_zone`,
+/// so a patch that moves the times keeps an end zone that differs from the
+/// start's instead of stamping the start zone on both ends.
+pub fn event_body_for(
+    input: &EventInput,
+    existing_attendees: Option<&Value>,
+    stored_end_zone: Option<&str>,
+) -> Value {
     let mut body = serde_json::to_value(&input.options)
         .ok()
         .and_then(|v| v.as_object().cloned())
@@ -251,18 +389,18 @@ pub fn event_body(input: &EventInput, existing_attendees: Option<&Value>) -> Val
             body.insert("end".into(), json!({ "date": d }));
         }
     } else {
-        let stamp = |ts: i64| {
+        let stamp = |ts: i64, zone: Option<&str>| {
             let mut v = json!({ "dateTime": super::model::to_rfc3339(ts) });
-            if let Some(tz) = &input.time_zone {
+            if let Some(tz) = zone {
                 v["timeZone"] = json!(tz);
             }
             v
         };
         if let Some(ts) = input.start_ts {
-            body.insert("start".into(), stamp(ts));
+            body.insert("start".into(), stamp(ts, input.time_zone.as_deref()));
         }
         if let Some(ts) = input.end_ts {
-            body.insert("end".into(), stamp(ts));
+            body.insert("end".into(), stamp(ts, end_zone(input, stored_end_zone)));
         }
     }
     if let Some(emails) = &input.attendees {
@@ -525,6 +663,95 @@ pub async fn patch_event_if_match(
     .await
 }
 
+/// `events.move` (see [`events_move_url`]). The call has no body.
+pub async fn move_event(
+    account_id: &str,
+    from_calendar_google_id: &str,
+    event_google_id: &str,
+    to_calendar_google_id: &str,
+    send: SendUpdates,
+) -> Result<Value> {
+    let token = google::access_token(account_id).await?;
+    let url = events_move_url(
+        from_calendar_google_id,
+        event_google_id,
+        to_calendar_google_id,
+        send,
+    );
+    let resp = google::http()
+        .post(url)
+        .bearer_auth(token)
+        .header(reqwest::header::CONTENT_LENGTH, "0")
+        .send()
+        .await
+        .map_err(|e| SkimError::other("network", e.to_string()))?;
+    if !resp.status().is_success() {
+        return Err(google::api_error(account_id, resp).await);
+    }
+    resp.json()
+        .await
+        .map_err(|e| SkimError::other("gcal_api", e.to_string()))
+}
+
+/// `calendarList.get` for one calendar.
+pub async fn fetch_calendar_list_entry(
+    account_id: &str,
+    calendar_google_id: &str,
+) -> Result<Value> {
+    get_json(account_id, calendar_list_entry_url(calendar_google_id)).await
+}
+
+/// `calendarList.patch` with `colorRgbFormat=true`.
+pub async fn patch_calendar_list(
+    account_id: &str,
+    calendar_google_id: &str,
+    body: &Value,
+) -> Result<Value> {
+    let url = calendar_list_patch_url(calendar_google_id);
+    send_json(account_id, google::http().patch(url), body).await
+}
+
+/// `calendarList.insert`. A calendar already in the list (409) is read back
+/// instead; one not shared with the user is `gcal_not_shared`.
+pub async fn insert_calendar_list(account_id: &str, calendar_google_id: &str) -> Result<Value> {
+    let token = google::access_token(account_id).await?;
+    let resp = google::http()
+        .post(calendar_list_insert_url())
+        .bearer_auth(token)
+        .json(&calendar_list_insert_body(calendar_google_id))
+        .send()
+        .await
+        .map_err(|e| SkimError::other("network", e.to_string()))?;
+    let status = resp.status().as_u16();
+    if resp.status().is_success() {
+        return resp
+            .json()
+            .await
+            .map_err(|e| SkimError::other("gcal_api", e.to_string()));
+    }
+    if status == 409 {
+        return fetch_calendar_list_entry(account_id, calendar_google_id).await;
+    }
+    let body = resp.text().await.unwrap_or_default();
+    match calendar_list_insert_error(status, &body) {
+        Some("gcal_not_shared") => Err(SkimError::other(
+            "gcal_not_shared",
+            "That calendar is not shared with this account.",
+        )),
+        _ => Err(google::error_from_parts(account_id, status, &body).await),
+    }
+}
+
+/// `calendars.insert`.
+pub async fn insert_calendar(account_id: &str, body: &Value) -> Result<Value> {
+    send_json(
+        account_id,
+        google::http().post(calendars_insert_url()),
+        body,
+    )
+    .await
+}
+
 /// `events.delete`. An event Google already dropped (404 / 410) counts as done.
 pub async fn delete_event(
     account_id: &str,
@@ -755,6 +982,162 @@ mod tests {
         );
         let plain = rsvp_body(None, "me@example.test", "accepted", None);
         assert!(plain["attendees"][0].get("comment").is_none());
+    }
+
+    #[test]
+    fn the_end_zone_is_the_inputs_then_the_stored_then_the_starts() {
+        let base = EventInput {
+            start_ts: Some(3600),
+            end_ts: Some(7200),
+            time_zone: Some("Africa/Johannesburg".into()),
+            ..Default::default()
+        };
+        // Today's behaviour without a stored zone: the start's zone on both.
+        let b = event_body(&base, None);
+        assert_eq!(b["end"]["timeZone"], "Africa/Johannesburg");
+        let b = event_body_for(&base, None, Some("Europe/London"));
+        assert_eq!(b["end"]["timeZone"], "Europe/London");
+        assert_eq!(b["start"]["timeZone"], "Africa/Johannesburg");
+        let named = EventInput {
+            end_time_zone: Some("Asia/Tokyo".into()),
+            ..base.clone()
+        };
+        let b = event_body_for(&named, None, Some("Europe/London"));
+        assert_eq!(b["end"]["timeZone"], "Asia/Tokyo");
+        assert_eq!(event_body(&named, None)["end"]["timeZone"], "Asia/Tokyo");
+        // An empty end zone means "not given".
+        let empty = EventInput {
+            end_time_zone: Some(String::new()),
+            ..base.clone()
+        };
+        assert_eq!(
+            event_body_for(&empty, None, None)["end"]["timeZone"],
+            "Africa/Johannesburg"
+        );
+        // No zone anywhere: none written.
+        let bare = EventInput {
+            start_ts: Some(1),
+            end_ts: Some(2),
+            ..Default::default()
+        };
+        assert!(event_body(&bare, None)["end"].get("timeZone").is_none());
+        // An end zone alone (no end time) writes nothing.
+        let zone_only = EventInput {
+            end_time_zone: Some("Asia/Tokyo".into()),
+            ..Default::default()
+        };
+        assert_eq!(event_body(&zone_only, None), json!({}));
+        let input: EventInput =
+            serde_json::from_value(json!({"end_time_zone": "Europe/Paris"})).unwrap();
+        assert_eq!(input.end_time_zone.as_deref(), Some("Europe/Paris"));
+    }
+
+    #[test]
+    fn event_type_fields_are_camel_case_in_the_body() {
+        let input: EventInput = serde_json::from_value(json!({
+            "start_ts": 3600, "end_ts": 7200,
+            "options": {"eventType": "focusTime",
+                        "focusTimeProperties": {"autoDeclineMode": "declineNone", "chatStatus": "doNotDisturb"}}
+        }))
+        .unwrap();
+        let b = event_body(&input, None);
+        assert_eq!(b["eventType"], "focusTime");
+        assert_eq!(b["focusTimeProperties"]["chatStatus"], "doNotDisturb");
+        assert!(b.get("outOfOfficeProperties").is_none());
+        assert!(b.get("event_type").is_none());
+    }
+
+    #[test]
+    fn move_url_names_the_destination_and_send_updates() {
+        let u = events_move_url(
+            "me@example.test",
+            "ev/1",
+            "team@group.calendar.google.com",
+            SendUpdates::None,
+        );
+        assert_eq!(
+            u.path(),
+            "/calendar/v3/calendars/me@example.test/events/ev%2F1/move"
+        );
+        let qs = q(&u);
+        assert_eq!(qs["destination"], "team@group.calendar.google.com");
+        assert_eq!(qs["sendUpdates"], "none");
+        assert_eq!(qs.len(), 2);
+        let u = events_move_url("a", "b", "c", SendUpdates::All);
+        assert_eq!(q(&u)["sendUpdates"], "all");
+    }
+
+    #[test]
+    fn calendar_list_urls() {
+        let u = calendar_list_patch_url("team#holiday@group.v.calendar.google.com");
+        assert_eq!(
+            u.path(),
+            "/calendar/v3/users/me/calendarList/team%23holiday@group.v.calendar.google.com"
+        );
+        assert_eq!(q(&u)["colorRgbFormat"], "true");
+        assert_eq!(
+            calendar_list_entry_url("kim@example.test").as_str(),
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList/kim@example.test"
+        );
+        assert_eq!(
+            calendar_list_insert_url().as_str(),
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+        );
+        assert_eq!(
+            calendars_insert_url().as_str(),
+            "https://www.googleapis.com/calendar/v3/calendars"
+        );
+        assert_eq!(
+            calendar_list_insert_body("kim@example.test"),
+            json!({"id": "kim@example.test", "selected": true})
+        );
+        assert_eq!(
+            calendar_insert_body("Projects", "Africa/Johannesburg"),
+            json!({"summary": "Projects", "timeZone": "Africa/Johannesburg"})
+        );
+    }
+
+    #[test]
+    fn colours_parse_and_pick_a_readable_foreground() {
+        assert_eq!(parse_hex_color(" #A1B2C3 ").as_deref(), Some("#a1b2c3"));
+        for bad in ["a1b2c3", "#abc", "#abcdeg", "#a1b2c3d4", ""] {
+            assert_eq!(parse_hex_color(bad), None, "{bad}");
+        }
+        assert_eq!(foreground_for("#ffffff"), "#1d1d1d");
+        assert_eq!(foreground_for("#000000"), "#ffffff");
+        assert_eq!(foreground_for("#fbd75b"), "#1d1d1d", "yellow");
+        assert_eq!(foreground_for("#1a4fd6"), "#ffffff", "deep blue");
+        assert_eq!(foreground_for("#9fe1e7"), "#1d1d1d", "pale teal");
+        assert_eq!(
+            calendar_color_body("#1A4FD6").unwrap(),
+            json!({"backgroundColor": "#1a4fd6", "foregroundColor": "#ffffff"})
+        );
+        assert!(calendar_color_body("blue").is_none());
+    }
+
+    #[test]
+    fn an_unshared_calendar_maps_to_gcal_not_shared_and_scope_wins() {
+        assert_eq!(
+            calendar_list_insert_error(404, "{}"),
+            Some("gcal_not_shared")
+        );
+        assert_eq!(
+            calendar_list_insert_error(403, r#"{"error":{"errors":[{"reason":"forbidden"}]}}"#),
+            Some("gcal_not_shared")
+        );
+        assert_eq!(
+            calendar_list_insert_error(
+                403,
+                r#"{"error":{"errors":[{"reason":"insufficientPermissions"}]}}"#
+            ),
+            Some("gcal_scope")
+        );
+        assert_eq!(
+            calendar_list_insert_error(403, "ACCESS_TOKEN_SCOPE_INSUFFICIENT"),
+            Some("gcal_scope")
+        );
+        assert_eq!(calendar_list_insert_error(500, "{}"), None);
+        assert_eq!(calendar_list_insert_error(400, "{}"), None);
     }
 
     #[test]

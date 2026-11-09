@@ -149,6 +149,9 @@ pub struct OauthOutcome {
     /// restricted-scope app's verification. The Sent-folder scan covers the
     /// rest, so this is a head start, not the mechanism.
     pub display_name: Option<String>,
+    /// The space-separated scopes the provider says it granted (the token
+    /// response's `scope`), when it sent one.
+    pub granted_scopes: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -162,6 +165,9 @@ struct TokenResponse {
     /// claims, sparing us a separate userinfo/Graph round-trip.
     #[serde(default)]
     id_token: Option<String>,
+    /// Space-separated granted scopes (RFC 6749 section 5.1).
+    #[serde(default)]
+    scope: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -310,6 +316,7 @@ pub async fn authorize(
         access_token: tokens.access_token,
         expires_at: now_unix() + tokens.expires_in.unwrap_or(3600) - 60,
         display_name,
+        granted_scopes: tokens.scope.clone().filter(|s| !s.trim().is_empty()),
     })
 }
 
