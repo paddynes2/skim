@@ -6,9 +6,13 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-11-09.**
 
+## Version 1.1.51 (November 9)
+
+D98: Google Calendar parity rounds 2 and 3. Event types (out of office, focus time, working location), moving an event to another calendar, a separate end time zone, calendar colours, adding a colleague's calendar and making a calendar (these need the wider Google permission: one reconnect per account), time insights, print, rich-text descriptions. Fixes from the 1.1.50 check: / opens search in a narrow window; the answer toast reads "You said yes".
+
 ## Version 1.1.50 (November 9)
 
-D97: calendar Look A and Google Calendar parity round 1 (look, year and N-day views, event search, event card, held delete with Undo, answers with a note or for the series, meeting pop-ups, view settings, safe descriptions, the hidden 08:00 fixed). Rounds 2 and 3 (event types, calendar colours, moving between calendars, separate end time zone, the Gmail calendar, colleague calendars, print, time insights, rich-text editing) follow in later versions.
+D97: calendar Look A and Google Calendar parity round 1 (look, year and N-day views, event search, event card, held delete with Undo, answers with a note or for the series, meeting pop-ups, view settings, safe descriptions, the hidden 08:00 fixed). Rounds 2 and 3 (event types, calendar colours, moving between calendars, separate end time zone, the Gmail calendar, colleague calendars, print, time insights, rich-text editing) follow in later versions. Built from 47cbc2d through build-install.ps1 (all gates green: 665 Rust tests, node tests, clippy, fmt, svelte-check, contrast) and installed 9 Nov 09:00, ProductVersion 1.1.50, SHA-256 c80b259aa587349df2a99dbbc121bd5a75d0aacb3107e98eed2d620e7b405d0a, backup ~/.skim-fork/backups/20261109-090044. Checked read-only on the installed app over CDP with the owner's real calendar: rail with 10 calendars, day numerals with today circled, 18 events with 3 unanswered and 2 private, the event card with its six actions and Join, no page errors. The owner was using the window during the check; the check's typing reached the shortcuts (narrow search, fixed in 1.1.51) and opened an empty New event form, nothing saved (no ops, no local rows afterwards). Not pushed, not published.
 
 ## Version 1.1.49 (November 9)
 

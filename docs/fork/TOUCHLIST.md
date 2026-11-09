@@ -343,3 +343,4 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/lib/i18n/locales/en.json` | `fork.cal.*` | Look A, search, undo, card, view and pop-up settings strings | D97 |
 | `src-tauri/src/mail/oauth.rs` | `TokenResponse`, `OauthOutcome`, `authorize` | + `scope` read from the token response, returned as `OauthOutcome.granted_scopes` | D98: the calendar grant records which scopes Google granted; the mail flow ignores the field |
 | `src-tauri/src/lib.rs` | `generate_handler!` | `fork_cal_move`, `fork_cal_set_color`, `fork_cal_add_calendar`, `fork_cal_create_calendar` | D98 |
+| `src/lib/i18n/locales/en.json` | `fork.cal.*` | event types, move, end zone, calendar list, insights, print, rich description, refusal sentences | D98 |
