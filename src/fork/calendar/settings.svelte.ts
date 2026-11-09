@@ -4,6 +4,7 @@
 // may fold `hydrate` into `prefs.hydrate` later. Read lazily through
 // `calPrefs.load()` (once), written back through `set_setting` like prefs.
 import { api } from "../../lib/api";
+import type { CalView } from "./types";
 
 const state = $state({
   /** Minutes; the quick-create and `n` length. */
@@ -18,8 +19,23 @@ const state = $state({
   bookingLink: "",
   visibleStart: "06:00",
   visibleEnd: "22:00",
+  /** Look A and the Google Calendar view settings (D97). */
+  weekStart: 1 as 0 | 1 | 6,
+  showWeekends: true,
+  showDeclined: true,
+  dimPast: true,
+  weekNumbers: false,
+  defaultView: "week" as CalView,
+  customDays: 4,
+  railOpen: true,
+  addMeetDefault: false,
+  /** Calendar ids hidden from the grid only; syncing and busy time are unaffected (D97). */
+  hiddenCals: [] as number[],
   loaded: false,
 });
+
+const VIEWS: CalView[] = ["day", "week", "workweek", "custom", "month", "year", "agenda"];
+const on = (v: string | undefined, d: boolean) => (v === undefined ? d : v === "1");
 
 let loading: Promise<void> | null = null;
 
@@ -41,6 +57,23 @@ export const calPrefs = {
     if (s.fork_booking_link !== undefined) state.bookingLink = s.fork_booking_link;
     if (s.fork_cal_visible_start && HHMM.test(s.fork_cal_visible_start)) state.visibleStart = s.fork_cal_visible_start;
     if (s.fork_cal_visible_end && HHMM.test(s.fork_cal_visible_end)) state.visibleEnd = s.fork_cal_visible_end;
+    const ws = Number(s.fork_cal_week_start);
+    if (ws === 0 || ws === 1 || ws === 6) state.weekStart = ws;
+    state.showWeekends = on(s.fork_cal_show_weekends, true);
+    state.showDeclined = on(s.fork_cal_show_declined, true);
+    state.dimPast = on(s.fork_cal_dim_past, true);
+    state.weekNumbers = on(s.fork_cal_week_numbers, false);
+    state.railOpen = on(s.fork_cal_rail, true);
+    state.addMeetDefault = on(s.fork_cal_add_meet, false);
+    if (VIEWS.includes(s.fork_cal_default_view as CalView)) state.defaultView = s.fork_cal_default_view as CalView;
+    try {
+      const hc = JSON.parse(s.fork_cal_hidden_cals ?? "[]");
+      if (Array.isArray(hc)) state.hiddenCals = hc.filter((x) => Number.isInteger(x));
+    } catch {
+      state.hiddenCals = [];
+    }
+    const cd = Number(s.fork_cal_custom_days);
+    if (cd >= 2 && cd <= 7) state.customDays = cd;
     state.loaded = true;
   },
   /** Read the settings once; later calls resolve at once. */
@@ -123,4 +156,24 @@ export const calPrefs = {
     state.bookingLink = v.trim();
     persist("fork_booking_link", state.bookingLink);
   },
+  get weekStart() { return state.weekStart; },
+  setWeekStart(v: 0 | 1 | 6) { state.weekStart = v; persist("fork_cal_week_start", String(v)); },
+  get showWeekends() { return state.showWeekends; },
+  setShowWeekends(v: boolean) { state.showWeekends = v; persist("fork_cal_show_weekends", v ? "1" : "0"); },
+  get showDeclined() { return state.showDeclined; },
+  setShowDeclined(v: boolean) { state.showDeclined = v; persist("fork_cal_show_declined", v ? "1" : "0"); },
+  get dimPast() { return state.dimPast; },
+  setDimPast(v: boolean) { state.dimPast = v; persist("fork_cal_dim_past", v ? "1" : "0"); },
+  get weekNumbers() { return state.weekNumbers; },
+  setWeekNumbers(v: boolean) { state.weekNumbers = v; persist("fork_cal_week_numbers", v ? "1" : "0"); },
+  get defaultView() { return state.defaultView; },
+  setDefaultView(v: CalView) { if (!VIEWS.includes(v)) return; state.defaultView = v; persist("fork_cal_default_view", v); },
+  get customDays() { return state.customDays; },
+  setCustomDays(n: number) { if (n < 2 || n > 7) return; state.customDays = n; persist("fork_cal_custom_days", String(n)); },
+  get railOpen() { return state.railOpen; },
+  setRailOpen(v: boolean) { state.railOpen = v; persist("fork_cal_rail", v ? "1" : "0"); },
+  get addMeetDefault() { return state.addMeetDefault; },
+  setAddMeetDefault(v: boolean) { state.addMeetDefault = v; persist("fork_cal_add_meet", v ? "1" : "0"); },
+  get hiddenCals() { return state.hiddenCals; },
+  setHiddenCals(ids: number[]) { state.hiddenCals = [...new Set(ids)]; persist("fork_cal_hidden_cals", JSON.stringify(state.hiddenCals)); },
 };

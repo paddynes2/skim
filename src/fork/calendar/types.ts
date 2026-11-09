@@ -44,6 +44,8 @@ export interface EventRow {
   updated: string | null;
   local_only: boolean;
   options?: EventOptions;
+  /** Google's iCalUID; the same meeting seen through two accounts shares it (D97). */
+  ical_uid?: string | null;
 }
 
 /** What create / patch take. Every field optional; a patch names only what changed. */
@@ -149,8 +151,8 @@ export interface Attendee {
   optional?: boolean;
 }
 
-/** The four calendar views (keys d w m a). */
-export type CalView = "day" | "week" | "workweek" | "month" | "agenda";
+/** The calendar views. "agenda" is shown as Schedule; "custom" is N days (calPrefs.customDays). */
+export type CalView = "day" | "week" | "workweek" | "custom" | "month" | "year" | "agenda";
 
 /** What the guests prompt is about; the wording differs per kind. */
 export type GuestsPromptKind = "create" | "update" | "delete" | "rsvp";
@@ -167,4 +169,20 @@ export interface CalendarSyncState {
   pending_ops: number;
   failed_ops: number;
   events: { event_id: number; can_discard?: boolean; status: "pending" | "failed"; message: string | null }[];
+}
+
+/** One event search hit: an EventRow plus whether it came only from Google (id 0, not cached). */
+export type SearchHit = EventRow & { remote: boolean };
+export interface SearchResult {
+  hits: SearchHit[];
+  /** Set when Google's search failed; the cached hits are still returned. */
+  remote_error: string | null;
+}
+
+/** Payload of "calendar:alert": a meeting starts soon (D97). */
+export interface CalendarAlert {
+  event_id: number;
+  title: string;
+  start_ts: number;
+  join_url: string | null;
 }

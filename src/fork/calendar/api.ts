@@ -3,6 +3,7 @@
 // Tauri expects on the wire (camelCase of the Rust parameters).
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  SearchResult,
   CalStatus,
   AvailabilityResult,
   CalendarSyncState,
@@ -17,6 +18,8 @@ import type {
 
 export const CALENDAR_UPDATED = "calendar:updated";
 export const CALENDAR_OPS_FAILED = "calendar:ops_failed";
+/** A meeting is about to start (src-tauri fork/calendar/alerts.rs, D97). */
+export const CALENDAR_ALERT = "calendar:alert";
 
 export const googleApi = {
   /** The OAuth client in use, secret masked. */
@@ -53,8 +56,12 @@ export const calendarApi = {
     invoke<EventRow>("fork_cal_patch", { eventId, input, sendUpdates }),
   delete: (eventId: number, sendUpdates: SendUpdates, series = false) =>
     invoke<void>("fork_cal_delete", { eventId, sendUpdates, series }),
-  rsvp: (eventId: number, response: RsvpResponse, sendUpdates: SendUpdates) =>
-    invoke<EventRow>("fork_cal_rsvp", { eventId, response, sendUpdates }),
+  /** `comment` is the note to the organiser ("" clears it); `series` answers for every occurrence (D97). */
+  rsvp: (eventId: number, response: RsvpResponse, sendUpdates: SendUpdates, comment: string | null = null, series = false) =>
+    invoke<EventRow>("fork_cal_rsvp", { eventId, response, sendUpdates, comment, series }),
+  /** Cached events plus Google's own search beyond the synced window (D97). */
+  search: (query: string, accountId: string | null = null, limit = 100) =>
+    invoke<SearchResult>("fork_cal_search", { query, accountId, limit }),
   syncNow: (accountId: string) => invoke<void>("fork_cal_sync_now", { accountId }),
 };
 
