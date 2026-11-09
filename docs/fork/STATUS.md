@@ -6,6 +6,10 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-11-09.**
 
+## Version 1.1.50 (November 9)
+
+D97: calendar Look A and Google Calendar parity round 1 (look, year and N-day views, event search, event card, held delete with Undo, answers with a note or for the series, meeting pop-ups, view settings, safe descriptions, the hidden 08:00 fixed). Rounds 2 and 3 (event types, calendar colours, moving between calendars, separate end time zone, the Gmail calendar, colleague calendars, print, time insights, rich-text editing) follow in later versions.
+
 ## Version 1.1.49 (November 9)
 
 D96: the calendar's hour lines are solid and darker; half-hour lines stay faint. Checked in the browser demo in Pastel and Base dark at 1600x1000 before the build. Built from ebb1cf4 (gates green: 645 Rust tests, node tests, clippy, fmt, svelte-check, contrast) and installed 9 Nov 07:58, ProductVersion 1.1.49, SHA-256 2677dae9554f9048e69e2e19e207ea6249a3a0640dc4ee6374cc411aacdd3a7c, backup ~/.skim-fork/backups/20261109-075757, relaunched in the desktop session. The built CSS carries the new lines; not yet looked at on the installed app with real events. Not pushed, not published.

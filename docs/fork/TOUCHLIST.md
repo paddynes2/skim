@@ -339,3 +339,5 @@ moving sent copies to Trash while deleting grouped drafts.
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.47 | D95 |
 | `src/components/ComposeForm.svelte` | `save`, `send`, Send/Send later `disabled`, `undoHold` | settled guard on save; `aiBusy` blocks send; not-scheduled hand-back | D95 round 2 |
 | `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` | version | 1.1.48 | D95 round 2 |
+| `src-tauri/src/lib.rs` | `generate_handler!` | registers `fork_cal_search` | D97 |
+| `src/lib/i18n/locales/en.json` | `fork.cal.*` | Look A, search, undo, card, view and pop-up settings strings | D97 |
