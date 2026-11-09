@@ -424,7 +424,7 @@
 <svelte:window onkeydowncapture={onKeydown} />
 
 <section class="fork-cal look-a" class:with-panel={editorOpen} aria-label={t("fork.nav.calendar")}>
-  {#if calPrefs.railOpen}<CalendarRail range={visibleRange} />{/if}
+  {#if calPrefs.railOpen && !editorOpen}<CalendarRail range={visibleRange} />{/if}
   <div class="main">
     <header class="bar">
       <button class="icon" onclick={() => calPrefs.setRailOpen(!calPrefs.railOpen)} aria-label={t("fork.cal.toggle_rail")} aria-pressed={calPrefs.railOpen} title={t("fork.cal.toggle_rail")}>
@@ -460,7 +460,7 @@
         <kbd>/</kbd>
       </label>
       <button class="new" onclick={() => calendar.newEvent()} disabled={!calendar.connected} title="C">
-        <span class="plus">+</span>{t("fork.cal.new_event")}
+        <span class="plus">+</span><span class="label">{t("fork.cal.new_event")}</span>
       </button>
     </header>
 
@@ -511,7 +511,7 @@
 
 <style>
   .fork-cal { flex: 1; min-width: 0; display: flex; background: var(--surface); position: relative; }
-  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; container-type: inline-size; container-name: calmain; }
   .bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px 10px 10px; border-bottom: 1px solid var(--hairline); flex-shrink: 0; min-width: 0; }
   .spacer { flex: 1; min-width: 8px; }
   .icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--radius-s); color: var(--text-dim); flex-shrink: 0; }
@@ -520,7 +520,7 @@
   .outline { padding: 5px 13px; border: 1px solid var(--hairline-strong); border-radius: 99px; font-size: 13px; background: var(--surface-raised); flex-shrink: 0; }
   .outline:hover { background: var(--hover); }
   .nav { display: flex; gap: 0; flex-shrink: 0; }
-  .month-anchor { position: relative; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .month-anchor { position: relative; display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; }
   .title { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 3px 4px; border-radius: var(--radius-s); }
   .title:hover { background: var(--hover); }
   .week-tag { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
@@ -551,7 +551,11 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   :global(:root[data-theme="pastel-light"]) .fork-cal .new { background: var(--p-mint); color: var(--ink); border: 1px solid var(--ink); }
   :global(:root[data-theme="pastel-light"]) .fork-cal .outline, :global(:root[data-theme="pastel-light"]) .fork-cal .views, :global(:root[data-theme="pastel-light"]) .fork-cal .search { border-color: var(--ink); background: #fff; }
-  @media (max-width: 1280px) { .search { width: 140px; } .week-tag { display: none; } }
+  /* The bar follows the width it has, which shrinks when the editor is open. */
+  @container calmain (max-width: 1060px) { .search { width: 150px; } .week-tag { display: none; } }
+  @container calmain (max-width: 940px) { .search { width: 34px; min-width: 34px; padding: 5px 9px; } .search input, .search kbd { display: none; } .search:focus-within { width: 160px; } .search:focus-within input { display: block; } }
+  @container calmain (max-width: 820px) { .views button { padding: 4px 8px; } .new .label { display: none; } .bar > .icon:first-child { display: none; } }
+  @container calmain (max-width: 700px) { .views { display: none; } }
   @media (max-width: 1100px) {
     .fork-cal.with-panel .main { display: none; }
     .fork-cal.with-panel :global(.panel) { width: 100%; border-left: 0; }
