@@ -11,12 +11,13 @@ import { mail } from "../../lib/stores/mail.svelte";
 import { ui } from "../../lib/stores/ui.svelte";
 import { navHooks } from "../nav";
 import { toast } from "../stores/toast.svelte";
-import { CALENDAR_OPS_FAILED, CALENDAR_UPDATED, calendarApi, googleApi } from "./api";
+import { CALENDAR_ALERT, CALENDAR_OPS_FAILED, CALENDAR_UPDATED, calendarApi, googleApi } from "./api";
 import { calendarErrorText, otherGuests, roundUp } from "./guests";
 import { guestsPrompt } from "./prompt.svelte";
 import { calPrefs } from "./settings.svelte";
 import type {
   CalStatus,
+  CalendarAlert,
   CalendarSyncState,
   CalView,
   CalendarOpsFailed,
@@ -24,6 +25,7 @@ import type {
   EventInput,
   EventRow,
   RsvpResponse,
+  SearchResult,
   SendUpdates,
 } from "./types";
 
@@ -56,6 +58,14 @@ const state = $state({
   upcoming: null as EventRow | null,
   /** Unix seconds, ticked with the upcoming poll so "in 25m" moves. */
   now: Math.floor(Date.now() / 1000),
+  /** Rows hidden while a delete waits out its Undo hold (D97). */
+  hidden: [] as number[],
+  /** Set once the user picks a view; until then the Settings default applies. */
+  viewChosen: false,
+  /** A search hit outside the synced window, shown read-only (id 0). */
+  foreign: null as EventRow | null,
+  /** The event search panel: open, the query and the last answer. */
+  search: { open: false, query: "", busy: false, result: null as SearchResult | null },
 });
 
 let range: { from: number; to: number } | null = null;
@@ -289,7 +299,18 @@ export const calendar = {
       void calendar.refreshSync();
       toast.show({ text: `${t("fork.cal.ops_failed")} ${e.payload?.message ?? ""}`.trim(), ms: 10_000 });
     }).then((u) => unlisten.push(u));
-    void calPrefs.load();
+    void listen<CalendarAlert>(CALENDAR_ALERT, (e) => {
+      const a = e.payload;
+      if (!a) return;
+      const mins = Math.round((a.start_ts - Date.now() / 1000) / 60);
+      const text = mins > 0 ? t("fork.cal.alert_in", { title: a.title, n: mins }) : t("fork.cal.alert_now", { title: a.title });
+      toast.show({
+        text,
+        ms: 60_000,
+        action: a.join_url ? { label: t("fork.cal.join"), run: () => void openUrl(a.join_url!) } : { label: t("fork.cal.open_event"), run: () => { ui.showCalendar(); state.date = new Date(a.start_ts * 1000); state.selectedId = a.event_id; state.editing = false; } },
+      });
+    }).then((u) => unlisten.push(u));
+    void calPrefs.load().then(() => { if (!state.viewChosen) state.view = calPrefs.defaultView; });
     void refreshStatus().then(() => { void calendar.refreshSync(); return refreshUpcoming(); });
     pollTimer = setInterval(() => void refreshUpcoming(), UPCOMING_POLL_MS);
     return () => {
@@ -323,6 +344,10 @@ export const calendar = {
   // ---- navigation ----
   setView(v: CalView) {
     state.view = v;
+    state.viewChosen = true;
+  },
+  get viewChosen() {
+    return state.viewChosen;
   },
   today() {
     state.date = new Date();
@@ -337,6 +362,12 @@ export const calendar = {
         d.setDate(1);
         d.setMonth(d.getMonth() + dir);
         break;
+      case "year":
+        d.setFullYear(d.getFullYear() + dir);
+        break;
+      case "custom":
+        d.setDate(d.getDate() + calPrefs.customDays * dir);
+        break;
       default:
         d.setDate(d.getDate() + 7 * dir);
     }
@@ -348,6 +379,7 @@ export const calendar = {
 
   // ---- selection ----
   open(id: number) {
+    state.foreign = null;
     state.draft = null;
     state.selectedId = id;
     state.editing = false;
@@ -365,6 +397,7 @@ export const calendar = {
   },
   close() {
     state.selectedId = null;
+    state.foreign = null;
     state.draft = null;
   },
 
@@ -400,10 +433,11 @@ export const calendar = {
     void refreshUpcoming();
     return true;
   },
-  async remove(id: number, series = false): Promise<boolean> {
+  /** `preset` is only for the delete hold (D97): the prompt was answered at the click, the delete goes out when Undo expires. */
+  async remove(id: number, series = false, preset?: SendUpdates): Promise<boolean> {
     const row = series ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
     const n = row ? otherGuests(row, ownEmails()).length : 0;
-    const su = await askGuests("delete", n);
+    const su = preset ?? (await askGuests("delete", n));
     if (su === null) return false;
     await calendarApi.delete(id, su, series);
     drop(id);
@@ -411,14 +445,71 @@ export const calendar = {
     return true;
   },
   /** RSVP: the organiser is someone else by definition, so the prompt always shows (D-7f). */
-  async rsvp(id: number, response: RsvpResponse): Promise<boolean> {
+  async rsvp(id: number, response: RsvpResponse, opts: { comment?: string | null; series?: boolean } = {}): Promise<boolean> {
     const su = await guestsPrompt.ask("rsvp", 1);
     if (su === null) return false;
-    const updated = await calendarApi.rsvp(id, response, su);
+    const updated = await calendarApi.rsvp(id, response, su, opts.comment ?? null, opts.series ?? false);
     upsert(updated);
     void this.refreshSync();
     void refreshUpcoming();
     return true;
+  },
+
+  /** The guest answer for a delete, asked now; null when cancelled. */
+  async askDelete(id: number, series = false): Promise<SendUpdates | null> {
+    const row = series ? await calendarApi.series(id) : state.events.find((e) => e.id === id);
+    return askGuests("delete", row ? otherGuests(row, ownEmails()).length : 0);
+  },
+  // ---- delete hold (D97): hidden at once, sent when the Undo time is up ----
+  get hidden() {
+    return state.hidden;
+  },
+  hide(id: number) {
+    if (!state.hidden.includes(id)) state.hidden = [...state.hidden, id];
+    if (state.selectedId === id) state.selectedId = null;
+  },
+  unhide(id: number) {
+    state.hidden = state.hidden.filter((x) => x !== id);
+  },
+
+  // ---- event search (D97) ----
+  get search() {
+    return state.search;
+  },
+  openSearch() {
+    state.search.open = true;
+  },
+  closeSearch() {
+    state.search = { open: false, query: "", busy: false, result: null };
+  },
+  async runSearch(query: string): Promise<void> {
+    state.search.query = query;
+    const q = query.trim();
+    if (!q) {
+      state.search.result = null;
+      return;
+    }
+    state.search.busy = true;
+    try {
+      const result = await calendarApi.search(q);
+      if (state.search.query.trim() === q) state.search.result = result;
+    } catch (e: unknown) {
+      if (state.search.query.trim() === q) state.search.result = { hits: [], remote_error: calendarErrorText(e) };
+    } finally {
+      if (state.search.query.trim() === q) state.search.busy = false;
+    }
+  },
+  /** A search hit that is not cached (outside the synced window) opens read-only from the hit itself. */
+  openRow(row: EventRow) {
+    if (row.id && state.events.some((e) => e.id === row.id)) return this.open(row.id);
+    if (row.id) upsert(row);
+    state.draft = null;
+    state.selectedId = row.id || null;
+    state.foreign = row.id ? null : row;
+    state.editing = false;
+  },
+  get foreign() {
+    return state.foreign;
   },
 
   // ---- Meet (7.6) ----

@@ -226,3 +226,94 @@
     100% 100%,
     100% calc(var(--ec-slot-height) * var(--ec-slot-label-periodicity));
 }
+
+/* ---------------------------------------------------------------------------
+   Look A, "Paper planner" (D97). The owner picked it on 9 November 2026 from
+   three mocks (OS docs/plans/skim-calendar-20261109/look-a.png). Big day
+   numerals over a small weekday, today's numeral in an ink circle, a darker
+   paper tint on weekends, events as filled cards with an outline, unanswered
+   invites as white dashed cards with a "Reply?" pill, private events hatched.
+   Under Pastel the fill is the nearest pastel (--cal-pastel, presentation.ts
+   pastelFor) with an ink outline; other themes mix the calendar colour into
+   the surface as before. */
+
+.fork-cal.look-a .ec { --ec-today-bg-color: transparent; font-size: 12.5px; }
+.fork-cal.look-a .ec-header { background: var(--surface); }
+.fork-cal.look-a .ec-time-grid .ec-header { box-shadow: 0 1px 0 var(--hairline); }
+
+/* Day headers: numeral over weekday (the dayHeaderFormat html). */
+.fork-cal.look-a .ec-time-grid .ec-col-head,
+.fork-cal.look-a .ec-time-grid .ec-day-head { text-transform: none; letter-spacing: 0; font-family: var(--font-ui); padding: 8px 0 6px 10px; text-align: left; }
+.fork-cal.look-a .ec-time-grid .ec-col-head time,
+.fork-cal.look-a .ec-time-grid .ec-day-head time { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.fork-cal.look-a .dh-num { display: grid; place-items: center; min-width: 32px; height: 32px; margin-left: -4px; border-radius: 50%; font-size: 21px; font-weight: 650; letter-spacing: -0.02em; color: var(--text); font-variant-numeric: tabular-nums; }
+.fork-cal.look-a .dh-wd { font-size: 11.5px; color: var(--text-dim); }
+.fork-cal.look-a .ec-today .dh-num { background: var(--text); color: var(--bg); }
+.fork-cal.look-a .ec-today .dh-wd { color: var(--text); font-weight: 600; }
+
+/* Weekends: a slightly darker paper. */
+.fork-cal.look-a .ec-time-grid .ec-body .ec-day.ec-sat,
+.fork-cal.look-a .ec-time-grid .ec-body .ec-day.ec-sun,
+.fork-cal.look-a .ec-day-grid .ec-day.ec-sat,
+.fork-cal.look-a .ec-day-grid .ec-day.ec-sun { --ec-day-bg-color: color-mix(in oklab, var(--text) 3.5%, var(--surface)); background-color: var(--ec-day-bg-color); }
+
+/* Hour labels sit on their line. */
+.fork-cal.look-a .ec-sidebar .ec-time { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); letter-spacing: 0; }
+
+/* Now: a red line with a dot on today; the time label in the gutter. */
+.fork-cal.look-a .ec-now-indicator { border-top: 2px solid var(--danger); }
+.fork-cal.look-a .ec-now-indicator::before { content: ""; position: absolute; left: -6px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); }
+
+/* Events: cards. */
+.fork-cal.look-a .ec-event {
+  --cal-fill: color-mix(in oklab, var(--cal-color, var(--acct-1)) 26%, var(--surface));
+  --cal-edge: color-mix(in oklab, var(--cal-color, var(--acct-1)) 70%, var(--text));
+  background-color: var(--cal-fill);
+  border: 1px solid var(--cal-edge);
+  border-radius: 7px;
+  color: var(--text);
+  box-shadow: none;
+}
+.fork-cal.look-a .ec-time-grid .ec-event { border-left-width: 1px; padding: 3px 6px; margin-right: 3px; }
+.fork-cal.look-a .ec-time-grid .ec-event-body { display: block; }
+.fork-cal.look-a .cal-event-content { display: flex; flex-direction: column; gap: 1px; min-width: 0; height: 100%; }
+.fork-cal.look-a .cal-event-title { display: block; font-weight: 600; font-size: 12px; line-height: 1.3; overflow: hidden; overflow-wrap: break-word; word-break: normal; text-overflow: ellipsis; }
+.fork-cal.look-a .ec-time-grid .ec-event:not(.cal-short) .ec-event-title { overflow-wrap: break-word; }
+.fork-cal.look-a .ec-time-grid .cal-short .cal-event-title { white-space: nowrap; text-overflow: ellipsis; display: block; line-height: 1.25; }
+.fork-cal.look-a .cal-event-time { order: 2; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); line-height: 1.25; margin: 0; }
+.fork-cal.look-a .lock { width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+/* Fifteen minutes or less: one small line. */
+.fork-cal.look-a .ec-time-grid .ec-event.cal-short { padding: 0 5px; }
+.fork-cal.look-a .ec-time-grid .cal-short .cal-event-title { font-size: 11px; line-height: 13px; }
+.fork-cal.look-a .cal-reply { order: 3; align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: 99px; font-size: 10px; font-weight: 600; line-height: 15px; background: var(--p-amber, #fde68a); color: #16181d; border: 1px solid #16181d; }
+.fork-cal.look-a .cal-short .cal-reply { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); margin: 0; }
+.fork-cal.look-a .cal-short .cal-event-content { flex-direction: row; align-items: center; padding-right: 48px; }
+
+/* Unanswered invite: white, dashed. */
+.fork-cal.look-a .ec-event.cal-needs { background: var(--surface-raised); border: 1.5px dashed var(--cal-edge); }
+/* Tentative: outlined, no fill. Declined: faded and struck. Cancelled: dotted. */
+.fork-cal.look-a .ec-event.cal-tentative { background: var(--surface-raised); border-style: dashed; }
+.fork-cal.look-a .ec-event.cal-declined { opacity: 0.5; background: transparent; }
+/* Private: hatched over the fill. */
+.fork-cal.look-a .ec-event.cal-private { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--cal-color, var(--acct-1)) 35%, transparent) 6px 7.5px); }
+/* Past events fade a little, like Google's "dim past events". */
+.fork-cal.look-a .ec-event.cal-past { opacity: 0.62; }
+.fork-cal.look-a .ec-event.cal-past.cal-declined { opacity: 0.4; }
+/* Selected: an ink ring. */
+.fork-cal.look-a .ec-event.cal-selected { outline: 2px solid var(--text); outline-offset: 1px; z-index: 3; }
+
+/* Month view: compact chips. */
+.fork-cal.look-a .ec-day-grid .ec-event { padding: 1px 6px; font-size: 11.5px; }
+.fork-cal.look-a .ec-day-grid .ec-day-head { font-size: 12px; padding: 6px 8px 2px; }
+.fork-cal.look-a .ec-day-grid .ec-today .ec-day-head time { display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 50%; background: var(--text); color: var(--bg); font-weight: 700; }
+.fork-cal.look-a .ec-day-grid .cal-reply { display: none; }
+.fork-cal.look-a .ec-week-number { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+
+/* Pastel: pastel fill with an ink outline, like the inbox cards. */
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec-event { background-color: var(--cal-pastel, var(--p-peri)); border-color: var(--ink); color: var(--ink); }
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec-event.cal-needs,
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec-event.cal-tentative { background-color: #fff; border: 1.5px dashed var(--ink); }
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec-event.cal-private { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(22, 24, 29, 0.14) 6px 7.5px); }
+:root[data-theme="pastel-light"] .fork-cal.look-a .cal-event-time { color: #3f4148; }
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec-header,
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec { --ec-bg-color: var(--surface); }

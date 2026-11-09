@@ -35,6 +35,7 @@
   import { shiftEnd } from "./time";
   import { calendarApi } from "./api";
   import OptionsEditor from "./OptionsEditor.svelte";
+  import { calPrefs } from "./settings.svelte";
   import RepeatEditor from "./RepeatEditor.svelte";
   import { changedOptions, eventOptions, zonedParts, eventTimestamp, zonedTimestamp } from "./editor";
 
@@ -77,7 +78,8 @@
   let guests = $state(seed ? guestsValue(seed, own) : "");
   let location = $state(seed?.location ?? "");
   let description = $state(seed?.description ?? "");
-  let addMeet = $state(false);
+  // New events follow Settings, "New events: Add Google Meet" (D97).
+  let addMeet = $state(!seed && calPrefs.addMeetDefault);
   let zone = $state(seed?.time_zone ?? localZone());
   let options = $state(eventOptions(seed?.options, seed?.transparency));
   let optionalGuests = $state<string[]>(seed ? parseAttendees(seed).filter((a) => a.optional).map((a) => a.email.toLowerCase()) : []);

@@ -290,6 +290,17 @@ export function forkCalendarInvoke(cmd: string, args: any = {}): { ok: unknown }
     }
     case "fork_cal_sync_now":
       return { ok: undefined };
+    case "fork_cal_search": {
+      // Every term must match the title, place, notes or guests (D97).
+      const terms = String(args.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      const hits = EVENTS.filter((e) => {
+        const hay = [e.summary, e.description, e.location, e.attendees_json].join(" ").toLowerCase();
+        return terms.length > 0 && terms.every((t) => hay.includes(t));
+      }).map((e) => ({ ...e, remote: false }));
+      return { ok: { hits: hits.sort((a, b) => a.start_ts - b.start_ts), remote_error: null } };
+    }
+    case "fork_cal_discard_split":
+      return { ok: null };
     case "fork_free_slots":
       if (!status("acc-1").connected) return { err: notConnected() };
       return { ok: freeSlots(Number(args.durationMin) || 30, Number(args.days) || 5) };
