@@ -151,6 +151,13 @@ fn classify(msgs: &[Msg], own: &HashSet<String>, has_draft: bool) -> Option<Verd
         if m.folder_role.as_deref() == Some("drafts") {
             continue;
         }
+        // Fork (v1.1.52): a Trash copy is not the last word either. Gmail
+        // moves a replaced or discarded draft to Trash, and that copy must not
+        // mark the thread as answered. A thread that lives only in Junk or
+        // Trash keeps its copies, and is filed below.
+        if m.folder_role.as_deref() == Some("trash") && !only_junk_or_trash {
+            continue;
+        }
         let key = m
             .message_id
             .clone()
@@ -1065,6 +1072,46 @@ mod tests {
             now - 30 * 86_400,
             "negative = default"
         );
+    }
+
+    /// Fork (v1.1.52): Gmail moves a replaced or discarded reply draft to
+    /// Trash. That copy is not his answer: the inbound message stays on him.
+    #[test]
+    fn a_discarded_draft_in_trash_does_not_answer_the_thread() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|conn| {
+            let [inbox, _, _, _, trash, _] = seed(conn);
+            let (m1, t) = add(
+                conn,
+                M {
+                    folder: inbox,
+                    uid: 1,
+                    msgid: "m1",
+                    from: "anna@client.com",
+                    date: 100,
+                    refs: vec![],
+                    unsub: false,
+                },
+            );
+            let (_, t2) = add(
+                conn,
+                M {
+                    folder: trash,
+                    uid: 1,
+                    msgid: "m2",
+                    from: ME,
+                    date: 200,
+                    refs: vec!["m1"],
+                    unsub: false,
+                },
+            );
+            assert_eq!(t, t2, "the draft threads with its parent");
+            run(conn);
+            let (state, since, last, _) = row(conn, t).unwrap();
+            assert_eq!((state.as_str(), since, last), ("on_me", 100, m1));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

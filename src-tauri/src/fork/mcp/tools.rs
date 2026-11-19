@@ -400,6 +400,8 @@ async fn get_thread(server: &Server, a: &Args<'_>) -> ToolResult {
                     "has_attachments": m.has_attachments,
                     // Unsent: an agent must never read a draft as a reply.
                     "draft": m.is_draft,
+                    // Deleted: a discarded draft lands in Trash, never a reply.
+                    "trashed": m.is_trashed,
                     "body": body,
                 }));
             }

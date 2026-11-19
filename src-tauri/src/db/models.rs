@@ -97,6 +97,11 @@ pub struct MessageMeta {
     /// Fork (v1.1.9): every copy of this message is in a Drafts folder, so it
     /// is unsent and must never read as sent mail in a conversation.
     pub is_draft: bool,
+    /// Fork (v1.1.52): every copy of this message is in Trash. Gmail moves a
+    /// replaced or discarded draft there, so a conversation hides it outside
+    /// the Trash view, the way Gmail shows "1 deleted message".
+    #[serde(default)]
+    pub is_trashed: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

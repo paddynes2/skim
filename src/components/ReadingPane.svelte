@@ -305,6 +305,16 @@
     void loadThread(mail.selectedThreadId!);
   });
 
+  // Fork (v1.1.52): outside the Trash view a conversation hides messages that
+  // are only in Trash, as Gmail does. Gmail moves a replaced or discarded draft
+  // there, and it must never read as mail he sent. A thread with nothing else
+  // keeps them.
+  function withoutTrashed(d: ThreadDetail): ThreadDetail {
+    if (mail.selectedFolder?.role === "trash") return d;
+    const kept = d.messages.filter((m) => !m.isTrashed);
+    return kept.length === 0 || kept.length === d.messages.length ? d : { ...d, messages: kept };
+  }
+
   async function loadThread(threadId: number) {
     const seq = ++threadSeq;
     const sameThread = untrack(() => detail?.id === threadId);
@@ -322,7 +332,7 @@
     try {
       const d = await api.getThread(threadId);
       if (mail.selectedThreadId !== threadId || seq !== threadSeq) return;
-      detail = d;
+      detail = withoutTrashed(d);
       // Fork (v1.1.1): open the newest message of the whole conversation, like
       // Outlook, so a reply filed in another folder is never hidden. Drafts keep
       // the in-folder message, because that is the draft being opened. v1.1.9:

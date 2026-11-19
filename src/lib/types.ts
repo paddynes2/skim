@@ -81,6 +81,8 @@ export interface MessageMeta {
   canUnsubscribe: boolean;
   /** Fork: every copy is in Drafts, so it is unsent. */
   isDraft: boolean;
+  /** Fork: every copy is in Trash (a deleted message or a discarded draft). */
+  isTrashed: boolean;
 }
 
 export interface ThreadDetail {

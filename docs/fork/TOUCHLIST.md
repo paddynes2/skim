@@ -344,3 +344,7 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/mail/oauth.rs` | `TokenResponse`, `OauthOutcome`, `authorize` | + `scope` read from the token response, returned as `OauthOutcome.granted_scopes` | D98: the calendar grant records which scopes Google granted; the mail flow ignores the field |
 | `src-tauri/src/lib.rs` | `generate_handler!` | `fork_cal_move`, `fork_cal_set_color`, `fork_cal_add_calendar`, `fork_cal_create_calendar` | D98 |
 | `src/lib/i18n/locales/en.json` | `fork.cal.*` | event types, move, end zone, calendar list, insights, print, rich description, refusal sentences | D98 |
+| `src-tauri/src/db/models.rs`, `src/lib/types.ts` | `MessageMeta` | `+ is_trashed` / `isTrashed` | D99 |
+| `src-tauri/src/db/bodies.rs` | `get_thread`, `row_to_meta` | trashed only when every copy is in Trash | D99 |
+| `src-tauri/src/mail/threading.rs` | `recompute_thread` | `last_date` and `snippet` skip Trash copies like Drafts | D99 |
+| `src/components/ReadingPane.svelte` | `loadThread`, `withoutTrashed` | hides trashed messages outside the Trash view | D99 |

@@ -593,6 +593,10 @@ fn merge_threads(conn: &Connection, target: i64, other: i64) -> rusqlite::Result
 /// conversation in Inbox, Sent or Deals. A thread of drafts only falls back to
 /// its newest draft.
 ///
+/// Fork (v1.1.52): a Trash copy is left out the same way, so a replaced or
+/// discarded draft (Gmail moves it to Trash) never dates or previews the
+/// conversation. A thread with nothing else falls back to it.
+///
 /// Fork (v1.1.10, D63): `message_count` counts distinct Message-IDs, the way
 /// `bodies::get_thread` shows the conversation, so a message Gmail files
 /// under Inbox and Important counts once.
@@ -600,7 +604,7 @@ pub fn recompute_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<b
     let row: Option<(i64, i64, i64, i64)> = conn
         .query_row(
             "SELECT count(DISTINCT COALESCE(m.message_id, 'pk:' || m.id)),
-                    COALESCE(max(CASE WHEN f.role IS 'drafts' THEN NULL ELSE m.date END),
+                    COALESCE(max(CASE WHEN f.role IN ('drafts', 'trash') THEN NULL ELSE m.date END),
                              max(m.date)),
                     sum(m.is_read = 0), max(m.is_starred)
              FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
@@ -626,7 +630,7 @@ pub fn recompute_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<b
         .query_row(
             "SELECT m.snippet FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
              WHERE m.thread_id = ?1
-             ORDER BY f.role IS 'drafts', m.date DESC LIMIT 1",
+             ORDER BY COALESCE(f.role IN ('drafts', 'trash'), 0), m.date DESC LIMIT 1",
             params![thread_id],
             |r| r.get(0),
         )

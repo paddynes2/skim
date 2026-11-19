@@ -338,6 +338,7 @@ fn row_to_meta(r: &rusqlite::Row) -> rusqlite::Result<MessageMeta> {
         body_state: r.get(13)?,
         can_unsubscribe: list_unsubscribe.is_some(),
         is_draft: r.get(17)?,
+        is_trashed: r.get(18)?,
     })
 }
 
@@ -345,12 +346,15 @@ fn row_to_meta(r: &rusqlite::Row) -> rusqlite::Result<MessageMeta> {
 /// (Gmail label folders store copies of the same message under several
 /// mailboxes). A message is a draft only when every copy of it is in Drafts,
 /// the rule `court::classify` and `threading::recompute_thread` also follow.
+/// Fork (v1.1.52): likewise a message is trashed only when every copy is in
+/// Trash; the reading pane hides those outside the Trash view.
 pub fn get_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<ThreadDetail>> {
     let mut stmt = conn.prepare_cached(
         "SELECT m.id, m.folder_id, m.thread_id, m.subject, m.from_name, m.from_addr,
                 m.to_addrs, m.cc_addrs, m.date, m.snippet, m.is_read, m.is_starred,
                 m.has_attachments, m.body_state, m.list_unsubscribe,
-                m.list_unsubscribe_one_click, m.message_id, f.role IS 'drafts'
+                m.list_unsubscribe_one_click, m.message_id, f.role IS 'drafts',
+                f.role IS 'trash'
          FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
          WHERE m.thread_id = ?1 ORDER BY m.date, m.id",
     )?;
@@ -367,7 +371,10 @@ pub fn get_thread(conn: &Connection, thread_id: i64) -> rusqlite::Result<Option<
         match seen.get(&key) {
             // Just after a send the Sent copy shares the draft's Message-ID
             // while the Drafts copy waits for the next sync: that is sent mail.
-            Some(&kept) => messages[kept].is_draft &= meta.is_draft,
+            Some(&kept) => {
+                messages[kept].is_draft &= meta.is_draft;
+                messages[kept].is_trashed &= meta.is_trashed;
+            }
             None => {
                 seen.insert(key, messages.len());
                 messages.push(meta);

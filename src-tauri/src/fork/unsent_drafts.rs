@@ -271,3 +271,62 @@ fn older_drafts_are_scoped_oldest_first_and_opening_does_not_count_as_editing() 
         Ok(())
     }).unwrap();
 }
+
+/// Fork (v1.1.52): Gmail moves a replaced or discarded reply draft to Trash.
+/// That copy must not read as sent mail: it is flagged trashed in the
+/// conversation, and it neither dates nor previews the thread. A deleted
+/// message that is the thread's only message keeps the thread's date.
+#[test]
+fn a_discarded_draft_in_trash_neither_reads_as_sent_nor_dates_the_thread() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|conn| {
+        seed(conn)?;
+        let (sent, _) = sent_and_drafts(conn)?;
+        conn.execute_batch(
+            "INSERT INTO folders (account_id, imap_name, role, display_name, unread_count, sort_order)
+             VALUES ('a1', 'Trash', 'trash', 'Trash', 0, 12);",
+        )?;
+        let trash = folder_id(conn, "a1", "Trash");
+        add_reply(conn, sent, 1, "<s1@x>", None, "Agreement", 100);
+        add_reply(
+            conn,
+            trash,
+            1,
+            "<old-draft@x>",
+            Some("<s1@x>"),
+            "Re: Agreement",
+            300,
+        );
+        let thread: i64 = conn.query_row(
+            "SELECT thread_id FROM messages WHERE message_id = 's1@x'",
+            [],
+            |r| r.get(0),
+        )?;
+        let detail = crate::db::bodies::get_thread(conn, thread)?.unwrap();
+        let shape: Vec<_> = detail
+            .messages
+            .iter()
+            .map(|m| (m.date, m.is_draft, m.is_trashed))
+            .collect();
+        assert_eq!(shape, [(100, false, false), (300, false, true)]);
+
+        let summary: (i64, String) = conn.query_row(
+            "SELECT last_date, snippet FROM threads WHERE id = ?1",
+            params![thread],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        assert_eq!(summary, (100, "Agreement body".to_string()));
+
+        // A thread that lives only in Trash still dates by its message.
+        add_reply(conn, trash, 2, "<gone@x>", None, "Gone", 700);
+        let summary: (i64, String) = conn.query_row(
+            "SELECT t.last_date, t.snippet FROM threads t
+             JOIN messages m ON m.thread_id = t.id WHERE m.message_id = 'gone@x'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        assert_eq!(summary, (700, "Gone body".to_string()));
+        Ok(())
+    })
+    .unwrap();
+}
