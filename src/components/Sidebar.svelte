@@ -5,7 +5,7 @@
   import { folderIcon, folderLabel, folderTree, ownFoldersHeading } from "../lib/folders";
   import { t } from "../lib/i18n/index.svelte";
   import { ai } from "../lib/stores/ai.svelte";
-  import { mail } from "../lib/stores/mail.svelte";
+  import { mail, UNIFIED } from "../lib/stores/mail.svelte";
   import { palette } from "../lib/stores/palette.svelte";
   import { ui } from "../lib/stores/ui.svelte";
   import { updater } from "../lib/stores/update.svelte";
@@ -57,6 +57,37 @@
     ),
   );
   const collapsed = $derived(ui.sidebarCollapsed);
+
+  // Fork (v1.1.53, D100): every mailbox's inbox in the sidebar, under "All
+  // inboxes". Picking one makes it the active mailbox (the title-bar switcher
+  // does the same), so the folders, To reply and Deals below follow it.
+  const multi = $derived(mail.accounts.length > 1);
+  const scope = $derived(mail.unified ? UNIFIED : (mail.account?.id ?? null));
+  const inboxOpen = $derived(
+    ui.view === "mail" && mail.folders.some((f) => f.id === mail.selectedFolderId && f.role === "inbox"),
+  );
+  let inboxUnread = $state<Record<string, number>>({});
+  const allUnread = $derived(Object.values(inboxUnread).reduce((sum, n) => sum + n, 0));
+  // The folder list reloads after every sync, so the counts follow it.
+  $effect(() => {
+    void mail.folders;
+    if (!multi) return;
+    void api
+      .inboxUnreadCounts()
+      .then((counts) => (inboxUnread = counts))
+      .catch(() => {});
+  });
+
+  async function openInbox(id: string) {
+    ui.showMail();
+    if (id !== scope) {
+      // Switching lands on the mailbox's inbox.
+      await mail.switchAccount(id);
+      return;
+    }
+    const inbox = mail.folders.find((f) => f.role === "inbox");
+    if (inbox) await mail.selectFolder(inbox.id);
+  }
 </script>
 
 {#snippet folderRow(folder: (typeof mainFolders)[number])}
@@ -102,9 +133,38 @@
 
     <!-- Fork: Inbox, Calendar and Deals precede the remaining folders. -->
     <div class="section">
-      {#each mainFolders.filter((f) => f.role === "inbox") as folder (folder.id)}
-        {@render folderRow(folder)}
-      {/each}
+      {#if multi}
+        <button
+          class="item"
+          class:selected={inboxOpen && scope === UNIFIED}
+          onclick={() => void openInbox(UNIFIED)}
+          title={collapsed ? t("accounts.all_inboxes") : undefined}
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+            <path d={folderIcon("inbox")} />
+          </svg>
+          <span class="name">{t("accounts.all_inboxes")}</span>
+          {#if allUnread > 0}<span class="count">{allUnread}</span>{/if}
+        </button>
+        {#each mail.accounts as a (a.id)}
+          {@const badge = mail.accountBadge(a.id)}
+          <button
+            class="item mailbox"
+            class:selected={inboxOpen && scope === a.id}
+            onclick={() => void openInbox(a.id)}
+            title={a.email}
+          >
+            <span class="acct-dot" style:--c="var(--acct-{badge?.color ?? 0})"></span>
+            <span class="initial" aria-hidden="true">{(badge?.label ?? a.email).charAt(0).toUpperCase()}</span>
+            <span class="name">{badge?.label ?? a.email}</span>
+            {#if (inboxUnread[a.id] ?? 0) > 0}<span class="count">{inboxUnread[a.id]}</span>{/if}
+          </button>
+        {/each}
+      {:else}
+        {#each mainFolders.filter((f) => f.role === "inbox") as folder (folder.id)}
+          {@render folderRow(folder)}
+        {/each}
+      {/if}
       <!-- Fork (v1.1.19, D70): To reply, the conversations waiting on a reply.
            The count is every one of them, read or not. -->
       <button
@@ -493,6 +553,18 @@
     font-size: 11px;
     color: var(--text-dim);
   }
+  /* D100: a mailbox's inbox sits under All inboxes, marked with the colour
+     its rows carry in the unified list. */
+  .item.mailbox {
+    padding-left: 26px;
+  }
+  .acct-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--c) 70%, var(--text));
+  }
   .dot {
     width: 8px;
     height: 8px;
@@ -579,7 +651,8 @@
   .sidebar.collapsed .search {
     margin-top: 0;
   }
-  .sidebar.collapsed .dot {
+  .sidebar.collapsed .dot,
+  .sidebar.collapsed .acct-dot {
     display: none;
   }
   .sidebar.collapsed .initial {

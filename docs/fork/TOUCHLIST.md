@@ -348,3 +348,4 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/db/bodies.rs` | `get_thread`, `row_to_meta` | trashed only when every copy is in Trash | D99 |
 | `src-tauri/src/mail/threading.rs` | `recompute_thread` | `last_date` and `snippet` skip Trash copies like Drafts | D99 |
 | `src/components/ReadingPane.svelte` | `loadThread`, `withoutTrashed` | hides trashed messages outside the Trash view | D99 |
+| `src/components/Sidebar.svelte` | Inbox row, styles | All inboxes plus one inbox row per mailbox when more than one is connected | D100 |
