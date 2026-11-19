@@ -522,7 +522,7 @@ impl Engine {
                 };
                 let body = gapi::rsvp_body(
                     attendees.as_deref(),
-                    &self.account_email,
+                    p["as"].as_str().unwrap_or(&self.account_email),
                     response,
                     p["comment"].as_str(),
                 );

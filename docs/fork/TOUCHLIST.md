@@ -352,3 +352,4 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src/lib/i18n/locales/en.json` | `fork.cal.join_as` | new string: the account a Meet Join opens as | D101 |
 | `src/lib/stores/mail.svelte.ts` | `ACCOUNT_COLORS` | order blue, rose, green, teal, amber: the third mailbox is green | D102 |
 | `src/lib/i18n/locales/en.json` | `fork.cal.shared_with_you` | new string: rail group for other people's calendars | D102 |
+| `src/components/InviteCard.svelte` | `myResponse`, `respond`, extras mount | answers through the calendar when the invite is on it; shows the calendar's answer | D103 |

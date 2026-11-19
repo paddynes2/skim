@@ -15,9 +15,8 @@
   import type { EventRow } from "./types";
   import ProposeTime from "./ProposeTime.svelte";
 
-  let { invite }: { invite: InviteView } = $props();
-
-  let matched = $state<EventRow | null>(null);
+  // D103: `matched` is bindable so the invite card answers through the calendar.
+  let { invite, matched = $bindable(null) }: { invite: InviteView; matched?: EventRow | null } = $props();
   let conflicts = $state<EventRow[]>([]);
   // Fork (v1.1.1): propose a new time straight from the invite.
   let proposing = $state(false);
@@ -59,8 +58,13 @@
       return;
     }
     const live = rows.filter((r) => r.status !== "cancelled");
+    // D103: the same meeting can sit on two calendars; answer on an own one.
+    const own = calendar.ownEmails;
+    const onOwn = (r: EventRow) => own.includes((calendar.calendarOf(r)?.google_id ?? "").toLowerCase());
+    const byUid = live.filter((r) => uidMatches(inv.uid, r));
     const hit =
-      live.find((r) => uidMatches(inv.uid, r)) ??
+      byUid.find(onOwn) ??
+      byUid[0] ??
       live.find(
         (r) =>
           !!inv.summary &&

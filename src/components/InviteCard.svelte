@@ -3,6 +3,8 @@
   import { getLocale, t } from "../lib/i18n/index.svelte";
   import type { InviteView } from "../lib/types";
   import InviteCardExtras from "../fork/calendar/InviteCardExtras.svelte"; // fork (7.5)
+  import { calendar } from "../fork/calendar/store.svelte"; // fork (D103)
+  import type { EventRow } from "../fork/calendar/types"; // fork (D103)
 
   let {
     invite,
@@ -19,7 +21,17 @@
   let sending = $state(false);
   let failed = $state(false);
   let addFailed = $state(false);
-  const myResponse = $derived(localResponse ?? invite.myResponse);
+  // Fork (D103): when the invite is on a connected calendar, the answer is the
+  // calendar's (it outlives this card) and a click answers through Google,
+  // like Google's own invite card, instead of mailing an iMIP reply that
+  // leaves the owner's calendar unanswered.
+  let calRow = $state<EventRow | null>(null);
+  const calResponse = $derived.by(() => {
+    if (!calRow) return null;
+    const live = calendar.events.find((e) => e.id === calRow!.id) ?? calRow;
+    return live.self_response && live.self_response !== "needsAction" ? live.self_response : null;
+  });
+  const myResponse = $derived(localResponse ?? calResponse ?? invite.myResponse);
 
   // Skim has no calendar — hand the .ics to the OS so the user adds it
   // wherever they keep their calendar.
@@ -39,7 +51,13 @@
     sending = true;
     failed = false;
     try {
-      await onRsvp(response);
+      if (calRow && calendar.connected) {
+        const ok = await calendar.rsvp(calRow.id, response);
+        if (!ok) localResponse = previous;
+        else calRow = { ...calRow, self_response: response };
+      } else {
+        await onRsvp(response);
+      }
     } catch {
       localResponse = previous;
       failed = true;
@@ -242,7 +260,7 @@
       {/if}
     </div>
   {/if}
-  <InviteCardExtras {invite} /><!-- fork (7.5): "In your calendar" + conflicts -->
+  <InviteCardExtras {invite} bind:matched={calRow} /><!-- fork (7.5): "In your calendar" + conflicts -->
 </div>
 
 <style>

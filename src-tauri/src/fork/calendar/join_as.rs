@@ -37,6 +37,30 @@ pub fn join_as(
     account_email.map(str::to_ascii_lowercase)
 }
 
+/// The own address an invitation answer is given as (D103): the meeting's own
+/// address when one is invited or owns the calendar; on a group calendar the
+/// syncing account; `None` on another person's calendar that invites no own
+/// address (answering there would answer for, or add a guest to, their event).
+pub fn answer_as(
+    attendees_json: Option<&str>,
+    calendar_id: &str,
+    account_email: &str,
+    own: &[String],
+) -> Option<String> {
+    let who = join_as(attendees_json, calendar_id, Some(account_email), own)?;
+    let person = calendar_id.contains('@')
+        && !calendar_id
+            .to_ascii_lowercase()
+            .ends_with("calendar.google.com");
+    let own_calendar = own.iter().any(|o| o.eq_ignore_ascii_case(calendar_id));
+    let invited =
+        attendees_json.is_some_and(|j| j.to_ascii_lowercase().contains(&format!("\"{who}\"")));
+    if person && !own_calendar && !invited {
+        return None;
+    }
+    Some(who)
+}
+
 /// The link opened as `email` when it is a Google Meet or Calendar page; any
 /// other link unchanged.
 pub fn with_account(link: &str, email: Option<&str>) -> String {
@@ -111,6 +135,34 @@ mod tests {
             Some("me@work.test")
         );
         assert_eq!(join_as(Some("not json"), "x", None, &own()), None);
+    }
+
+    #[test]
+    fn an_answer_is_never_given_on_someone_elses_calendar_without_an_invite() {
+        let theirs = r#"[{"email":"friend@other.test","self":true}]"#;
+        assert_eq!(
+            answer_as(Some(theirs), "friend@other.test", "me@work.test", &own()),
+            None
+        );
+        let invited = r#"[{"email":"friend@other.test","self":true},{"email":"me@home.test"}]"#;
+        assert_eq!(
+            answer_as(Some(invited), "friend@other.test", "me@work.test", &own()).as_deref(),
+            Some("me@home.test")
+        );
+        assert_eq!(
+            answer_as(None, "me@home.test", "me@work.test", &own()).as_deref(),
+            Some("me@home.test")
+        );
+        assert_eq!(
+            answer_as(
+                None,
+                "c_1@group.calendar.google.com",
+                "me@work.test",
+                &own()
+            )
+            .as_deref(),
+            Some("me@work.test")
+        );
     }
 
     #[test]

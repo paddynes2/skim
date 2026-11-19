@@ -451,10 +451,12 @@ pub fn rsvp_body(
         .unwrap_or_default();
     let mut found = false;
     for a in list.iter_mut() {
-        let is_self = a.get("self").and_then(Value::as_bool).unwrap_or(false)
-            || a.get("email")
-                .and_then(Value::as_str)
-                .is_some_and(|e| e.eq_ignore_ascii_case(self_email));
+        // D103: match by address; a `self` entry without one still counts.
+        // `self` alone is the calendar's owner, who on a shared calendar is
+        // someone else.
+        let email = a.get("email").and_then(Value::as_str);
+        let is_self = email.is_some_and(|e| e.eq_ignore_ascii_case(self_email))
+            || (email.is_none() && a.get("self").and_then(Value::as_bool).unwrap_or(false));
         if is_self {
             a["responseStatus"] = json!(response);
             if let Some(c) = comment {
@@ -952,6 +954,16 @@ mod tests {
         assert_eq!(list[1]["email"], "me@x.com");
         assert_eq!(list[1]["responseStatus"], "declined");
         assert!(valid_response("tentative") && !valid_response("maybe"));
+    }
+
+    #[test]
+    fn rsvp_body_never_answers_for_the_owner_of_a_shared_calendar() {
+        let stored = r#"[{"email":"friend@x.com","self":true,"responseStatus":"accepted"},
+                         {"email":"me@x.com","responseStatus":"needsAction"}]"#;
+        let b = rsvp_body(Some(stored), "me@x.com", "declined", None);
+        let list = b["attendees"].as_array().unwrap();
+        assert_eq!(list[0]["responseStatus"], "accepted");
+        assert_eq!(list[1]["responseStatus"], "declined");
     }
 
     #[test]

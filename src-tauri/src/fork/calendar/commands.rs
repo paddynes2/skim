@@ -959,6 +959,9 @@ pub async fn fork_cal_rsvp(
     }
     let send = SendUpdates::parse(&send_updates)?;
     let series = series.unwrap_or(false);
+    // D103: answer as the own address the meeting belongs to (a mailbox's
+    // calendar shared into another account answers as that mailbox), and
+    // refuse on another person's calendar that invites no own address.
     let (account_id, account_email) = state
         .db
         .call(move |conn| {
@@ -968,10 +971,26 @@ pub async fn fork_cal_rsvp(
             let Some(cal) = store::get_calendar(conn, row.calendar_id)? else {
                 return Ok(None);
             };
-            Ok(db_accounts::get(conn, &cal.account_id)?.map(|a| (a.id, a.email)))
+            let Some(acct) = db_accounts::get(conn, &cal.account_id)? else {
+                return Ok(None);
+            };
+            let (own, _) = store::join_identities(conn)?;
+            let who = super::join_as::answer_as(
+                row.attendees_json.as_deref(),
+                &cal.google_id,
+                &acct.email,
+                &own,
+            );
+            Ok(Some((acct.id, who)))
         })
         .await?
         .ok_or_else(|| SkimError::other("gcal_input", "unknown event"))?;
+    let account_email = account_email.ok_or_else(|| {
+        SkimError::other(
+            "gcal_input",
+            "this event is on another person's calendar and does not invite you",
+        )
+    })?;
     require_connected(&account_id)?;
     let resp = response.clone();
     let aid = account_id.clone();
@@ -983,7 +1002,8 @@ pub async fn fork_cal_rsvp(
             };
             let note = comment.as_deref();
             let master = row.recurring_event_id.clone().filter(|_| series);
-            let payload = rsvp_op_payload(&row, &resp, send, note, series);
+            let mut payload = rsvp_op_payload(&row, &resp, send, note, series);
+            payload["as"] = json!(account_email.clone());
             let answer = |r: &mut EventRow| {
                 let body =
                     gapi::rsvp_body(r.attendees_json.as_deref(), &account_email, &resp, note);
