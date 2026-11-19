@@ -6,6 +6,16 @@ this file, and its date, whenever the state moves.
 
 **As of 2026-11-19.**
 
+## Versions 1.1.56 and 1.1.57 (November 19)
+
+D102 (1.1.56): the calendar shows which mailbox each event belongs to. The owner picked "A and C" from three mocks on his real week (mocks and review page in the owner's private OS repo): each event is filled in its mailbox colour and starts with the mailbox word as a tag; another person's calendar is white with stripes and tagged with its name; the calendar list is grouped by mailbox with "Shared with you" last. The third mailbox's colour moved from teal to green (also its inbox tag). Checked in the browser demo with two mailboxes, Pastel light and Base dark (4 tags, rail groups); the Base fill was raised to 42% after that check. Not checked in the owner's window.
+
+D103 (1.1.57): an invitation answer shows everywhere. The Yes / No / Maybe buttons on an invitation email answered by iMIP mail only; the owner's calendar stayed unanswered. Now they answer through Google when the invite is on a connected calendar, and the card shows the calendar's answer. Answers are given as the meeting's own address and change only that guest entry; on another person's calendar without an invite to an own address the answer is refused. Before the fix, the stored rows matched Google (checked on the Workspace mailbox's 19 Nov meeting: accepted in both), so the fault was the email card, not sync. Not exercised live: a real answer from an invitation email (no test invite was sent).
+
+Built through build-install.ps1 -NoInstall (all gates green: 696 Rust tests, node tests, clippy, fmt, svelte-check, contrast), installed by hand 19 Nov 14:38: ProductVersion 1.1.57, SHA-256 da208fea9b23ebb3d5753a273a604ba4a503491f9806aa2c4e66c07158129372, backup ~/.skim-fork/backups/20261119-143752 (1.1.56 backup 20261119-142419). Not published as a release.
+
+Open (needs the owner): look at the calendar colours and tags; answer one real invitation from its email and confirm the calendar shows it; click Join on a Workspace or personal Meet once and confirm the browser account; "Reconnect Google" for the work account (wider scopes, from 9 Nov).
+
 ## Versions 1.1.54 and 1.1.55 (November 19)
 
 D101: one calendar for every mailbox, and Join opens as the account the meeting belongs to. Every Join (event card, editor panel, side preview, titlebar chip, alert toast, Windows pop-up) and every "Open in Google Calendar" carries `?authuser=<own address>`: the `self` guest when it is a mailbox, else another invited own address (1.1.55), else the calendar's own address, else the syncing account. Built from 5f5deae, bda4f8a (1.1.54) and the 1.1.55 commit through build-install.ps1 -NoInstall (all gates green: 694 Rust tests, node tests, clippy, fmt, svelte-check, contrast), installed by hand 19 Nov 13:57: ProductVersion 1.1.55, SHA-256 78c26fc68d606cccd3cc87ea5e247b74307e2e60ab81ac00cff279ad30572c24, backup ~/.skim-fork/backups/20261119-135724 (1.1.54 backup 20261119-133618).
