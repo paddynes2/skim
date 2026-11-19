@@ -105,15 +105,19 @@ export function withAccount(url: string, email: string | null | undefined): stri
 
 /**
  * The own address a meeting belongs to: the guest Google marks as this
- * calendar (`self`), else the calendar's own address, else the account that
- * synced it. Only an address with a mailbox in Skim counts.
+ * calendar (`self`), else another invited own address (a meeting on someone
+ * else's shared calendar), else the calendar's own address, else the account
+ * that synced it. Only an address with a mailbox in Skim counts.
  */
 export function joinAs(row: Pick<EventRow, "attendees_json">, calendarId: string | null | undefined, accountEmail: string | null | undefined, own: string[]): string | null {
   const mine = (e: string | null | undefined) => !!e && own.includes(e.toLowerCase());
   try {
     const list = JSON.parse(row.attendees_json ?? "[]") as { email?: string; self?: boolean }[];
-    const self = Array.isArray(list) ? list.find((a) => a?.self)?.email : undefined;
+    const guests = Array.isArray(list) ? list : [];
+    const self = guests.find((a) => a?.self)?.email;
     if (mine(self)) return self!.toLowerCase();
+    const invited = guests.find((a) => mine(a?.email))?.email;
+    if (invited) return invited.toLowerCase();
   } catch { /* fall through */ }
   if (mine(calendarId)) return calendarId!.toLowerCase();
   return accountEmail ? accountEmail.toLowerCase() : null;

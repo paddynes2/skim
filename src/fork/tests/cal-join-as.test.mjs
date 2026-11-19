@@ -15,6 +15,11 @@ test("a shared calendar of an own address opens as that address", () => {
   assert.equal(joinAs({ attendees_json: null }, "me@side.test", "me@work.test", own), "me@side.test");
 });
 
+test("an invited own address on someone else's calendar wins", () => {
+  const attendees_json = JSON.stringify([{ email: "me@home.test" }, { email: "partner@other.test", self: true }]);
+  assert.equal(joinAs({ attendees_json }, "partner@other.test", "me@work.test", own), "me@home.test");
+});
+
 test("someone else's calendar falls back to the syncing account", () => {
   const attendees_json = JSON.stringify([{ email: "partner@other.test", self: true }]);
   assert.equal(joinAs({ attendees_json }, "partner@other.test", "Me@Work.test", own), "me@work.test");

@@ -7,8 +7,9 @@
 //! `joinAs` / `withAccount` in `src/fork/calendar/presentation.ts`.
 
 /// The own address a meeting belongs to: the guest Google marks as this
-/// calendar (`self`), else the calendar's own address, else the account that
-/// synced it. Only an address with a mailbox in Skim counts.
+/// calendar (`self`), else another invited own address (a meeting on someone
+/// else's shared calendar), else the calendar's own address, else the account
+/// that synced it. Only an address with a mailbox in Skim counts.
 pub fn join_as(
     attendees_json: Option<&str>,
     calendar_id: &str,
@@ -16,17 +17,18 @@ pub fn join_as(
     own: &[String],
 ) -> Option<String> {
     let mine = |e: &str| own.iter().any(|o| o.eq_ignore_ascii_case(e));
-    let self_email = attendees_json
-        .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
-        .and_then(|v| {
-            v.as_array()?.iter().find_map(|a| {
-                a.get("self")?
-                    .as_bool()?
-                    .then(|| a.get("email")?.as_str().map(str::to_string))
-                    .flatten()
-            })
-        });
+    let guests: Vec<serde_json::Value> = attendees_json
+        .and_then(|j| serde_json::from_str(j).ok())
+        .unwrap_or_default();
+    let email = |a: &serde_json::Value| a.get("email")?.as_str().map(str::to_string);
+    let self_email = guests
+        .iter()
+        .find(|a| a.get("self").and_then(|v| v.as_bool()) == Some(true))
+        .and_then(email);
     if let Some(e) = self_email.filter(|e| mine(e)) {
+        return Some(e.to_ascii_lowercase());
+    }
+    if let Some(e) = guests.iter().filter_map(email).find(|e| mine(e)) {
         return Some(e.to_ascii_lowercase());
     }
     if mine(calendar_id) {
@@ -89,6 +91,15 @@ mod tests {
         assert_eq!(
             join_as(None, "me@side.test", Some("me@work.test"), &own()).as_deref(),
             Some("me@side.test")
+        );
+    }
+
+    #[test]
+    fn an_invited_own_address_on_someone_elses_calendar_wins() {
+        let a = r#"[{"email":"me@home.test"},{"email":"partner@other.test","self":true}]"#;
+        assert_eq!(
+            join_as(Some(a), "partner@other.test", Some("me@work.test"), &own()).as_deref(),
+            Some("me@home.test")
         );
     }
 
