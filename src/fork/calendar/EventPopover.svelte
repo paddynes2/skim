@@ -56,6 +56,7 @@
   const cal = $derived(calendar.calendarOf(row));
   const color = $derived(EVENT_COLORS[Number(row.options?.colorId)] || cal?.color || "var(--acct-1)");
   const join = $derived(joinLink(row));
+  const joinAsEmail = $derived(join ? calendar.joinAs(row) : null);
   const guests = $derived(parseAttendees(row).filter((g) => !g.email.endsWith("resource.calendar.google.com")));
   const iAmGuest = $derived(!foreign && selfIsGuest(row, calendar.ownEmails) && row.status !== "cancelled");
   const canEdit = $derived(!foreign && calendar.canEdit(row));
@@ -154,7 +155,7 @@
     {#if !foreign && others.length}<button title={t("fork.cal.email_guests")} aria-label={t("fork.cal.email_guests")} onclick={emailGuests}><svg viewBox="0 0 16 16"><path d="M2.5 4h11v8h-11zM2.5 4.5 8 9l5.5-4.5" /></svg></button>{/if}
     {#if !foreign}<button title={t("fork.cal.duplicate")} aria-label={t("fork.cal.duplicate")} disabled={!calendar.connected} onclick={() => calendar.duplicate(row)}><svg viewBox="0 0 16 16"><path d="M5.5 5.5h7v7h-7zM3.5 10.5v-7h7" /></svg></button>{/if}
     {#if canEdit}<button title={t("fork.cal.delete")} aria-label={t("fork.cal.delete")} onclick={() => (confirmDelete = !confirmDelete)}><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5" /></svg></button>{/if}
-    {#if row.html_link}<button title={t("fork.cal.open_in_google")} aria-label={t("fork.cal.open_in_google")} onclick={() => openUrl(row.html_link!)}><svg viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7.5 8.5M11.5 9.5V13H3V4.5h3.5" /></svg></button>{/if}
+    {#if row.html_link}<button title={t("fork.cal.open_in_google")} aria-label={t("fork.cal.open_in_google")} onclick={() => calendar.openAs(row, row.html_link!)}><svg viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7.5 8.5M11.5 9.5V13H3V4.5h3.5" /></svg></button>{/if}
     <span class="sep"></span>
     <button title={t("fork.cal.close")} aria-label={t("fork.cal.close")} onclick={onclose}><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
   </div>
@@ -183,7 +184,8 @@
   </div>
 
   {#if join}
-    <button class="join" onclick={() => openUrl(join.url)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5h7.5v6H2.5zM10 7.2l3.5-2v5.6l-3.5-2" /></svg>{t(`fork.cal.join_${join.kind}`)}</button>
+    <button class="join" onclick={() => calendar.openAs(row, join.url)} title={joinAsEmail ? t("fork.cal.join_as", { email: joinAsEmail }) : undefined}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5h7.5v6H2.5zM10 7.2l3.5-2v5.6l-3.5-2" /></svg>{t(`fork.cal.join_${join.kind}`)}</button>
+    {#if joinAsEmail && join.kind === "meet" && mail.accounts.length > 1}<p class="join-as">{t("fork.cal.join_as", { email: joinAsEmail })}</p>{/if}
   {/if}
 
   {#if row.location && !(join && (row.location.includes(join.url) || /^(google( meet)?|microsoft teams meeting|zoom)$/i.test(row.location.trim())))}
@@ -263,6 +265,7 @@
   .meta { color: var(--text-faint); font-size: 12px; margin: 2px 0 0; }
   .join { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 12px 26px; padding: 7px 14px; border-radius: var(--radius-m); background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 13px; }
   .join:hover { filter: brightness(0.97); }
+  .join-as { margin: -6px 0 12px 26px; font-size: 12px; color: var(--text-muted, var(--muted)); }
   .row { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: center; margin: 0 0 10px; color: var(--text-dim); }
   .row.top { align-items: start; }
   .row.top svg { margin-top: 2px; }

@@ -2,7 +2,6 @@
   // Titlebar chip (PLAN.md 7.5): "14:00 Call with X · in 25m · Join" while an
   // event starts within the hour; nothing otherwise. Click opens the event in
   // the calendar view; Join opens the Meet link in the browser.
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { t } from "../../lib/i18n/index.svelte";
   import { ui } from "../../lib/stores/ui.svelte";
   import { fmtIn, fmtTime } from "./guests";
@@ -27,7 +26,7 @@
       <span class="in">{fmtIn(ev.start_ts, calendar.now)}</span>
     </button>
     {#if ev.hangout_link}
-      <button class="join" onclick={() => openUrl(ev.hangout_link!)}>{t("fork.cal.join")}</button>
+      <button class="join" onclick={() => calendar.openAs(ev, ev.hangout_link!)}>{t("fork.cal.join")}</button>
     {/if}
   </div>
 {/if}

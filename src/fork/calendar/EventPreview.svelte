@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { t } from "../../lib/i18n/index.svelte";
   import AttachmentLinks from "./AttachmentLinks.svelte";
   import { eventState } from "./presentation";
@@ -37,13 +36,13 @@
     {#if sync?.status === "failed"}<p class="muted">{sync.message}</p><button class="btn" onclick={retry}>{t("fork.cal.retry")}</button>{/if}
     {#if sync?.can_discard}<details><summary>{t("fork.cal.discard_split")}</summary><p>{t("fork.cal.discard_split_note")}</p><button class="btn" disabled={discarding} onclick={discard}>{t("fork.cal.discard_split_confirm")}</button></details>{/if}
     {#if row.location}<h3>{t("fork.cal.location")}</h3><p>{row.location}</p>{/if}
-    {#if row.hangout_link}<button class="btn primary" onclick={() => openUrl(row.hangout_link!)}>{t("fork.cal.join")}</button>{/if}
+    {#if row.hangout_link}<button class="btn primary" onclick={() => calendar.openAs(row, row.hangout_link!)}>{t("fork.cal.join")}</button>{/if}
     {#if parseAttendees(row).length}<h3>{t("fork.cal.guests")}</h3><ul>{#each parseAttendees(row) as guest}<li><span>{guest.displayName || guest.email}</span><small>{t(`fork.cal.rsvp_${guest.responseStatus ?? "needsAction"}`)}</small></li>{/each}</ul>{/if}
     {#if row.description}<h3>{t("fork.cal.description")}</h3><p class="description">{row.description}</p>{/if}
     {#if row.options?.attachments?.length}<AttachmentLinks value={row.options.attachments} />{/if}
     {#if error}<p class="failed" role="alert">{error}</p>{/if}
   </div>
-  <footer><button class="btn primary" onclick={() => calendar.edit(row.id)}>{t(calendar.canEdit(row) ? "fork.cal.edit_event" : "fork.cal.event_details")}</button><button class="btn" disabled={!calendar.connected} onclick={() => calendar.duplicate(row)}>{t("fork.cal.duplicate")}</button>{#if row.html_link}<button class="google" onclick={() => openUrl(row.html_link!)}>{t("fork.cal.open_in_google")}</button>{/if}</footer>
+  <footer><button class="btn primary" onclick={() => calendar.edit(row.id)}>{t(calendar.canEdit(row) ? "fork.cal.edit_event" : "fork.cal.event_details")}</button><button class="btn" disabled={!calendar.connected} onclick={() => calendar.duplicate(row)}>{t("fork.cal.duplicate")}</button>{#if row.html_link}<button class="google" onclick={() => calendar.openAs(row, row.html_link!)}>{t("fork.cal.open_in_google")}</button>{/if}</footer>
 </aside>
 <style>
   .rsvp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; margin: 4px 0 12px; border: 1px solid var(--hairline); border-radius: var(--radius-m); background: var(--hover); }

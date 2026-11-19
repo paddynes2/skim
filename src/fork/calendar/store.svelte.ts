@@ -13,6 +13,7 @@ import { navHooks } from "../nav";
 import { toast } from "../stores/toast.svelte";
 import { CALENDAR_ALERT, CALENDAR_OPS_FAILED, CALENDAR_UPDATED, calendarApi, googleApi } from "./api";
 import { calendarErrorText, otherGuests, roundUp } from "./guests";
+import { joinAs, withAccount } from "./presentation";
 import { guestsPrompt } from "./prompt.svelte";
 import { calPrefs } from "./settings.svelte";
 import type {
@@ -278,6 +279,16 @@ export const calendar = {
   },
   calendarOf(row: EventRow): CalendarRow | undefined {
     return state.calendars.find((c) => c.id === row.calendar_id);
+  },
+  /** The own address this meeting opens as in the browser (D101). */
+  joinAs(row: EventRow): string | null {
+    const cal = this.calendarOf(row);
+    const account = mail.accounts.find((a) => a.id === cal?.account_id)?.email;
+    return joinAs(row, cal?.google_id, account, ownEmails());
+  },
+  /** Open a Meet or Calendar link signed in as the meeting's own account (D101). */
+  openAs(row: EventRow, url: string): void {
+    void openUrl(withAccount(url, this.joinAs(row)));
   },
   /** True when the event's calendar accepts writes and the account is connected. */
   canEdit(row: EventRow): boolean {

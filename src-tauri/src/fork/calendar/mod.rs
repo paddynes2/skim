@@ -11,6 +11,7 @@ pub mod alerts;
 pub mod availability;
 pub mod commands;
 pub mod gapi;
+pub mod join_as;
 pub mod model;
 pub mod options;
 #[cfg(test)]

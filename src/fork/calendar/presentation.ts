@@ -84,3 +84,37 @@ export function initials(name: string): string {
   const parts = base.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }
+
+// ---- Join as the right account (D101) ----
+
+/** True for Google pages that honour `?authuser=`: Meet and Calendar. */
+function honoursAuthuser(u: URL): boolean {
+  const host = u.hostname.toLowerCase();
+  return host === "meet.google.com" || host === "calendar.google.com" || (host === "www.google.com" && u.pathname.startsWith("/calendar"));
+}
+
+/** The link opened as `email` when it is a Google Meet or Calendar page; any other link unchanged. */
+export function withAccount(url: string, email: string | null | undefined): string {
+  if (!email) return url;
+  let u: URL;
+  try { u = new URL(url); } catch { return url; }
+  if (u.protocol !== "https:" || !honoursAuthuser(u)) return url;
+  u.searchParams.set("authuser", email);
+  return u.toString();
+}
+
+/**
+ * The own address a meeting belongs to: the guest Google marks as this
+ * calendar (`self`), else the calendar's own address, else the account that
+ * synced it. Only an address with a mailbox in Skim counts.
+ */
+export function joinAs(row: Pick<EventRow, "attendees_json">, calendarId: string | null | undefined, accountEmail: string | null | undefined, own: string[]): string | null {
+  const mine = (e: string | null | undefined) => !!e && own.includes(e.toLowerCase());
+  try {
+    const list = JSON.parse(row.attendees_json ?? "[]") as { email?: string; self?: boolean }[];
+    const self = Array.isArray(list) ? list.find((a) => a?.self)?.email : undefined;
+    if (mine(self)) return self!.toLowerCase();
+  } catch { /* fall through */ }
+  if (mine(calendarId)) return calendarId!.toLowerCase();
+  return accountEmail ? accountEmail.toLowerCase() : null;
+}

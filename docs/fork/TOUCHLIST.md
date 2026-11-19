@@ -349,3 +349,4 @@ moving sent copies to Trash while deleting grouped drafts.
 | `src-tauri/src/mail/threading.rs` | `recompute_thread` | `last_date` and `snippet` skip Trash copies like Drafts | D99 |
 | `src/components/ReadingPane.svelte` | `loadThread`, `withoutTrashed` | hides trashed messages outside the Trash view | D99 |
 | `src/components/Sidebar.svelte` | Inbox row, styles | All inboxes plus one inbox row per mailbox when more than one is connected | D100 |
+| `src/lib/i18n/locales/en.json` | `fork.cal.join_as` | new string: the account a Meet Join opens as | D101 |

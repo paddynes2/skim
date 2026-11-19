@@ -496,6 +496,28 @@ pub fn alert_candidates(
     rows.collect()
 }
 
+/// Every mailbox address, lowercased, and each calendar's `(google_id,
+/// account email)` by local calendar id: what `join_as` needs (D101).
+pub fn join_identities(
+    conn: &Connection,
+) -> rusqlite::Result<(
+    Vec<String>,
+    std::collections::HashMap<i64, (String, Option<String>)>,
+)> {
+    let own = conn
+        .prepare("SELECT lower(email) FROM accounts")?
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let cals = conn
+        .prepare(
+            "SELECT c.id, c.google_id, a.email FROM fork_cal_calendars c
+               LEFT JOIN accounts a ON a.id = c.account_id",
+        )?
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, (r.get(1)?, r.get(2)?))))?
+        .collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()?;
+    Ok((own, cals))
+}
+
 /// One fired alert: `(account_id, google_id, start_ts, lead_min)`.
 pub type FiredKey = (String, String, i64, i64);
 

@@ -5,7 +5,6 @@
   // write goes through `calendar` (store), which asks about guests before it
   // names `sendUpdates`. Delete is two clicks. "Prep" opens the Phase 11 panel
   // when the event has guests other than Patrick.
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { untrack } from "svelte";
   import AddressInput from "../../components/AddressInput.svelte";
   import { t } from "../../lib/i18n/index.svelte";
@@ -494,7 +493,7 @@
     <div class="row meet">
       <span class="label">{t("fork.cal.meet")}</span>
       {#if row?.hangout_link}
-        <button class="btn join" onclick={() => openUrl(row!.hangout_link!)}>{t("fork.cal.join")}</button>
+        <button class="btn join" onclick={() => calendar.openAs(row!, row!.hangout_link!)}>{t("fork.cal.join")}</button>
         <span class="link" title={row.hangout_link}>{row.hangout_link.replace(/^https?:\/\//, "")}</span>
       {:else}
         <button
@@ -533,7 +532,7 @@
       <button class="btn" onclick={() => prepOpen.open(row!.id)}>{t("fork.prep.prep")}</button>
     {/if}
     {#if row?.html_link}
-      <button class="btn ghost" onclick={() => openUrl(row!.html_link!)} title={row.html_link}>{t("fork.cal.open_in_google")}</button>
+      <button class="btn ghost" onclick={() => calendar.openAs(row!, row!.html_link!)} title={row.html_link}>{t("fork.cal.open_in_google")}</button>
     {/if}
     {#if row && editable && !followingMode}
       <button class="btn danger" class:armed={deleteStep === 1} onclick={remove} disabled={saving}>

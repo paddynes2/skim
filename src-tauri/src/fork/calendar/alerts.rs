@@ -11,6 +11,7 @@
 //! `notify::handle_skim_uri`); when the event has a meeting link, a **Join**
 //! button opens it in the browser (protocol activation with the https URI).
 
+use super::join_as::{join_as, with_account};
 use super::model::{is_local_id, EventRow};
 use super::store::{self, FiredKey};
 use crate::db::{queries, Db};
@@ -381,13 +382,36 @@ async fn run_once(app: &AppHandle, db: &Db, fired: &mut HashSet<FiredKey>) -> Re
             } else {
                 vec![]
             };
-            Ok((enabled, lead, events))
+            let ids = if enabled && !events.is_empty() {
+                Some(store::join_identities(conn)?)
+            } else {
+                None
+            };
+            Ok((enabled, lead, (events, ids)))
         })
         .await?;
     if !enabled {
         return Ok(());
     }
-    let due = due_alerts(now, &events, fired, lead);
+    let (events, ids) = events;
+    let mut due = due_alerts(now, &events, fired, lead);
+    // Join opens as the account the meeting belongs to (D101).
+    if let Some((own, cals)) = ids.as_ref() {
+        for a in due.iter_mut() {
+            let (Some(url), Some((_, e))) = (
+                a.join_url.as_deref(),
+                events.iter().find(|(_, e)| e.id == a.event_id),
+            ) else {
+                continue;
+            };
+            let (gid, acct) = cals
+                .get(&e.calendar_id)
+                .map(|(g, m)| (g.as_str(), m.as_deref()))
+                .unwrap_or(("", None));
+            let who = join_as(e.attendees_json.as_deref(), gid, acct, own);
+            a.join_url = Some(with_account(url, who.as_deref()));
+        }
+    }
     if due.is_empty() {
         return Ok(());
     }
