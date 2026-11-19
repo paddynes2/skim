@@ -1237,6 +1237,7 @@
   "fork.cal.outside_sync": "Outside the synced dates. Open it in Google Calendar to change it.",
   "fork.cal.join_meet": "Join Google Meet",
   "fork.cal.join_as": "as {email}",
+  "fork.cal.shared_with_you": "Shared with you",
   "fork.cal.join_zoom": "Join Zoom",
   "fork.cal.join_teams": "Join Teams",
   "fork.cal.guest_count": "{n} guests",

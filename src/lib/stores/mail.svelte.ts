@@ -108,7 +108,7 @@ function isUnified(): boolean {
 
 // Mailbox colours in account order. Amber (--acct-2) comes last: it reads as
 // the star, and the green heat wash sits under every row.
-const ACCOUNT_COLORS = [1, 4, 3, 5, 2];
+const ACCOUNT_COLORS = [1, 4, 5, 3, 2];
 
 // Free mail providers: an address there is a personal mailbox, so its domain
 // says nothing worth showing.

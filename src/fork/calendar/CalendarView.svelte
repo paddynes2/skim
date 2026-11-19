@@ -20,6 +20,7 @@
   import { Calendar, DayGrid, Interaction, List, TimeGrid, type Calendar as EC } from "@event-calendar/core";
   import { onMount, tick } from "svelte";
   import { getLocale, t } from "../../lib/i18n/index.svelte";
+  import { mail } from "../../lib/stores/mail.svelte";
   import { palette } from "../../lib/stores/palette.svelte";
   import { ui } from "../../lib/stores/ui.svelte";
   import { toast } from "../stores/toast.svelte";
@@ -30,9 +31,8 @@
   import MiniMonth from "./MiniMonth.svelte";
   import SearchPanel from "./SearchPanel.svelte";
   import YearView from "./YearView.svelte";
-  import { EVENT_COLORS } from "./editor";
   import { calendarErrorText, localDate, localZone } from "./guests";
-  import { eventState, isoWeek, needsReply, pastelFor, zoneClock } from "./presentation";
+  import { eventState, isoWeek, needsReply, zoneClock } from "./presentation";
   import { calPrefs } from "./settings.svelte";
   import { calendar } from "./store.svelte";
   import { calUndo, deleteWithUndo } from "./undo.svelte";
@@ -106,8 +106,11 @@
   });
 
   function toEc(row: EventRow): EC.EventInput {
-    const cal = calendar.calendarOf(row);
-    const color = EVENT_COLORS[Number(row.options?.colorId)] || cal?.color || "#7986cb";
+    // D102: the fill is the mailbox colour (the inbox tags' colours); another
+    // person's calendar is neutral with stripes. Each event names its mailbox.
+    const acct = calendar.accountOf(row);
+    const color = acct ? `var(--acct-${acct.color})` : "var(--cal-shared)";
+    const tag = mail.accounts.length > 1 ? (acct?.label ?? calendar.sharedName(row)) : null;
     const declined = row.self_response === "declined";
     const tentative = row.status === "tentative" || row.self_response === "tentative";
     const short = !row.all_day && row.end_ts - row.start_ts <= 1800;
@@ -120,6 +123,7 @@
     if (needs) classNames.push("cal-needs");
     if (priv) classNames.push("cal-private");
     if (row.local_only) classNames.push("cal-local");
+    if (!acct) classNames.push("cal-shared");
     if (calPrefs.dimPast && row.end_ts < nowS()) classNames.push("cal-past");
     if (row.id === calendar.selectedId) classNames.push("cal-selected");
     return {
@@ -129,9 +133,9 @@
       start: row.all_day && row.start_date ? row.start_date : new Date(row.start_ts * 1000),
       end: row.all_day && row.end_date ? row.end_date : new Date(row.end_ts * 1000),
       classNames,
-      styles: [`--cal-color: ${color}`, `--cal-pastel: var(${pastelFor(color)})`],
+      styles: [`--cal-color: ${color}`, `--cal-pastel: ${color}`],
       editable: !declined && row.status !== "cancelled" && calendar.canEdit(row),
-      extendedProps: { rowId: row.id, state: eventState(row), short, needs, priv },
+      extendedProps: { rowId: row.id, state: eventState(row), short, needs, priv, tag, tagTitle: acct?.email ?? null },
     };
   }
 
@@ -490,7 +494,7 @@
       <Calendar plugins={PLUGINS} {options}>
         {#snippet eventContent({ event, timeText })}
           <span class="cal-event-content">
-            <span class="cal-event-title">{#if event.extendedProps.priv}<svg class="lock" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>{/if}<span class="cal-state-mark" aria-hidden="true">{event.extendedProps.state === "declined" ? "× " : event.extendedProps.state === "cancelled" ? `${t("fork.cal.state_cancelled")}: ` : ""}</span>{event.title}</span>
+            <span class="cal-event-title">{#if event.extendedProps.tag}<span class="cal-acct" title={(event.extendedProps.tagTitle as string | null) ?? undefined}>{event.extendedProps.tag}</span>{/if}{#if event.extendedProps.priv}<svg class="lock" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" /></svg>{/if}<span class="cal-state-mark" aria-hidden="true">{event.extendedProps.state === "declined" ? "× " : event.extendedProps.state === "cancelled" ? `${t("fork.cal.state_cancelled")}: ` : ""}</span>{event.title}</span>
             {#if !event.allDay && !event.extendedProps.short}<span class="cal-event-time">{timeText}</span>{/if}
             {#if event.extendedProps.needs}<span class="cal-reply">{t("fork.cal.reply_pill")}</span>{/if}
           </span>

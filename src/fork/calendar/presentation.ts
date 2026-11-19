@@ -103,13 +103,19 @@ export function withAccount(url: string, email: string | null | undefined): stri
   return u.toString();
 }
 
+/** A person's own calendar (an address), not a group or holiday calendar. */
+export function isPersonCalendar(id: string | null | undefined): boolean {
+  return !!id && id.includes("@") && !/calendar\.google\.com$/i.test(id);
+}
+
 /**
- * The own address a meeting belongs to: the guest Google marks as this
- * calendar (`self`), else another invited own address (a meeting on someone
- * else's shared calendar), else the calendar's own address, else the account
- * that synced it. Only an address with a mailbox in Skim counts.
+ * The mailbox an event belongs to (D102), or null for an event on another
+ * person's calendar that names no own address. Order: the guest Google marks
+ * as this calendar (`self`), else another invited own address, else the
+ * calendar's own address, else (a group or holiday calendar) the account that
+ * synced it. Only an address with a mailbox in Skim counts.
  */
-export function joinAs(row: Pick<EventRow, "attendees_json">, calendarId: string | null | undefined, accountEmail: string | null | undefined, own: string[]): string | null {
+export function eventAccount(row: Pick<EventRow, "attendees_json">, calendarId: string | null | undefined, accountEmail: string | null | undefined, own: string[]): string | null {
   const mine = (e: string | null | undefined) => !!e && own.includes(e.toLowerCase());
   try {
     const list = JSON.parse(row.attendees_json ?? "[]") as { email?: string; self?: boolean }[];
@@ -120,5 +126,17 @@ export function joinAs(row: Pick<EventRow, "attendees_json">, calendarId: string
     if (invited) return invited.toLowerCase();
   } catch { /* fall through */ }
   if (mine(calendarId)) return calendarId!.toLowerCase();
+  if (isPersonCalendar(calendarId)) return null;
   return accountEmail ? accountEmail.toLowerCase() : null;
+}
+
+/** The own address a meeting opens as (D101): its mailbox, else the account that synced it. */
+export function joinAs(row: Pick<EventRow, "attendees_json">, calendarId: string | null | undefined, accountEmail: string | null | undefined, own: string[]): string | null {
+  return eventAccount(row, calendarId, accountEmail, own) ?? (accountEmail ? accountEmail.toLowerCase() : null);
+}
+
+/** The short name of another person's calendar: the part before the @. */
+export function calendarShortName(summary: string | null | undefined, id: string | null | undefined): string {
+  const text = (summary || id || "").trim();
+  return text.includes("@") ? text.split("@")[0] : text;
 }

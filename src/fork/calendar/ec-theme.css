@@ -64,8 +64,8 @@
 
 /* Events: calendar colour muted into the surface, ink text, no shadow. */
 .fork-cal .ec-event {
-  --cal-fill: color-mix(in oklab, var(--cal-color, var(--acct-1)) 28%, var(--surface));
-  --cal-edge: color-mix(in oklab, var(--cal-color, var(--acct-1)) 60%, var(--surface));
+  --cal-fill: color-mix(in oklab, var(--cal-color, var(--acct-1)) 42%, var(--surface));
+  --cal-edge: color-mix(in oklab, var(--cal-color, var(--acct-1)) 85%, var(--surface));
   background-color: var(--cal-fill);
   color: var(--text);
   border: 1px solid var(--cal-edge);
@@ -266,8 +266,8 @@
 
 /* Events: cards. */
 .fork-cal.look-a .ec-event {
-  --cal-fill: color-mix(in oklab, var(--cal-color, var(--acct-1)) 26%, var(--surface));
-  --cal-edge: color-mix(in oklab, var(--cal-color, var(--acct-1)) 70%, var(--text));
+  --cal-fill: color-mix(in oklab, var(--cal-color, var(--acct-1)) 42%, var(--surface));
+  --cal-edge: color-mix(in oklab, var(--cal-color, var(--acct-1)) 85%, var(--text));
   background-color: var(--cal-fill);
   border: 1px solid var(--cal-edge);
   border-radius: 7px;
@@ -320,6 +320,15 @@
 :root[data-theme="pastel-light"] .fork-cal.look-a .cal-event-time { color: #3f4148; }
 :root[data-theme="pastel-light"] .fork-cal.look-a .ec-header,
 :root[data-theme="pastel-light"] .fork-cal.look-a .ec { --ec-bg-color: var(--surface); }
+
+/* D102: which mailbox an event belongs to. The fill is the mailbox colour
+   (CalendarView sets --cal-color to var(--acct-N)); a word tag starts the
+   title; another person's calendar is neutral with stripes. */
+.fork-cal { --cal-shared: #9a958c; }
+.fork-cal .cal-acct { display: inline-block; height: 15px; line-height: 13px; padding: 0 5px; margin-right: 5px; border-radius: 4px; border: 1px solid var(--cal-edge, currentColor); background: var(--surface); color: var(--text); font-size: 10px; font-weight: 650; vertical-align: 1px; white-space: nowrap; }
+.fork-cal .ec-event.cal-shared { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--cal-shared) 22%, transparent) 6px 12px); }
+:root[data-theme="pastel-light"] .fork-cal .cal-acct { background: #fff; border-color: var(--ink); color: var(--ink); }
+:root[data-theme="pastel-light"] .fork-cal.look-a .ec-event.cal-shared { background-color: #fff; background-image: repeating-linear-gradient(135deg, #fff 0 6px, #ece9e2 6px 12px); }
 
 /* Print (D97): only the grid, every visible hour, no app chrome. */
 @media print {

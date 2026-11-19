@@ -34,3 +34,24 @@ test("Meet and Calendar links carry the account; nothing else does", () => {
   assert.equal(withAccount("https://www.google.com/search?q=x", "me@work.test"), "https://www.google.com/search?q=x");
   assert.equal(withAccount("https://meet.google.com/abc", null), "https://meet.google.com/abc");
 });
+
+// D102: which mailbox an event belongs to, for its colour and tag.
+import { eventAccount, isPersonCalendar, calendarShortName } from "../calendar/presentation.ts";
+
+test("an event on another person's calendar with no own guest belongs to no mailbox", () => {
+  const attendees_json = JSON.stringify([{ email: "friend@other.test", self: true }]);
+  assert.equal(eventAccount({ attendees_json }, "friend@other.test", "me@work.test", own), null);
+  assert.equal(joinAs({ attendees_json }, "friend@other.test", "me@work.test", own), "me@work.test");
+});
+
+test("a group or holiday calendar belongs to the account that synced it", () => {
+  assert.equal(isPersonCalendar("en.sa#holiday@group.v.calendar.google.com"), false);
+  assert.equal(isPersonCalendar("c_123@group.calendar.google.com"), false);
+  assert.equal(isPersonCalendar("friend@other.test"), true);
+  assert.equal(eventAccount({ attendees_json: null }, "en.sa#holiday@group.v.calendar.google.com", "me@side.test", own), "me@side.test");
+});
+
+test("another person's calendar is named by the part before the @", () => {
+  assert.equal(calendarShortName("friend@other.test", "friend@other.test"), "friend");
+  assert.equal(calendarShortName("Team", "c_1@group.calendar.google.com"), "Team");
+});

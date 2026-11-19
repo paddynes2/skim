@@ -18,18 +18,29 @@
 
   let { range }: { range: { start: string; end: string } | null } = $props();
 
+  // D102: calendars sit under the mailbox they belong to (a mailbox's calendar
+  // shared into another account goes under its own mailbox); other people's
+  // calendars go under "Shared with you", last.
+  const SHARED = "shared";
   const groups = $derived.by(() => {
     const byAccount = new Map<string, CalendarRow[]>();
     for (const c of calendar.calendars) {
-      const list = byAccount.get(c.account_id) ?? [];
+      const key = calendar.calendarAccount(c)?.id ?? SHARED;
+      const list = byAccount.get(key) ?? [];
       list.push(c);
-      byAccount.set(c.account_id, list);
+      byAccount.set(key, list);
     }
-    return [...byAccount.entries()].map(([id, cals]) => ({
-      id,
-      email: mail.accounts.find((a) => a.id === id)?.email ?? "",
-      cals: cals.sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || Number(b.selected) - Number(a.selected) || a.summary.localeCompare(b.summary, getLocale())),
-    }));
+    const order = (id: string) => (id === SHARED ? 99 : mail.accounts.findIndex((a) => a.id === id));
+    return [...byAccount.entries()].sort(([a], [b]) => order(a) - order(b)).map(([id, cals]) => {
+      const badge = id === SHARED ? null : mail.accountBadge(id);
+      return {
+        id,
+        label: badge?.label ?? t("fork.cal.shared_with_you"),
+        email: badge?.email ?? "",
+        color: badge ? `var(--acct-${badge.color})` : "var(--cal-shared, #9a958c)",
+        cals: cals.sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || Number(b.selected) - Number(a.selected) || a.summary.localeCompare(b.summary, getLocale())),
+      };
+    });
   });
 
   let menuFor = $state<number | null>(null);
@@ -124,12 +135,12 @@
       </form>
     {/if}
     {#each groups as g (g.id)}
-      {#if groups.length > 1}<p class="account">{g.email}</p>{/if}
+      {#if groups.length > 1}<p class="account" title={g.email || undefined}><span class="acct-dot" style:background={g.color}></span><b>{g.label}</b>{#if g.email}<small>{g.email}</small>{/if}</p>{/if}
       <ul>
         {#each g.cals as c (c.id)}
           <li class:off={!shown(c)} class:unsynced={!c.selected}>
             <label title={c.selected ? c.summary : t("fork.cal.not_synced")}>
-              <input type="checkbox" checked={shown(c)} disabled={busy !== null} onchange={() => toggle(c)} style:--cal-color={c.color || "var(--primary)"} />
+              <input type="checkbox" checked={shown(c)} disabled={busy !== null} onchange={() => toggle(c)} style:--cal-color={g.color} />
               <span class="name">{c.summary}</span>
             </label>
             {#if c.selected}
@@ -155,7 +166,10 @@
 <style>
   .rail { width: 232px; flex-shrink: 0; display: flex; flex-direction: column; gap: 22px; padding: 16px 14px; border-right: 1px solid var(--hairline); overflow-y: auto; background: var(--bg); }
   h2 { font-size: 12.5px; font-weight: 600; margin: 0 0 8px 2px; color: var(--text); }
-  .account { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); margin: 10px 2px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text); margin: 12px 2px 4px; overflow: hidden; white-space: nowrap; }
+  .account b { font-weight: 650; }
+  .account small { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .acct-dot { width: 11px; height: 11px; border-radius: 3px; flex: none; border: 1px solid color-mix(in oklab, var(--text) 35%, transparent); }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
   li { position: relative; display: flex; align-items: center; border-radius: var(--radius-s); }
   li:hover { background: var(--hover); }

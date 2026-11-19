@@ -13,7 +13,7 @@ import { navHooks } from "../nav";
 import { toast } from "../stores/toast.svelte";
 import { CALENDAR_ALERT, CALENDAR_OPS_FAILED, CALENDAR_UPDATED, calendarApi, googleApi } from "./api";
 import { calendarErrorText, otherGuests, roundUp } from "./guests";
-import { joinAs, withAccount } from "./presentation";
+import { calendarShortName, eventAccount, isPersonCalendar, joinAs, withAccount } from "./presentation";
 import { guestsPrompt } from "./prompt.svelte";
 import { calPrefs } from "./settings.svelte";
 import type {
@@ -279,6 +279,30 @@ export const calendar = {
   },
   calendarOf(row: EventRow): CalendarRow | undefined {
     return state.calendars.find((c) => c.id === row.calendar_id);
+  },
+  /**
+   * The mailbox an event belongs to, as a badge (word, colour), or null for
+   * another person's calendar (D102). `shared` names that calendar.
+   */
+  accountOf(row: EventRow): { label: string; color: number; email: string } | null {
+    const cal = this.calendarOf(row);
+    const account = mail.accounts.find((a) => a.id === cal?.account_id)?.email;
+    const email = eventAccount(row, cal?.google_id, account, ownEmails());
+    const id = email ? mail.accounts.find((a) => a.email.toLowerCase() === email)?.id : undefined;
+    const badge = id ? mail.accountBadge(id) : null;
+    return badge ? { label: badge.label, color: badge.color, email: badge.email } : null;
+  },
+  /** The rail group and colour of a calendar: the mailbox it belongs to, or null for another person's (D102). */
+  calendarAccount(c: CalendarRow): { id: string; label: string; color: number; email: string } | null {
+    const own = mail.accounts.find((a) => a.email.toLowerCase() === c.google_id.toLowerCase());
+    const id = own?.id ?? (isPersonCalendar(c.google_id) ? undefined : c.account_id);
+    const badge = id ? mail.accountBadge(id) : null;
+    return badge && id ? { id, label: badge.label, color: badge.color, email: badge.email } : null;
+  },
+  /** The short name shown on events of another person's calendar. */
+  sharedName(row: EventRow): string {
+    const cal = this.calendarOf(row);
+    return calendarShortName(cal?.summary, cal?.google_id);
   },
   /** The own address this meeting opens as in the browser (D101). */
   joinAs(row: EventRow): string | null {
