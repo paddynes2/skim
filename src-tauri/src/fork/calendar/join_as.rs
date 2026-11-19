@@ -20,7 +20,8 @@ pub fn join_as(
         .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
         .and_then(|v| {
             v.as_array()?.iter().find_map(|a| {
-                (a.get("self")?.as_bool()? == true)
+                a.get("self")?
+                    .as_bool()?
                     .then(|| a.get("email")?.as_str().map(str::to_string))
                     .flatten()
             })

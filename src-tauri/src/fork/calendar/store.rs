@@ -496,14 +496,12 @@ pub fn alert_candidates(
     rows.collect()
 }
 
+/// Each calendar's `(google_id, account email)` by local calendar id.
+pub type CalendarOwners = std::collections::HashMap<i64, (String, Option<String>)>;
+
 /// Every mailbox address, lowercased, and each calendar's `(google_id,
 /// account email)` by local calendar id: what `join_as` needs (D101).
-pub fn join_identities(
-    conn: &Connection,
-) -> rusqlite::Result<(
-    Vec<String>,
-    std::collections::HashMap<i64, (String, Option<String>)>,
-)> {
+pub fn join_identities(conn: &Connection) -> rusqlite::Result<(Vec<String>, CalendarOwners)> {
     let own = conn
         .prepare("SELECT lower(email) FROM accounts")?
         .query_map([], |r| r.get::<_, String>(0))?
