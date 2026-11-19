@@ -4,7 +4,11 @@ The one file that says where the fork stands. Everything else under
 `docs/fork/` is reference and changes only when the design changes. Update
 this file, and its date, whenever the state moves.
 
-**As of 2026-11-09.**
+**As of 2026-11-19.**
+
+## Version 1.1.52 (November 19)
+
+D99: a discarded draft in Trash never reads as sent mail. The owner saw a reply in a conversation as if sent ("You", time, full text, no draft bar); Gmail Sent had nothing. It was an earlier version of a reply draft that Gmail moved to Trash when the draft was replaced. The same rule also took it as his answer: the court verdict read Waiting, so the thread left On me. Now a message is trashed only when every copy is in Trash; the conversation hides it outside the Trash view, the court skips Trash copies, the thread date and preview skip them, the MCP `get_thread` reports `trashed`. Built from f45f984 through build-install.ps1 -NoInstall (all gates green: 689 Rust tests, node tests, clippy, fmt, svelte-check, contrast), then installed by hand with the script's own steps on 19 Nov 09:20: ProductVersion 1.1.52, SHA-256 d0729ec34bffda33d71d3735a6b5f835d221c32ac28f816642be4ad2a1d44c56, backup ~/.skim-fork/backups/20261119-092051. Checked live on the installed app through its backend (Tauri invoke over CDP, read-only): the affected conversation returns its two trashed drafts with `isTrashed` true and its real mail false; the court row for it moved from waiting (last message = the trashed draft) to on_me since the inbound message. Relaunched in the desktop session without the debug port. Known limit: a thread row's stored preview and date are recomputed only when the thread next changes, so rows already showing a trashed draft keep that preview until then. `message_count` still counts Trash copies. Not published as a release.
 
 ## Version 1.1.51 (November 9)
 
